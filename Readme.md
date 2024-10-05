@@ -20,7 +20,7 @@ It includes scripts for training RL agents on [modified procgen environments](ht
 Train:
 
 ```
-python train.py --exp_name coinrun --env_name coinrun --num_levels 100000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 6033 --random_percent 0
+python train.py --exp_name coinrun --env_name coinrun --num_levels 100000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 6033 --random_percent 0 --use_wandb
 ```
 
 In order to reproduce the experiments from the ablation, change the `random_percent` variable.

@@ -85,3 +85,5 @@ celerybeat-schedule
 logs/
 experiments/results
 videos
+
+private_login.py
