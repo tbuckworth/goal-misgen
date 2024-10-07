@@ -414,21 +414,25 @@ class VecRolloutInfoWrapper(VecEnvWrapper):
         # self._obs = [types.maybe_wrap_in_dictobs(new_obs)]
         # self._rews = []
         self._rollouts = {f"{i}": {"obs": [ob], "rews": []} for i, ob in enumerate(new_obs)}
-        return new_obs
+        return new_obsn
 
     def step_wait(self):
         obs, rew, done, infos = self.venv.step_wait()
         # self._obs.append(types.maybe_wrap_in_dictobs(obs))
         # self._rews.append(rew)
         for i, ob in enumerate(obs):
-            if not done[i]:
-                self._rollouts[f"{i}"]["obs"].append(ob)
+            if done[i]:
+                ob = np.zeros_like(ob)
+            self._rollouts[f"{i}"]["obs"].append(ob)
             self._rollouts[f"{i}"]["rews"].append(rew[i])
 
         if np.any(done):
             for i in np.argwhere(done):
                 i = i.squeeze()
                 assert "rollout" not in infos[i]
-                infos[i]["rollout"] = self._rollouts[f"{i}"].copy()
+                rollouts = self._rollouts[f"{i}"].copy()
+                rollouts["obs"] = np.stack(rollouts["obs"])
+                rollouts["rews"] = np.stack(rollouts["rews"])
+                infos[i]["rollout"] = rollouts
                 self._rollouts[f"{i}"] = {"obs": [obs[i]], "rews": []}
         return obs, rew, done, infos
