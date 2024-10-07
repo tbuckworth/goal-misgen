@@ -395,7 +395,7 @@ class DummyTerminalObsWrapper(VecEnvWrapper):
         return self.venv.reset()
 
 
-class RolloutInfoWrapper(VecEnvWrapper):
+class VecRolloutInfoWrapper(VecEnvWrapper):
     """Add the entire episode's rewards and observations to `info` at episode end.
 
     Whenever done=True, `info["rollouts"]` is a dict with keys "obs" and "rews", whose

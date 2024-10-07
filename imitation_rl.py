@@ -3,6 +3,7 @@ import warnings
 
 import torch
 
+from common.env.procgen_wrappers import VecRolloutInfoWrapper
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
 
@@ -12,7 +13,6 @@ shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 import numpy as np
 from imitation.policies.serialize import load_policy
 from imitation.util.util import make_vec_env
-from imitation.data.wrappers import RolloutInfoWrapper
 from imitation.data import rollout
 from imitation.algorithms.adversarial.airl import AIRL
 from imitation.rewards.reward_nets import BasicShapedRewardNet
@@ -78,7 +78,7 @@ def main():
 
     # Wrap with a VecMonitor to collect stats and avoid errors
     venv = create_venv(args, cfg)
-    venv = RolloutInfoWrapper(venv)
+    venv = VecRolloutInfoWrapper(venv)
     venv = VecMonitor(venv=venv)
     # VecMonitor
 
