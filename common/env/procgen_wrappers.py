@@ -375,3 +375,14 @@ class ScaledFloatFrame(VecEnvWrapper):
     def reset(self):
         obs = self.venv.reset()
         return obs/255.0
+
+
+class DummyTerminalObsWrapper(VecEnvWrapper):
+    def __init__(self, env):
+        super().__init__(venv=env)
+
+    def step_wait(self):
+        obs, reward, done, info = self.venv.step_wait()
+        info["terminal_observation"] = np.zeros_like(obs)
+        return obs, reward, done, info
+

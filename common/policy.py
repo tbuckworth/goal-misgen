@@ -1,3 +1,5 @@
+import torch
+
 from .misc_util import orthogonal_init
 from .model import GRU
 import torch.nn as nn
@@ -35,3 +37,17 @@ class CategoricalPolicy(nn.Module):
         p = Categorical(logits=log_probs)
         v = self.fc_value(hidden).reshape(-1)
         return p, v, hx
+
+
+class PolicyWrapperIRL(nn.Module):
+    def __init__(self,policy, device):
+        super(PolicyWrapperIRL, self).__init__()
+        self.policy = policy
+        self.device = device
+
+    def forward(self, obs, states=None, episode_masks=None):
+        x = torch.FloatTensor(obs).to(self.device)
+        p, v, hx = self.policy(x, None, None)
+        act = p.sample().detach().cpu().numpy()
+        return act, None
+
