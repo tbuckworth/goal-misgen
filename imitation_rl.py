@@ -67,7 +67,7 @@ def main():
     else:
         N_RL_TRAIN_STEPS = 2_000_000
 
-    # venv = make_vec_env(
+    # make_vec_env(
     #     "seals:seals/CartPole-v0",
     #     rng=np.random.default_rng(SEED),
     #     n_envs=8,
@@ -78,7 +78,7 @@ def main():
 
     # Wrap with a VecMonitor to collect stats and avoid errors
     venv = create_venv(args, cfg)
-    "terminal_observation"
+    venv = RolloutInfoWrapper(venv)
     venv = VecMonitor(venv=venv)
     # VecMonitor
 

@@ -7,11 +7,12 @@ from gym import spaces
 import time
 from collections import deque
 import torch
-
+from imitation.data import rollout, types
 
 """
 Copy-pasted from OpenAI to obviate dependency on Baselines. Required for vectorized environments.
 """
+
 
 class AlreadySteppingError(Exception):
     """
@@ -118,7 +119,7 @@ class VecEnv(ABC):
 
     def render(self, mode='human'):
         imgs = self.get_images()
-        bigimg = "ARGHH" #tile_images(imgs)
+        bigimg = "ARGHH"  # tile_images(imgs)
         if mode == 'human':
             self.get_viewer().imshow(bigimg)
             return self.get_viewer().isopen
@@ -146,7 +147,7 @@ class VecEnv(ABC):
             self.viewer = rendering.SimpleImageViewer()
         return self.viewer
 
-    
+
 class VecEnvWrapper(VecEnv):
     """
     An environment wrapper that applies to an entire batch
@@ -156,8 +157,8 @@ class VecEnvWrapper(VecEnv):
     def __init__(self, venv, observation_space=None, action_space=None):
         self.venv = venv
         super().__init__(num_envs=venv.num_envs,
-                        observation_space=observation_space or venv.observation_space,
-                        action_space=action_space or venv.action_space)
+                         observation_space=observation_space or venv.observation_space,
+                         action_space=action_space or venv.action_space)
 
     def step_async(self, actions):
         self.venv.step_async(actions)
@@ -184,7 +185,7 @@ class VecEnvWrapper(VecEnv):
             raise AttributeError("attempted to get missing private attribute '{}'".format(name))
         return getattr(self.venv, name)
 
-    
+
 class VecEnvObservationWrapper(VecEnvWrapper):
     @abstractmethod
     def process(self, obs):
@@ -198,7 +199,7 @@ class VecEnvObservationWrapper(VecEnvWrapper):
         obs, rews, dones, infos = self.venv.step_wait()
         return self.process(obs), rews, dones, infos
 
-    
+
 class CloudpickleWrapper(object):
     """
     Uses cloudpickle to serialize contents (otherwise multiprocessing tries to use pickle)
@@ -215,7 +216,7 @@ class CloudpickleWrapper(object):
         import pickle
         self.x = pickle.loads(ob)
 
-        
+
 @contextlib.contextmanager
 def clear_mpi_env_vars():
     """
@@ -234,7 +235,7 @@ def clear_mpi_env_vars():
     finally:
         os.environ.update(removed_environment)
 
-        
+
 class VecFrameStack(VecEnvWrapper):
     def __init__(self, venv, nstack):
         self.venv = venv
@@ -260,17 +261,18 @@ class VecFrameStack(VecEnvWrapper):
         self.stackedobs[...] = 0
         self.stackedobs[..., -obs.shape[-1]:] = obs
         return self.stackedobs
-    
+
+
 class VecExtractDictObs(VecEnvObservationWrapper):
     def __init__(self, venv, key):
         self.key = key
         super().__init__(venv=venv,
-            observation_space=venv.observation_space.spaces[self.key])
+                         observation_space=venv.observation_space.spaces[self.key])
 
     def process(self, obs):
         return obs[self.key]
-    
-    
+
+
 class RunningMeanStd(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
     def __init__(self, epsilon=1e-4, shape=()):
@@ -288,7 +290,7 @@ class RunningMeanStd(object):
         self.mean, self.var, self.count = update_mean_var_count_from_moments(
             self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
 
-        
+
 def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
     delta = batch_mean - mean
     tot_count = count + batch_count
@@ -314,7 +316,7 @@ class VecNormalize(VecEnvWrapper):
 
         self.ob_rms = RunningMeanStd(shape=self.observation_space.shape) if ob else None
         self.ret_rms = RunningMeanStd(shape=()) if ret else None
-        
+
         self.clipob = clipob
         self.cliprew = cliprew
         self.ret = np.zeros(self.num_envs)
@@ -351,15 +353,16 @@ class TransposeFrame(VecEnvWrapper):
     def __init__(self, env):
         super().__init__(venv=env)
         obs_shape = self.observation_space.shape
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(obs_shape[2], obs_shape[0], obs_shape[1]), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(obs_shape[2], obs_shape[0], obs_shape[1]),
+                                                dtype=np.float32)
 
     def step_wait(self):
         obs, reward, done, info = self.venv.step_wait()
-        return obs.transpose(0,3,1,2), reward, done, info
+        return obs.transpose(0, 3, 1, 2), reward, done, info
 
     def reset(self):
         obs = self.venv.reset()
-        return obs.transpose(0,3,1,2)
+        return obs.transpose(0, 3, 1, 2)
 
 
 class ScaledFloatFrame(VecEnvWrapper):
@@ -370,11 +373,11 @@ class ScaledFloatFrame(VecEnvWrapper):
 
     def step_wait(self):
         obs, reward, done, info = self.venv.step_wait()
-        return obs/255.0, reward, done, info
+        return obs / 255.0, reward, done, info
 
     def reset(self):
         obs = self.venv.reset()
-        return obs/255.0
+        return obs / 255.0
 
 
 class DummyTerminalObsWrapper(VecEnvWrapper):
@@ -382,7 +385,50 @@ class DummyTerminalObsWrapper(VecEnvWrapper):
         super().__init__(venv=env)
 
     def step_wait(self):
-        obs, reward, done, info = self.venv.step_wait()
-        info["terminal_observation"] = np.zeros_like(obs)
-        return obs, reward, done, info
+        obs, reward, done, infos = self.venv.step_wait()
+        for i in np.argwhere(done):
+            i = i.squeeze()
+            infos[i]["terminal_observation"] = np.zeros_like(obs[i])
+        return obs, reward, done, infos
 
+    def reset(self):
+        return self.venv.reset()
+
+
+class RolloutInfoWrapper(VecEnvWrapper):
+    """Add the entire episode's rewards and observations to `info` at episode end.
+
+    Whenever done=True, `info["rollouts"]` is a dict with keys "obs" and "rews", whose
+    corresponding values hold the NumPy arrays containing the raw observations and
+    rewards seen during this episode.
+    """
+
+    def __init__(self, env):
+        super().__init__(venv=env)
+        self._obs = None
+        self._rews = None
+
+    def reset(self):  # , **kwargs):
+        new_obs = self.venv.reset()
+        # TODO: make these both np.arrays for efficiency:
+        # self._obs = [types.maybe_wrap_in_dictobs(new_obs)]
+        # self._rews = []
+        self._rollouts = {f"{i}": {"obs": [ob], "rews": []} for i, ob in enumerate(new_obs)}
+        return new_obs
+
+    def step_wait(self):
+        obs, rew, done, infos = self.venv.step_wait()
+        # self._obs.append(types.maybe_wrap_in_dictobs(obs))
+        # self._rews.append(rew)
+        for i, ob in enumerate(obs):
+            if not done[i]:
+                self._rollouts[f"{i}"]["obs"].append(ob)
+            self._rollouts[f"{i}"]["rews"].append(rew[i])
+
+        if np.any(done):
+            for i in np.argwhere(done):
+                i = i.squeeze()
+                assert "rollout" not in infos[i]
+                infos[i]["rollout"] = self._rollouts[f"{i}"].copy()
+                self._rollouts[f"{i}"] = {"obs": [obs[i]], "rews": []}
+        return obs, rew, done, infos
