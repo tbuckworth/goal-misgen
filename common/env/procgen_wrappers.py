@@ -414,7 +414,7 @@ class VecRolloutInfoWrapper(VecEnvWrapper):
         # self._obs = [types.maybe_wrap_in_dictobs(new_obs)]
         # self._rews = []
         self._rollouts = {f"{i}": {"obs": [ob], "rews": []} for i, ob in enumerate(new_obs)}
-        return new_obsn
+        return new_obs
 
     def step_wait(self):
         obs, rew, done, infos = self.venv.step_wait()
