@@ -51,7 +51,7 @@ def main():
     unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 
-    agent_dir = unshifted_agent_dir
+    agent_dir = shifted_agent_dir
 
     cfg = get_config(agent_dir)
     # cfg = {}
