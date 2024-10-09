@@ -153,6 +153,7 @@ def main():
         venv=venv,
         gen_algo=learner,
         reward_net=reward_net,
+        allow_variable_horizon=True,
     )
 
     venv.seed(SEED)
