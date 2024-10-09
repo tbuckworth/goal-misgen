@@ -51,7 +51,7 @@ def main():
     unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 
-    agent_dir = shifted_agent_dir
+    agent_dir = unshifted_agent_dir
 
     cfg = get_config(agent_dir)
     # cfg = {}
@@ -61,11 +61,16 @@ def main():
     SEED = 42
 
     FAST = True
-
+    SUPERFAST = True
+    n_steps = 2048
     if FAST:
         N_RL_TRAIN_STEPS = 100_000
     else:
         N_RL_TRAIN_STEPS = 2_000_000
+    if SUPERFAST:
+        N_RL_TRAIN_STEPS = 100
+        hyperparameters["n_envs"] = 4
+        n_steps = 4
 
     # make_vec_env(
     #     "seals:seals/CartPole-v0",
@@ -80,8 +85,13 @@ def main():
     venv = create_venv(args, cfg)
     venv = VecRolloutInfoWrapper(venv)
     venv = VecMonitor(venv=venv)
-    # VecMonitor
 
+    # # VecMonitor
+    # TODO: make this systematic in a wrapper:
+    import gymnasium
+
+    venv.action_space = gymnasium.spaces.discrete.Discrete(15)
+    venv.observation_space = gymnasium.spaces.box.Box(0.0, 1.0, (3, 64, 64))
     # expert = load_policy(
     #     "ppo-huggingface",
     #     organization="HumanCompatibleAI",
@@ -101,7 +111,7 @@ def main():
     rollouts = rollout.rollout(
         expert,
         venv,
-        rollout.make_sample_until(min_timesteps=None, min_episodes=60),
+        rollout.make_sample_until(min_timesteps=None, min_episodes=5),#60
         rng=np.random.default_rng(SEED),
     )
     # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator. We evaluate the learner before and after training so we can see if it made any progress.
@@ -117,6 +127,7 @@ def main():
         vf_coef=0.1,
         n_epochs=5,
         seed=SEED,
+        n_steps=n_steps,
     )
     reward_net = BasicShapedRewardNet(
         observation_space=venv.observation_space,

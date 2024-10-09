@@ -15,6 +15,8 @@ from common.policy import CategoricalPolicy
 
 def create_venv(args, hyperparameters, is_valid=False):
     val_env_name = args.val_env_name if args.val_env_name else args.env_name
+    # TODO: give this proper seed:
+    #  also check if reset uses the same initial levels
     start_level_val = random.randint(0, 9999)
     venv = ProcgenEnv(num_envs=hyperparameters.get('n_envs', 256),
                       env_name=val_env_name if is_valid else args.env_name,

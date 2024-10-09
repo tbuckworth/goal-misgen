@@ -405,6 +405,7 @@ class VecRolloutInfoWrapper(VecEnvWrapper):
 
     def __init__(self, env):
         super().__init__(venv=env)
+        self._seed = 0
         self._obs = None
         self._rews = None
 
@@ -430,9 +431,12 @@ class VecRolloutInfoWrapper(VecEnvWrapper):
             for i in np.argwhere(done):
                 i = i.squeeze()
                 assert "rollout" not in infos[i]
-                rollouts = self._rollouts[f"{i}"].copy()
+                rollouts = self._rollouts[f"{i}"]#.copy()
                 rollouts["obs"] = np.stack(rollouts["obs"])
                 rollouts["rews"] = np.stack(rollouts["rews"])
                 infos[i]["rollout"] = rollouts
                 self._rollouts[f"{i}"] = {"obs": [obs[i]], "rews": []}
         return obs, rew, done, infos
+
+    def seed(self, seed=0):
+        self._seed = seed
