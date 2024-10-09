@@ -3,7 +3,8 @@ import warnings
 
 import torch
 
-from common.env.procgen_wrappers import VecRolloutInfoWrapper
+from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper
+from common.model import IdentityModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
 
@@ -84,6 +85,17 @@ def main():
     # Wrap with a VecMonitor to collect stats and avoid errors
     venv = create_venv(args, cfg)
     venv = VecRolloutInfoWrapper(venv)
+
+    model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
+    # load policy
+    last_model = latest_model_path(agent_dir)
+    policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
+
+    policy.embedder = IdentityModel()
+
+    expert = PolicyWrapperIRL(policy, device)
+
+    venv = EmbedderWrapper(venv, embedder=model)
     venv = VecMonitor(venv=venv)
 
     # # VecMonitor
@@ -99,12 +111,7 @@ def main():
     #     venv=venv,
     # )
 
-    model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
-    # load policy
-    last_model = latest_model_path(agent_dir)
-    policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
-    expert = PolicyWrapperIRL(policy, device)
 
     # We generate some expert trajectories, that the discriminator needs to distinguish from the learner's trajectories.
 
