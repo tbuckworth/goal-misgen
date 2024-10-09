@@ -7,6 +7,13 @@ from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, 
 from common.model import IdentityModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
+from stable_baselines3.common.policies import ActorCriticPolicy
+
+try:
+    import wandb
+    from private_login import wandb_login
+except ImportError:
+    pass
 
 unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
 shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
@@ -59,14 +66,17 @@ def main():
     args = get_env_args(agent_dir)
     hyperparameters = cfg#get_hyperparameters(args.param_name)
 
+    use_wandb = True
+
     SEED = 42
 
     FAST = True
-    SUPERFAST = True
+    SUPERFAST = False
     n_steps = 2048
+    demo_batch_size = 2048
 
     if FAST:
-        N_RL_TRAIN_STEPS = 100_000
+        N_RL_TRAIN_STEPS = int(2e19 + 1)#100_000
     else:
         N_RL_TRAIN_STEPS = 2_000_000
     if SUPERFAST:
@@ -122,14 +132,16 @@ def main():
     rollouts = rollout.rollout(
         expert,
         venv,
-        rollout.make_sample_until(min_timesteps=None, min_episodes=5),#60
+        rollout.make_sample_until(min_timesteps=None, min_episodes=2048),
         rng=np.random.default_rng(SEED),
     )
     # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator. We evaluate the learner before and after training so we can see if it made any progress.
+    # sb3_policy = ActorCriticPolicy(net_arch=dict(pi=[],vf=[]))
+    sb3_policy = lambda *args, **kwargs: ActorCriticPolicy(*args, net_arch=dict(pi=[],vf=[]), **kwargs)
 
     learner = PPO(
         env=venv,
-        policy=MlpPolicy,
+        policy=sb3_policy,#MlpPolicy,
         batch_size=64,
         ent_coef=0.0,
         learning_rate=0.0005,
@@ -147,23 +159,36 @@ def main():
     )
     airl_trainer = AIRL(
         demonstrations=rollouts,
-        demo_batch_size=n_steps,
+        demo_batch_size=demo_batch_size,
         gen_replay_buffer_capacity=512,
         n_disc_updates_per_round=16,
         venv=venv,
         gen_algo=learner,
         reward_net=reward_net,
         allow_variable_horizon=True,
+        init_tensorboard=True,
+        init_tensorboard_graph=True,
+        log_dir = "results/"
     )
 
     venv.seed(SEED)
+
+    if use_wandb:
+        wandb_login()
+        # cfg = vars(args)
+        # cfg.update(hyperparameters)
+        wandb.init(project="LIRL", config={}, tags=[], sync_tensorboard=True)
+
+
+    airl_trainer.train(N_RL_TRAIN_STEPS)
+
     learner_rewards_before_training, _ = evaluate_policy(
         learner, venv, 100, return_episode_rewards=True
     )
-    airl_trainer.train(N_RL_TRAIN_STEPS)
+
     venv.seed(SEED)
     learner_rewards_after_training, _ = evaluate_policy(
-        learner, venv, 100, return_episode_rewards=True
+        learner, venv, n_eval_episodes=100, return_episode_rewards=True
     )
 
     print(
@@ -172,12 +197,16 @@ def main():
         "+/-",
         np.std(learner_rewards_before_training),
     )
+
     print(
-        "Rewards after training:",
+        f"Rewards after training",
         np.mean(learner_rewards_after_training),
         "+/-",
         np.std(learner_rewards_after_training),
     )
+    wandb.finish()
+
+
 
 
 if __name__ == "__main__":
