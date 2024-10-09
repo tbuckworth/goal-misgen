@@ -2,6 +2,7 @@ import contextlib
 import os
 from abc import ABC, abstractmethod
 import numpy as np
+import gymnasium
 import gym
 from gym import spaces
 import time
@@ -439,4 +440,31 @@ class VecRolloutInfoWrapper(VecEnvWrapper):
         return obs, rew, done, infos
 
     def seed(self, seed=0):
+        # this is a dummy seed
+        self._seed = seed
+
+class EmbedderWrapper(VecEnvWrapper):
+    def __init__(self, env, embedder):
+        super().__init__(venv=env)
+        self._seed = 0
+        self.embedder = embedder
+        dummy_obs = torch.zeros(env.observation_space.shape).to(device=embedder.device)
+
+        embedder_output_shape = self.embedder(dummy_obs.unsqueeze(0)).squeeze().shape
+        self.observation_space = gymnasium.spaces.box.Box(low=-np.inf, high=np.inf, shape=embedder_output_shape, dtype=np.float32)
+
+    def reset(self):
+        new_obs = self.venv.reset()
+        return self.embed(new_obs)
+
+    def step_wait(self):
+        obs, rew, done, infos = self.venv.step_wait()
+        return self.embed(obs), rew, done, infos
+
+    def embed(self, obs):
+        ob = torch.FloatTensor(obs).to(device=self.embedder.device)
+        return self.embedder(ob).detach().cpu().numpy()
+
+    def seed(self, seed=0):
+        # this is a dummy seed
         self._seed = seed
