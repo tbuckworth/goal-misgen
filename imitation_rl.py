@@ -1,6 +1,7 @@
 import os
 import warnings
 
+import imitation.util.logger
 import torch
 
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
@@ -54,46 +55,50 @@ def get_env_args(logdir):
     return DictToArgs(env_args)
 
 
-def main():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
-    shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
-
-    agent_dir = unshifted_agent_dir
-
+def lirl(agent_dir, args_dict):
     cfg = get_config(agent_dir)
-    # cfg = {}
+    #TODO: this is manually overriden:
     args = get_env_args(agent_dir)
-    hyperparameters = cfg#get_hyperparameters(args.param_name)
+    hyperparameters = cfg
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    use_wandb = True
+    # high level args
+    use_wandb = args_dict.get("use_wandb")
+    seed = args_dict.get("seed")
+    fast = args_dict.get("fast")
 
-    SEED = 42
 
-    FAST = True
-    SUPERFAST = False
-    n_steps = 2048
-    demo_batch_size = 2048
+    log_path = "results/"
 
-    if FAST:
-        N_RL_TRAIN_STEPS = int(2e19 + 1)#100_000
+    # learner arguments
+    ppo_batch_size = args_dict.get("ppo_batch_size")
+    ppo_ent_coef = args_dict.get("ppo_ent_coef")
+    ppo_learning_rate = args_dict.get("ppo_learning_rate")
+    ppo_gamma = args_dict.get("ppo_gamma")
+    ppo_clip_range = args_dict.get("ppo_clip_range")
+    ppo_vf_coef = args_dict.get("ppo_vf_coef")
+    ppo_n_epochs = args_dict.get("ppo_n_epochs")
+    ppo_n_steps = args_dict.get("ppo_n_steps")
+
+    # reward_net arguments
+    reward_hid_sizes = args_dict.get("reward_hid_sizes")
+    potential_hid_sizes = args_dict.get("potential_hid_sizes")
+
+    # AIRL arguments:
+    demo_batch_size = args_dict.get("demo_batch_size")
+    gen_replay_buffer_capacity = args_dict.get("gen_replay_buffer_capacity")
+    n_disc_updates_per_round = args_dict.get("n_disc_updates_per_round")
+    allow_variable_horizon = args_dict.get("allow_variable_horizon")
+    irl_steps_low = args_dict.get("irl_steps_low")
+    irl_steps_high = args_dict.get("irl_steps_high")
+    if fast:
+        n_rl_train_steps = irl_steps_low  # 100_000
     else:
-        N_RL_TRAIN_STEPS = 2_000_000
-    if SUPERFAST:
-        N_RL_TRAIN_STEPS = 100
-        hyperparameters["n_envs"] = 4
-        n_steps = 4
+        n_rl_train_steps = irl_steps_high
 
-    # make_vec_env(
-    #     "seals:seals/CartPole-v0",
-    #     rng=np.random.default_rng(SEED),
-    #     n_envs=8,
-    #     post_wrappers=[
-    #         lambda env, _: RolloutInfoWrapper(env)
-    #     ],  # needed for computing rollouts later
-    # )
+    # evals
+    n_eval_episodes = args_dict.get("n_eval_episodes")
 
-    # Wrap with a VecMonitor to collect stats and avoid errors
     venv = create_venv(args, cfg)
 
     model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
@@ -114,18 +119,8 @@ def main():
     # # VecMonitor
     # TODO: make this systematic in a wrapper:
     import gymnasium
-
     venv.action_space = gymnasium.spaces.discrete.Discrete(15)
     # venv.observation_space = gymnasium.spaces.box.Box(0.0, 1.0, (3, 64, 64))
-
-    # expert = load_policy(
-    #     "ppo-huggingface",
-    #     organization="HumanCompatibleAI",
-    #     env_name="seals/CartPole-v0",
-    #     venv=venv,
-    # )
-
-
 
     # We generate some expert trajectories, that the discriminator needs to distinguish from the learner's trajectories.
 
@@ -133,45 +128,53 @@ def main():
         expert,
         venv,
         rollout.make_sample_until(min_timesteps=None, min_episodes=2048),
-        rng=np.random.default_rng(SEED),
+        rng=np.random.default_rng(seed),
     )
-    # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator. We evaluate the learner before and after training so we can see if it made any progress.
-    # sb3_policy = ActorCriticPolicy(net_arch=dict(pi=[],vf=[]))
-    sb3_policy = lambda *args, **kwargs: ActorCriticPolicy(*args, net_arch=dict(pi=[],vf=[]), **kwargs)
+    # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator.
+    # We evaluate the learner before and after training so we can see if it made any progress.
+
+    # TODO: make this systematic:
+    sb3_policy = lambda *args, **kwargs: ActorCriticPolicy(*args, net_arch=dict(pi=[], vf=[]), **kwargs)
 
     learner = PPO(
         env=venv,
-        policy=sb3_policy,#MlpPolicy,
-        batch_size=64,
-        ent_coef=0.0,
-        learning_rate=0.0005,
-        gamma=0.95,
-        clip_range=0.1,
-        vf_coef=0.1,
-        n_epochs=5,
-        seed=SEED,
-        n_steps=n_steps,
+        policy=sb3_policy,  # MlpPolicy,
+        batch_size=ppo_batch_size,
+        ent_coef=ppo_ent_coef,
+        learning_rate=ppo_learning_rate,
+        gamma=ppo_gamma,
+        clip_range=ppo_clip_range,
+        vf_coef=ppo_vf_coef,
+        n_epochs=ppo_n_epochs,
+        seed=seed,
+        n_steps=ppo_n_steps,
     )
+
     reward_net = BasicShapedRewardNet(
         observation_space=venv.observation_space,
         action_space=venv.action_space,
         normalize_input_layer=RunningNorm,
+        reward_hid_sizes=reward_hid_sizes,  # (32,),
+        potential_hid_sizes=potential_hid_sizes,  # (32, 32),
     )
+    logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
+
     airl_trainer = AIRL(
         demonstrations=rollouts,
         demo_batch_size=demo_batch_size,
-        gen_replay_buffer_capacity=512,
-        n_disc_updates_per_round=16,
+        gen_replay_buffer_capacity=gen_replay_buffer_capacity,
+        n_disc_updates_per_round=n_disc_updates_per_round,
         venv=venv,
         gen_algo=learner,
         reward_net=reward_net,
-        allow_variable_horizon=True,
+        allow_variable_horizon=allow_variable_horizon,
         init_tensorboard=True,
         init_tensorboard_graph=True,
-        log_dir = "results/"
+        log_dir=log_path,
+        custom_logger=logger,
     )
 
-    venv.seed(SEED)
+    venv.seed(seed)
 
     if use_wandb:
         wandb_login()
@@ -179,16 +182,15 @@ def main():
         # cfg.update(hyperparameters)
         wandb.init(project="LIRL", config={}, tags=[], sync_tensorboard=True)
 
-
-    airl_trainer.train(N_RL_TRAIN_STEPS)
-
     learner_rewards_before_training, _ = evaluate_policy(
-        learner, venv, 100, return_episode_rewards=True
+        learner, venv, n_eval_episodes, return_episode_rewards=True
     )
 
-    venv.seed(SEED)
+    airl_trainer.train(n_rl_train_steps)
+
+    venv.seed(seed)
     learner_rewards_after_training, _ = evaluate_policy(
-        learner, venv, n_eval_episodes=100, return_episode_rewards=True
+        learner, venv, n_eval_episodes=n_eval_episodes, return_episode_rewards=True
     )
 
     print(
@@ -206,6 +208,39 @@ def main():
     )
     wandb.finish()
 
+def main():
+    unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
+    shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
+    
+    args_dict = dict(
+        use_wandb = True,
+        seed = 42,
+        fast = True,
+        log_path = "results/",
+        # learner arguments:
+        ppo_batch_size = 64,
+        ppo_ent_coef = 0.0,
+        ppo_learning_rate = 0.0005,
+        ppo_gamma = 0.95,
+        ppo_clip_range = 0.1,
+        ppo_vf_coef = 0.1,
+        ppo_n_epochs = 5,
+        ppo_n_steps = 2048,
+        # reward_net arguments:
+        reward_hid_sizes = (512,),
+        potential_hid_sizes = (512, 512),
+        # AIRL arguments:
+        demo_batch_size = 2048,
+        gen_replay_buffer_capacity = 512,
+        n_disc_updates_per_round = 16,
+        allow_variable_horizon = True,
+        irl_steps_low = int(2e19 + 1),
+        irl_steps_high = 2_000_000,
+        # Eval args:
+        n_eval_episodes = 100,
+    )
+    
+    lirl(unshifted_agent_dir, args_dict)
 
 
 
