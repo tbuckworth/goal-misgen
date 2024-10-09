@@ -35,7 +35,6 @@ def create_venv(args, hyperparameters, is_valid=False):
         # the img frames
     venv = TransposeFrame(venv)
     venv = ScaledFloatFrame(venv)
-    venv = DummyTerminalObsWrapper(venv)
     return venv
 
 class DictToArgs:

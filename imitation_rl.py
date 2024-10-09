@@ -3,7 +3,7 @@ import warnings
 
 import torch
 
-from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper
+from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
 from common.model import IdentityModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
@@ -64,6 +64,7 @@ def main():
     FAST = True
     SUPERFAST = True
     n_steps = 2048
+
     if FAST:
         N_RL_TRAIN_STEPS = 100_000
     else:
@@ -84,9 +85,9 @@ def main():
 
     # Wrap with a VecMonitor to collect stats and avoid errors
     venv = create_venv(args, cfg)
-    venv = VecRolloutInfoWrapper(venv)
 
     model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
+    model.device = device
     # load policy
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
@@ -96,6 +97,8 @@ def main():
     expert = PolicyWrapperIRL(policy, device)
 
     venv = EmbedderWrapper(venv, embedder=model)
+    venv = VecRolloutInfoWrapper(venv)
+    venv = DummyTerminalObsWrapper(venv)
     venv = VecMonitor(venv=venv)
 
     # # VecMonitor
@@ -103,7 +106,8 @@ def main():
     import gymnasium
 
     venv.action_space = gymnasium.spaces.discrete.Discrete(15)
-    venv.observation_space = gymnasium.spaces.box.Box(0.0, 1.0, (3, 64, 64))
+    # venv.observation_space = gymnasium.spaces.box.Box(0.0, 1.0, (3, 64, 64))
+
     # expert = load_policy(
     #     "ppo-huggingface",
     #     organization="HumanCompatibleAI",
@@ -143,7 +147,7 @@ def main():
     )
     airl_trainer = AIRL(
         demonstrations=rollouts,
-        demo_batch_size=2048,
+        demo_batch_size=n_steps,
         gen_replay_buffer_capacity=512,
         n_disc_updates_per_round=16,
         venv=venv,

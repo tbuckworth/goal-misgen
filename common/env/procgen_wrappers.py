@@ -8,7 +8,7 @@ from gym import spaces
 import time
 from collections import deque
 import torch
-from imitation.data import rollout, types
+# from imitation.data import rollout, types
 
 """
 Copy-pasted from OpenAI to obviate dependency on Baselines. Required for vectorized environments.
@@ -384,6 +384,7 @@ class ScaledFloatFrame(VecEnvWrapper):
 class DummyTerminalObsWrapper(VecEnvWrapper):
     def __init__(self, env):
         super().__init__(venv=env)
+        self._seed = 0
 
     def step_wait(self):
         obs, reward, done, infos = self.venv.step_wait()
@@ -395,6 +396,9 @@ class DummyTerminalObsWrapper(VecEnvWrapper):
     def reset(self):
         return self.venv.reset()
 
+    def seed(self, seed=0):
+        # this is a dummy seed
+        self._seed = seed
 
 class VecRolloutInfoWrapper(VecEnvWrapper):
     """Add the entire episode's rewards and observations to `info` at episode end.
