@@ -16,8 +16,8 @@ try:
 except ImportError:
     pass
 
-unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
-shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
+# unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
+# shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 
 import numpy as np
 from imitation.policies.serialize import load_policy
@@ -71,14 +71,14 @@ def lirl(agent_dir, args_dict):
     log_path = "results/"
 
     # learner arguments
-    ppo_batch_size = args_dict.get("ppo_batch_size")
-    ppo_ent_coef = args_dict.get("ppo_ent_coef")
-    ppo_learning_rate = args_dict.get("ppo_learning_rate")
-    ppo_gamma = args_dict.get("ppo_gamma")
-    ppo_clip_range = args_dict.get("ppo_clip_range")
-    ppo_vf_coef = args_dict.get("ppo_vf_coef")
-    ppo_n_epochs = args_dict.get("ppo_n_epochs")
-    ppo_n_steps = args_dict.get("ppo_n_steps")
+    ppo_batch_size = cfg.get("mini_batch_size")
+    ppo_ent_coef = cfg.get("entropy_coef")
+    ppo_learning_rate = cfg.get("learning_rate")
+    ppo_gamma = cfg.get("gamma")
+    ppo_clip_range = cfg.get("eps_clip")
+    ppo_vf_coef = cfg.get("value_coef")
+    ppo_n_epochs = cfg.get("epoch")
+    ppo_n_steps = cfg.get("n_steps")
 
     # reward_net arguments
     reward_hid_sizes = args_dict.get("reward_hid_sizes")
@@ -178,9 +178,8 @@ def lirl(agent_dir, args_dict):
 
     if use_wandb:
         wandb_login()
-        # cfg = vars(args)
-        # cfg.update(hyperparameters)
-        wandb.init(project="LIRL", config={}, tags=[], sync_tensorboard=True)
+        args_dict.update(cfg)
+        wandb.init(project="LIRL", config=args_dict, tags=[], sync_tensorboard=True)
 
     learner_rewards_before_training, _ = evaluate_policy(
         learner, venv, n_eval_episodes, return_episode_rewards=True
@@ -218,17 +217,17 @@ def main():
         fast = True,
         log_path = "results/",
         # learner arguments:
-        ppo_batch_size = 64,
-        ppo_ent_coef = 0.0,
-        ppo_learning_rate = 0.0005,
-        ppo_gamma = 0.95,
-        ppo_clip_range = 0.1,
-        ppo_vf_coef = 0.1,
-        ppo_n_epochs = 5,
-        ppo_n_steps = 2048,
+        # ppo_batch_size = 64,
+        # ppo_ent_coef = 0.0,
+        # ppo_learning_rate = 0.0005,
+        # ppo_gamma = 0.95,
+        # ppo_clip_range = 0.1,
+        # ppo_vf_coef = 0.1,
+        # ppo_n_epochs = 5,
+        # ppo_n_steps = 2048,
         # reward_net arguments:
-        reward_hid_sizes = (512,),
-        potential_hid_sizes = (512, 512),
+        reward_hid_sizes = (128),
+        potential_hid_sizes = (128, 128),
         # AIRL arguments:
         demo_batch_size = 2048,
         gen_replay_buffer_capacity = 512,
