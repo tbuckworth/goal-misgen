@@ -55,6 +55,22 @@ def get_env_args(logdir):
     return DictToArgs(env_args)
 
 
+def run_ppo(args_dict):
+    agent_dir = args_dict.get("agent_dir")
+    cfg = get_config(agent_dir)
+    #TODO: this is manually overriden:
+    args = get_env_args(agent_dir)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+    with self.logger.accumulate_means("gen"):
+            learner.learn(
+                total_timesteps=total_timesteps,
+                reset_num_timesteps=False,
+                callback=self.gen_callback,
+                **learn_kwargs,
+            )
+
 def lirl(args_dict):
     agent_dir = args_dict.get("agent_dir")
     cfg = get_config(agent_dir)
@@ -160,6 +176,7 @@ def lirl(args_dict):
     )
     logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
 
+
     airl_trainer = AIRL(
         demonstrations=rollouts,
         demo_batch_size=demo_batch_size,
@@ -181,6 +198,16 @@ def lirl(args_dict):
         wandb_login()
         args_dict.update(cfg)
         wandb.init(project="LIRL", config=args_dict, tags=[], sync_tensorboard=True)
+
+    if args_dict.get("test_ppo"):
+        with logger.accumulate_means("ppo"):
+            learner.learn(
+                total_timesteps=int(1e7),
+                reset_num_timesteps=False,
+                callback=None,#self.gen_callback,
+                #**learn_kwargs,
+            )
+        return
 
     learner_rewards_before_training, _ = evaluate_policy(
         learner, venv, n_eval_episodes, return_episode_rewards=True
@@ -213,6 +240,7 @@ def main():
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
     
     args_dict = dict(
+        test_ppo = True,
         agent_dir = shifted_agent_dir,
         use_wandb = True,
         seed = 42,
@@ -228,7 +256,7 @@ def main():
         # ppo_n_epochs = 5,
         # ppo_n_steps = 2048,
         # reward_net arguments:
-        reward_hid_sizes = (128),
+        reward_hid_sizes = (128,),
         potential_hid_sizes = (128, 128),
         # AIRL arguments:
         demo_batch_size = 2048,
