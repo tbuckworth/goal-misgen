@@ -55,21 +55,6 @@ def get_env_args(logdir):
     return DictToArgs(env_args)
 
 
-def run_ppo(args_dict):
-    agent_dir = args_dict.get("agent_dir")
-    cfg = get_config(agent_dir)
-    #TODO: this is manually overriden:
-    args = get_env_args(agent_dir)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-
-    with self.logger.accumulate_means("gen"):
-            learner.learn(
-                total_timesteps=total_timesteps,
-                reset_num_timesteps=False,
-                callback=self.gen_callback,
-                **learn_kwargs,
-            )
 
 def lirl(args_dict):
     agent_dir = args_dict.get("agent_dir")
