@@ -55,7 +55,8 @@ def get_env_args(logdir):
     return DictToArgs(env_args)
 
 
-def lirl(agent_dir, args_dict):
+def lirl(args_dict):
+    agent_dir = args_dict.get("agent_dir")
     cfg = get_config(agent_dir)
     #TODO: this is manually overriden:
     args = get_env_args(agent_dir)
@@ -212,6 +213,7 @@ def main():
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
     
     args_dict = dict(
+        agent_dir = shifted_agent_dir,
         use_wandb = True,
         seed = 42,
         fast = True,
@@ -239,7 +241,7 @@ def main():
         n_eval_episodes = 100,
     )
     
-    lirl(unshifted_agent_dir, args_dict)
+    lirl(args_dict)
 
 
 
