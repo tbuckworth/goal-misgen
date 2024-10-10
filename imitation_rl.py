@@ -54,6 +54,31 @@ def get_env_args(logdir):
     }
     return DictToArgs(env_args)
 
+def predict(policy, obs):
+    with torch.no_grad():
+        obs = torch.FloatTensor(obs).to(device=policy.device)
+        p, v, _ = policy(obs, None, None)
+        logits = p.logits
+        action = p.sample().detach().cpu().numpy()
+    return logits
+
+def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
+    obs = venv.reset()
+    reward_net.train()
+    for epoch in range(args_dict.get("n_reward_net_epochs")):
+        # collect data from policy and venv:
+        for batch in rollouts:
+            states, actions, next_states, dones = batch
+            rewards = reward_net(states, actions, next_states, dones)
+            logits = predict(policy, states)
+            # TODO: this is not the correct loss function
+            loss = (logits-rewards)**2
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
+            reward_net.optimizer.step()
+
+
+
 
 
 def lirl(args_dict):
@@ -71,6 +96,9 @@ def lirl(args_dict):
 
 
     log_path = "results/"
+
+    # overrides:
+    # cfg["learning_rate"] = 0.00005
 
     # learner arguments
     ppo_batch_size = cfg.get("mini_batch_size")
@@ -152,6 +180,10 @@ def lirl(args_dict):
         n_steps=ppo_n_steps,
     )
 
+    if args_dict.get("copy_weights"):
+        # copy weights into learner:
+        learner.policy.action_net.load_state_dict(policy.fc_policy.state_dict())
+
     reward_net = BasicShapedRewardNet(
         observation_space=venv.observation_space,
         action_space=venv.action_space,
@@ -193,6 +225,11 @@ def lirl(args_dict):
                 #**learn_kwargs,
             )
         return
+    
+    if args_dict.get("reward_shaping"):
+        with logger.accumulate_means("reward_shaping"):
+            train_reward_net(reward_net, venv, policy, rollouts, args_dict)
+            return
 
     learner_rewards_before_training, _ = evaluate_policy(
         learner, venv, n_eval_episodes, return_episode_rewards=True
@@ -225,7 +262,8 @@ def main():
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
     
     args_dict = dict(
-        test_ppo = True,
+        copy_weights = True,
+        test_ppo = False,
         agent_dir = shifted_agent_dir,
         use_wandb = True,
         seed = 42,
