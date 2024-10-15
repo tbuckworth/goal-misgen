@@ -1,8 +1,10 @@
+import copy
 import os
 import warnings
 
 import imitation.util.logger
 import torch
+from torch import nn
 
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
 from common.model import IdentityModel
@@ -58,25 +60,96 @@ def predict(policy, obs):
     with torch.no_grad():
         obs = torch.FloatTensor(obs).to(device=policy.device)
         p, v, _ = policy(obs, None, None)
-        logits = p.logits
+        log_probs = p.logits
         action = p.sample().detach().cpu().numpy()
-    return logits
+    return log_probs, action
+
+
+def collect_data(policy, venv, n):
+    obs = venv.reset()
+    states = obs
+    start = True
+    while(len(states) < n):
+        log_probs, action = predict(policy, obs)
+        next_obs, rew, done, info = venv.step(action)
+        if start:
+            actions = action
+            next_states = next_obs
+            dones = done
+            lp = log_probs
+            start = False
+        else:
+            actions = np.append(actions, action, 0)
+            next_states = np.append(next_states, next_obs, 0)
+            dones = np.append(dones, done, 0)
+            # lp = np.append(lp, log_probs, 0)
+            lp = torch.cat((lp, log_probs), 0)
+        states = np.append(states, next_obs, 0)
+    return states[:-len(next_obs)], actions, next_states, dones, lp
+
+def generate_data(agent, env, n):
+    X, _ = env.reset()
+    X = np.expand_dims(X,0)
+    agent.reset()
+    act = env.action_space.sample()
+    A = np.expand_dims(act.copy(), 0)
+    ep_count = 0
+    while ep_count < n:
+        x, rew, done, trunc, info = env.step(act)
+        act = env.action_space.sample()
+        if ep_count == 0 and not done:
+            act = agent.forward(x)
+        if done:
+            ep_count += 1
+            m_in, m_out, u_in, u_out, loss = agent.sample_pre_act(X, A)
+            X = np.expand_dims(x, 0)
+            A = np.expand_dims(act, 0)
+            if ep_count == 1:
+                M_in, M_out, U_in, U_out, Loss = m_in, m_out, u_in, u_out, loss
+            else:
+                M_in = np.append(M_in, m_in, axis=1)
+                M_out = np.append(M_out, m_out, axis=1)
+                U_in = np.append(U_in, u_in, axis=1)
+                U_out = np.append(U_out, u_out, axis=1)
+                Loss = np.append(Loss, loss, axis=1)
+
+        X = np.append(X, np.expand_dims(x, 0), axis=0)
+        A = np.append(A, np.expand_dims(act, 0), axis=0)
+
+    return M_in, M_out, U_in, U_out, Loss
+
+def reward_forward(reward_net, states, actions, next_states, dones, device, idx):
+    s = torch.FloatTensor(states).to(device=device)[idx]
+    # make one-hot:
+    act = torch.FloatTensor(actions).to(device=device).unsqueeze(dim=-1)
+    a = nn.functional.one_hot(act)[idx]
+    n = torch.FloatTensor(next_states).to(device=device)[idx]
+    d = torch.FloatTensor(dones).to(device=device)[idx]
+    return reward_net(s, a, n, d)
 
 def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
-    obs = venv.reset()
-    reward_net.train()
-    for epoch in range(args_dict.get("n_reward_net_epochs")):
-        # collect data from policy and venv:
-        for batch in rollouts:
-            states, actions, next_states, dones = batch
-            rewards = reward_net(states, actions, next_states, dones)
-            logits = predict(policy, states)
-            # TODO: this is not the correct loss function
-            loss = (logits-rewards)**2
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
-            reward_net.optimizer.step()
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(reward_net.parameters(), lr=args_dict["reward_shaping_lr"])
 
+    reward_net.train()
+    start_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+    for epoch in range(args_dict.get("n_reward_net_epochs")):
+        # collect data
+        states, actions, next_states, dones, log_probs = collect_data(policy, venv, n=10000)
+        # shuffle
+        idx = torch.randperm(len(states))
+        rewards = reward_forward(reward_net, states, actions, next_states, dones, policy.device, idx)
+        # TODO: could actually use rewards for all actions from this state
+        loss = loss_function(rewards, log_probs)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
+        optimizer.step()
+        optimizer.zero_grad()
+        reward_net.optimizer.step()
+    end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+
+    for s,e in zip(start_weights, end_weights):
+        assert (s == e).all(), "policy has changed!"
 
 
 
@@ -133,6 +206,7 @@ def lirl(args_dict):
 
     model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
     model.device = device
+    policy.device = device
     # load policy
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
@@ -264,6 +338,8 @@ def main():
     args_dict = dict(
         copy_weights = True,
         test_ppo = False,
+        reward_shaping = True,
+        reward_shaping_lr = 5e-3,
         agent_dir = shifted_agent_dir,
         use_wandb = True,
         seed = 42,
@@ -279,6 +355,7 @@ def main():
         # ppo_n_epochs = 5,
         # ppo_n_steps = 2048,
         # reward_net arguments:
+        n_reward_net_epochs = 100,
         reward_hid_sizes = (128,),
         potential_hid_sizes = (128, 128),
         # AIRL arguments:
