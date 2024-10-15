@@ -11,7 +11,7 @@ from common.model import IdentityModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
 from stable_baselines3.common.policies import ActorCriticPolicy
-
+from matplotlib import pyplot as plt
 try:
     import wandb
     from private_login import wandb_login
@@ -77,15 +77,17 @@ def collect_data(policy, venv, n):
             next_states = next_obs
             dones = done
             lp = log_probs
+            rews = rew
             start = False
         else:
             actions = np.append(actions, action, 0)
             next_states = np.append(next_states, next_obs, 0)
             dones = np.append(dones, done, 0)
+            rews = np.append(rews, rew, 0)
             # lp = np.append(lp, log_probs, 0)
             lp = torch.cat((lp, log_probs), 0)
         states = np.append(states, next_obs, 0)
-    return states[:-len(next_obs)], actions, next_states, dones, lp
+    return states[:-len(next_obs)], actions, next_states, dones, lp, rews
 
 def generate_data(agent, env, n):
     X, _ = env.reset()
@@ -121,7 +123,7 @@ def generate_data(agent, env, n):
 def reward_forward(reward_net, states, actions, next_states, dones, device, idx):
     s = torch.FloatTensor(states).to(device=device)[idx]
     # make one-hot:
-    act = torch.FloatTensor(actions).to(device=device).unsqueeze(dim=-1)
+    act = torch.LongTensor(actions).to(device=device)
     a = nn.functional.one_hot(act)[idx]
     n = torch.FloatTensor(next_states).to(device=device)[idx]
     d = torch.FloatTensor(dones).to(device=device)[idx]
@@ -129,29 +131,47 @@ def reward_forward(reward_net, states, actions, next_states, dones, device, idx)
 
 def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
     loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(reward_net.parameters(), lr=args_dict["reward_shaping_lr"])
 
     reward_net.train()
     start_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+    states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=10000)
+
     for epoch in range(args_dict.get("n_reward_net_epochs")):
         # collect data
-        states, actions, next_states, dones, log_probs = collect_data(policy, venv, n=10000)
-        # shuffle
         idx = torch.randperm(len(states))
-        rewards = reward_forward(reward_net, states, actions, next_states, dones, policy.device, idx)
-        # TODO: could actually use rewards for all actions from this state
-        loss = loss_function(rewards, log_probs)
+
+        advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device, idx)
+        act_log_prob = log_probs[torch.arange(len(actions)),torch.tensor(actions)][idx]
+        loss = loss_function(advantages, act_log_prob)
+
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
+        # torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
         optimizer.step()
         optimizer.zero_grad()
-        reward_net.optimizer.step()
+        with torch.no_grad():
+            rewards = reward_forward(reward_net.base, states, actions, next_states, dones, policy.device, idx)
+        reward_corr = np.corrcoef(true_rewards[idx], rewards.cpu().numpy())[0, 1]
+        adv_corr = np.corrcoef(true_rewards[idx], advantages.detach().cpu().numpy())[0, 1]
+        wandb.log({
+            "epoch": epoch,
+            "loss": loss.item(),
+            "adv_corr": adv_corr,
+            "reward_corr": reward_corr,
+        })
+        print(f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
     end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
 
     for s,e in zip(start_weights, end_weights):
         assert (s == e).all(), "policy has changed!"
 
-
+    plt.scatter(true_rewards[idx], rewards.cpu().numpy())
+    plt.show()
+    plt.scatter(true_rewards, rewards.cpu().numpy())
+    plt.show()
+    plt.scatter(true_rewards, advantages.detach().cpu().numpy())
+    plt.show()
 
 
 def lirl(args_dict):
