@@ -120,13 +120,13 @@ def generate_data(agent, env, n):
 
     return M_in, M_out, U_in, U_out, Loss
 
-def reward_forward(reward_net, states, actions, next_states, dones, device, idx):
-    s = torch.FloatTensor(states).to(device=device)[idx]
+def reward_forward(reward_net, states, actions, next_states, dones, device):
+    s = torch.FloatTensor(states).to(device=device)
     # make one-hot:
     act = torch.LongTensor(actions).to(device=device)
-    a = nn.functional.one_hot(act)[idx]
-    n = torch.FloatTensor(next_states).to(device=device)[idx]
-    d = torch.FloatTensor(dones).to(device=device)[idx]
+    a = nn.functional.one_hot(act)
+    n = torch.FloatTensor(next_states).to(device=device)
+    d = torch.FloatTensor(dones).to(device=device)
     return reward_net(s, a, n, d)
 
 def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
@@ -140,10 +140,10 @@ def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
 
     for epoch in range(args_dict.get("n_reward_net_epochs")):
         # collect data
-        idx = torch.randperm(len(states))
+        # idx = torch.randperm(len(states))
 
-        advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device, idx)
-        act_log_prob = log_probs[torch.arange(len(actions)),torch.tensor(actions)][idx]
+        advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device)
+        act_log_prob = log_probs[torch.arange(len(actions)),torch.tensor(actions)]
         loss = loss_function(advantages, act_log_prob)
 
         loss.backward()
@@ -151,9 +151,9 @@ def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
         optimizer.step()
         optimizer.zero_grad()
         with torch.no_grad():
-            rewards = reward_forward(reward_net.base, states, actions, next_states, dones, policy.device, idx)
-        reward_corr = np.corrcoef(true_rewards[idx], rewards.cpu().numpy())[0, 1]
-        adv_corr = np.corrcoef(true_rewards[idx], advantages.detach().cpu().numpy())[0, 1]
+            rewards = reward_forward(reward_net.base, states, actions, next_states, dones, policy.device)
+        reward_corr = np.corrcoef(true_rewards, rewards.cpu().numpy())[0, 1]
+        adv_corr = np.corrcoef(true_rewards, advantages.detach().cpu().numpy())[0, 1]
         wandb.log({
             "epoch": epoch,
             "loss": loss.item(),
@@ -166,10 +166,10 @@ def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
     for s,e in zip(start_weights, end_weights):
         assert (s == e).all(), "policy has changed!"
 
-    plt.scatter(true_rewards[idx], rewards.cpu().numpy())
-    plt.show()
     plt.scatter(true_rewards, rewards.cpu().numpy())
     plt.show()
+    # plt.scatter(true_rewards, rewards.cpu().numpy())
+    # plt.show()
     plt.scatter(true_rewards, advantages.detach().cpu().numpy())
     plt.show()
 
@@ -359,7 +359,7 @@ def main():
         copy_weights = True,
         test_ppo = False,
         reward_shaping = True,
-        reward_shaping_lr = 5e-3,
+        reward_shaping_lr = 5e-4,
         agent_dir = shifted_agent_dir,
         use_wandb = True,
         seed = 42,
@@ -375,7 +375,7 @@ def main():
         # ppo_n_epochs = 5,
         # ppo_n_steps = 2048,
         # reward_net arguments:
-        n_reward_net_epochs = 100,
+        n_reward_net_epochs = 10000,
         reward_hid_sizes = (128,),
         potential_hid_sizes = (128, 128),
         # AIRL arguments:
