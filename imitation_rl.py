@@ -144,8 +144,9 @@ def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
 
         advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device)
         act_log_prob = log_probs[torch.arange(len(actions)),torch.tensor(actions)]
-        loss = loss_function(advantages, act_log_prob)
 
+        loss = loss_function(advantages, act_log_prob)
+        # loss = loss_function(advantages, torch.FloatTensor(true_rewards).to(device=policy.device))
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
         optimizer.step()
@@ -167,9 +168,6 @@ def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
         assert (s == e).all(), "policy has changed!"
 
     plt.scatter(true_rewards, rewards.cpu().numpy())
-    plt.show()
-    # plt.scatter(true_rewards, rewards.cpu().numpy())
-    # plt.show()
     plt.scatter(true_rewards, advantages.detach().cpu().numpy())
     plt.show()
 
@@ -376,8 +374,8 @@ def main():
         # ppo_n_steps = 2048,
         # reward_net arguments:
         n_reward_net_epochs = 10000,
-        reward_hid_sizes = (128,),
-        potential_hid_sizes = (128, 128),
+        reward_hid_sizes = (128,128,128),
+        potential_hid_sizes = (128, 128, 128, 128),
         # AIRL arguments:
         demo_batch_size = 2048,
         gen_replay_buffer_capacity = 512,
