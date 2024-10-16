@@ -1,5 +1,6 @@
 import copy
 import os
+import time
 import warnings
 
 import imitation.util.logger
@@ -40,7 +41,7 @@ def get_config(logdir):
 
 def get_env_args(logdir):
     # manual implementation for now
-    warnings.warn("manually selecting env_args for now")
+    warnings.warn("manually selecting env_args for now \n\nINCORRECT FOR SHIFTED AGENT\n\n")
     env_args = {
         "val_env_name": "coinrun",
         "env_name": "coinrun",
@@ -129,7 +130,7 @@ def reward_forward(reward_net, states, actions, next_states, dones, device):
     d = torch.FloatTensor(dones).to(device=device)
     return reward_net(s, a, n, d)
 
-def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
+def train_reward_net(reward_net, venv, policy, args_dict, cfg):
     loss_function = nn.CrossEntropyLoss()
     loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(reward_net.parameters(), lr=args_dict["reward_shaping_lr"])
@@ -167,9 +168,25 @@ def train_reward_net(reward_net, venv, policy, rollouts, args_dict):
     for s,e in zip(start_weights, end_weights):
         assert (s == e).all(), "policy has changed!"
 
+    data = [[x, y] for (x, y) in zip(true_rewards, rewards.cpu().numpy())]
+    table = wandb.Table(data=data, columns=["True Rewards", "Learned Rewards"])
+    wandb.log({"Rewards": wandb.plot.scatter(table, "True Rewards", "Learned Rewards", title="True Rewards vs Learned Rewards")})
+    
+
     plt.scatter(true_rewards, rewards.cpu().numpy())
-    plt.scatter(true_rewards, advantages.detach().cpu().numpy())
-    plt.show()
+    # plt.scatter(true_rewards, advantages.detach().cpu().numpy())
+    plt.savefig("results/reward_shaping_scatter.png")
+
+    logdir = os.path.join('logs', 'rew_shaping', cfg["env_name"], cfg["exp_name"])
+    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
+    logdir = os.path.join(logdir, run_name)
+    if not (os.path.exists(logdir)):
+        os.makedirs(logdir)
+
+    # save reward net:
+    torch.save(reward_net.state_dict(), os.path.join(logdir,"reward_net.pth"))
+    np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
+    np.save(os.path.join(logdir, "config.npy"), cfg)
 
 
 def lirl(args_dict):
@@ -282,6 +299,7 @@ def lirl(args_dict):
         normalize_input_layer=RunningNorm,
         reward_hid_sizes=reward_hid_sizes,  # (32,),
         potential_hid_sizes=potential_hid_sizes,  # (32, 32),
+        use_action=args_dict.get("use_action_reward_net"),
     )
     logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
 
@@ -320,7 +338,7 @@ def lirl(args_dict):
     
     if args_dict.get("reward_shaping"):
         with logger.accumulate_means("reward_shaping"):
-            train_reward_net(reward_net, venv, policy, rollouts, args_dict)
+            train_reward_net(reward_net, venv, policy, args_dict, cfg)
             return
 
     learner_rewards_before_training, _ = evaluate_policy(
@@ -376,6 +394,7 @@ def main():
         n_reward_net_epochs = 10000,
         reward_hid_sizes = (128,128,128),
         potential_hid_sizes = (128, 128, 128, 128),
+        use_action_reward_net = False,
         # AIRL arguments:
         demo_batch_size = 2048,
         gen_replay_buffer_capacity = 512,
