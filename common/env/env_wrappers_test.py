@@ -14,7 +14,7 @@ class MyTestCase(unittest.TestCase):
         agent_dir = "/home/titus/PycharmProjects/goal-misgen/logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
         device = "cuda" if torch.cuda.is_available() else "cpu"
         cfg = get_config(agent_dir)
-        args = get_env_args(agent_dir)
+        args = get_env_args(cfg)
         venv = create_venv(args, cfg)
         model, policy = initialize_policy(device, cfg, venv, venv.observation_space.shape)
         model.device = device
