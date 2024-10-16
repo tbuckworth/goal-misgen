@@ -7,7 +7,7 @@ from gym import spaces
 import time
 from collections import deque
 import torch
-from imitation.data import rollout, types
+# from imitation.data import rollout, types
 
 """
 Copy-pasted from OpenAI to obviate dependency on Baselines. Required for vectorized environments.
