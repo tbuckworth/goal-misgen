@@ -1,14 +1,26 @@
+import copy
 import os
+import time
 import warnings
 
+import imitation.util.logger
 import torch
+from torch import nn
 
-from common.env.procgen_wrappers import VecRolloutInfoWrapper
+from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
+from common.model import IdentityModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
+from stable_baselines3.common.policies import ActorCriticPolicy
+from matplotlib import pyplot as plt
+try:
+    import wandb
+    from private_login import wandb_login
+except ImportError:
+    pass
 
-unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
-shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
+# unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
+# shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 
 import numpy as np
 from imitation.policies.serialize import load_policy
@@ -29,7 +41,7 @@ def get_config(logdir):
 
 def get_env_args(logdir):
     # manual implementation for now
-    warnings.warn("manually selecting env_args for now")
+    warnings.warn("manually selecting env_args for now \n\nINCORRECT FOR SHIFTED AGENT\n\n")
     env_args = {
         "val_env_name": "coinrun",
         "env_name": "coinrun",
@@ -45,102 +57,299 @@ def get_env_args(logdir):
     }
     return DictToArgs(env_args)
 
+def predict(policy, obs):
+    with torch.no_grad():
+        obs = torch.FloatTensor(obs).to(device=policy.device)
+        p, v, _ = policy(obs, None, None)
+        log_probs = p.logits
+        action = p.sample().detach().cpu().numpy()
+    return log_probs, action
 
-def main():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
-    shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 
-    agent_dir = shifted_agent_dir
+def collect_data(policy, venv, n):
+    obs = venv.reset()
+    states = obs
+    start = True
+    while(len(states) < n):
+        log_probs, action = predict(policy, obs)
+        next_obs, rew, done, info = venv.step(action)
+        if start:
+            actions = action
+            next_states = next_obs
+            dones = done
+            lp = log_probs
+            rews = rew
+            start = False
+        else:
+            actions = np.append(actions, action, 0)
+            next_states = np.append(next_states, next_obs, 0)
+            dones = np.append(dones, done, 0)
+            rews = np.append(rews, rew, 0)
+            # lp = np.append(lp, log_probs, 0)
+            lp = torch.cat((lp, log_probs), 0)
+        states = np.append(states, next_obs, 0)
+    return states[:-len(next_obs)], actions, next_states, dones, lp, rews
 
+def generate_data(agent, env, n):
+    X, _ = env.reset()
+    X = np.expand_dims(X,0)
+    agent.reset()
+    act = env.action_space.sample()
+    A = np.expand_dims(act.copy(), 0)
+    ep_count = 0
+    while ep_count < n:
+        x, rew, done, trunc, info = env.step(act)
+        act = env.action_space.sample()
+        if ep_count == 0 and not done:
+            act = agent.forward(x)
+        if done:
+            ep_count += 1
+            m_in, m_out, u_in, u_out, loss = agent.sample_pre_act(X, A)
+            X = np.expand_dims(x, 0)
+            A = np.expand_dims(act, 0)
+            if ep_count == 1:
+                M_in, M_out, U_in, U_out, Loss = m_in, m_out, u_in, u_out, loss
+            else:
+                M_in = np.append(M_in, m_in, axis=1)
+                M_out = np.append(M_out, m_out, axis=1)
+                U_in = np.append(U_in, u_in, axis=1)
+                U_out = np.append(U_out, u_out, axis=1)
+                Loss = np.append(Loss, loss, axis=1)
+
+        X = np.append(X, np.expand_dims(x, 0), axis=0)
+        A = np.append(A, np.expand_dims(act, 0), axis=0)
+
+    return M_in, M_out, U_in, U_out, Loss
+
+def reward_forward(reward_net, states, actions, next_states, dones, device):
+    s = torch.FloatTensor(states).to(device=device)
+    # make one-hot:
+    act = torch.LongTensor(actions).to(device=device)
+    a = nn.functional.one_hot(act)
+    n = torch.FloatTensor(next_states).to(device=device)
+    d = torch.FloatTensor(dones).to(device=device)
+    return reward_net(s, a, n, d)
+
+def train_reward_net(reward_net, venv, policy, args_dict, cfg):
+    loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.MSELoss()
+    optimizer = torch.optim.Adam(reward_net.parameters(), lr=args_dict["reward_shaping_lr"])
+
+    reward_net.train()
+    start_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+    states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=10000)
+
+    for epoch in range(args_dict.get("n_reward_net_epochs")):
+        # collect data
+        # idx = torch.randperm(len(states))
+
+        advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device)
+        act_log_prob = log_probs[torch.arange(len(actions)),torch.tensor(actions)]
+
+        loss = loss_function(advantages, act_log_prob)
+        # loss = loss_function(advantages, torch.FloatTensor(true_rewards).to(device=policy.device))
+        loss.backward()
+        # torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
+        optimizer.step()
+        optimizer.zero_grad()
+        with torch.no_grad():
+            rewards = reward_forward(reward_net.base, states, actions, next_states, dones, policy.device)
+        reward_corr = np.corrcoef(true_rewards, rewards.cpu().numpy())[0, 1]
+        adv_corr = np.corrcoef(true_rewards, advantages.detach().cpu().numpy())[0, 1]
+        wandb.log({
+            "epoch": epoch,
+            "loss": loss.item(),
+            "adv_corr": adv_corr,
+            "reward_corr": reward_corr,
+        })
+        print(f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
+    end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+
+    for s,e in zip(start_weights, end_weights):
+        assert (s == e).all(), "policy has changed!"
+
+    data = [[x, y] for (x, y) in zip(true_rewards, rewards.cpu().numpy())]
+    table = wandb.Table(data=data, columns=["True Rewards", "Learned Rewards"])
+    wandb.log({"Rewards": wandb.plot.scatter(table, "True Rewards", "Learned Rewards", title="True Rewards vs Learned Rewards")})
+    
+
+    plt.scatter(true_rewards, rewards.cpu().numpy())
+    # plt.scatter(true_rewards, advantages.detach().cpu().numpy())
+    plt.savefig("results/reward_shaping_scatter.png")
+
+    logdir = os.path.join('logs', 'rew_shaping', cfg["env_name"], cfg["exp_name"])
+    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
+    logdir = os.path.join(logdir, run_name)
+    if not (os.path.exists(logdir)):
+        os.makedirs(logdir)
+
+    # save reward net:
+    torch.save(reward_net.state_dict(), os.path.join(logdir,"reward_net.pth"))
+    np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
+    np.save(os.path.join(logdir, "config.npy"), cfg)
+
+
+def lirl(args_dict):
+    agent_dir = args_dict.get("agent_dir")
     cfg = get_config(agent_dir)
-    # cfg = {}
+    #TODO: this is manually overriden:
     args = get_env_args(agent_dir)
-    hyperparameters = cfg#get_hyperparameters(args.param_name)
+    hyperparameters = cfg
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    SEED = 42
+    # high level args
+    use_wandb = args_dict.get("use_wandb")
+    seed = args_dict.get("seed")
+    fast = args_dict.get("fast")
 
-    FAST = True
 
-    if FAST:
-        N_RL_TRAIN_STEPS = 100_000
+    log_path = "results/"
+
+    # overrides:
+    # cfg["learning_rate"] = 0.00005
+
+    # learner arguments
+    ppo_batch_size = cfg.get("mini_batch_size")
+    ppo_ent_coef = cfg.get("entropy_coef")
+    ppo_learning_rate = cfg.get("learning_rate")
+    ppo_gamma = cfg.get("gamma")
+    ppo_clip_range = cfg.get("eps_clip")
+    ppo_vf_coef = cfg.get("value_coef")
+    ppo_n_epochs = cfg.get("epoch")
+    ppo_n_steps = cfg.get("n_steps")
+
+    # reward_net arguments
+    reward_hid_sizes = args_dict.get("reward_hid_sizes")
+    potential_hid_sizes = args_dict.get("potential_hid_sizes")
+
+    # AIRL arguments:
+    demo_batch_size = args_dict.get("demo_batch_size")
+    gen_replay_buffer_capacity = args_dict.get("gen_replay_buffer_capacity")
+    n_disc_updates_per_round = args_dict.get("n_disc_updates_per_round")
+    allow_variable_horizon = args_dict.get("allow_variable_horizon")
+    irl_steps_low = args_dict.get("irl_steps_low")
+    irl_steps_high = args_dict.get("irl_steps_high")
+    if fast:
+        n_rl_train_steps = irl_steps_low  # 100_000
     else:
-        N_RL_TRAIN_STEPS = 2_000_000
+        n_rl_train_steps = irl_steps_high
 
-    # make_vec_env(
-    #     "seals:seals/CartPole-v0",
-    #     rng=np.random.default_rng(SEED),
-    #     n_envs=8,
-    #     post_wrappers=[
-    #         lambda env, _: RolloutInfoWrapper(env)
-    #     ],  # needed for computing rollouts later
-    # )
+    # evals
+    n_eval_episodes = args_dict.get("n_eval_episodes")
 
-    # Wrap with a VecMonitor to collect stats and avoid errors
     venv = create_venv(args, cfg)
-    venv = VecRolloutInfoWrapper(venv)
-    venv = VecMonitor(venv=venv)
-    # VecMonitor
-
-    # expert = load_policy(
-    #     "ppo-huggingface",
-    #     organization="HumanCompatibleAI",
-    #     env_name="seals/CartPole-v0",
-    #     venv=venv,
-    # )
 
     model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
+    model.device = device
+    policy.device = device
     # load policy
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
+    policy.embedder = IdentityModel()
+
     expert = PolicyWrapperIRL(policy, device)
+
+    venv = EmbedderWrapper(venv, embedder=model)
+    venv = VecRolloutInfoWrapper(venv)
+    venv = DummyTerminalObsWrapper(venv)
+    venv = VecMonitor(venv=venv)
+
+    # # VecMonitor
+    # TODO: make this systematic in a wrapper:
+    import gymnasium
+    venv.action_space = gymnasium.spaces.discrete.Discrete(15)
+    # venv.observation_space = gymnasium.spaces.box.Box(0.0, 1.0, (3, 64, 64))
 
     # We generate some expert trajectories, that the discriminator needs to distinguish from the learner's trajectories.
 
     rollouts = rollout.rollout(
         expert,
         venv,
-        rollout.make_sample_until(min_timesteps=None, min_episodes=60),
-        rng=np.random.default_rng(SEED),
+        rollout.make_sample_until(min_timesteps=None, min_episodes=2048),
+        rng=np.random.default_rng(seed),
     )
-    # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator. We evaluate the learner before and after training so we can see if it made any progress.
+    # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator.
+    # We evaluate the learner before and after training so we can see if it made any progress.
+
+    # TODO: make this systematic:
+    sb3_policy = lambda *args, **kwargs: ActorCriticPolicy(*args, net_arch=dict(pi=[], vf=[]), **kwargs)
 
     learner = PPO(
         env=venv,
-        policy=MlpPolicy,
-        batch_size=64,
-        ent_coef=0.0,
-        learning_rate=0.0005,
-        gamma=0.95,
-        clip_range=0.1,
-        vf_coef=0.1,
-        n_epochs=5,
-        seed=SEED,
+        policy=sb3_policy,  # MlpPolicy,
+        batch_size=ppo_batch_size,
+        ent_coef=ppo_ent_coef,
+        learning_rate=ppo_learning_rate,
+        gamma=ppo_gamma,
+        clip_range=ppo_clip_range,
+        vf_coef=ppo_vf_coef,
+        n_epochs=ppo_n_epochs,
+        seed=seed,
+        n_steps=ppo_n_steps,
     )
+
+    if args_dict.get("copy_weights"):
+        # copy weights into learner:
+        learner.policy.action_net.load_state_dict(policy.fc_policy.state_dict())
+
     reward_net = BasicShapedRewardNet(
         observation_space=venv.observation_space,
         action_space=venv.action_space,
         normalize_input_layer=RunningNorm,
+        reward_hid_sizes=reward_hid_sizes,  # (32,),
+        potential_hid_sizes=potential_hid_sizes,  # (32, 32),
+        use_action=args_dict.get("use_action_reward_net"),
     )
+    logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
+
+
     airl_trainer = AIRL(
         demonstrations=rollouts,
-        demo_batch_size=2048,
-        gen_replay_buffer_capacity=512,
-        n_disc_updates_per_round=16,
+        demo_batch_size=demo_batch_size,
+        gen_replay_buffer_capacity=gen_replay_buffer_capacity,
+        n_disc_updates_per_round=n_disc_updates_per_round,
         venv=venv,
         gen_algo=learner,
         reward_net=reward_net,
+        allow_variable_horizon=allow_variable_horizon,
+        init_tensorboard=True,
+        init_tensorboard_graph=True,
+        log_dir=log_path,
+        custom_logger=logger,
     )
 
-    venv.seed(SEED)
+    venv.seed(seed)
+
+    if use_wandb:
+        wandb_login()
+        args_dict.update(cfg)
+        wandb.init(project="LIRL", config=args_dict, tags=[], sync_tensorboard=True)
+
+    if args_dict.get("test_ppo"):
+        with logger.accumulate_means("ppo"):
+            learner.learn(
+                total_timesteps=int(1e7),
+                reset_num_timesteps=False,
+                callback=None,#self.gen_callback,
+                #**learn_kwargs,
+            )
+        return
+    
+    if args_dict.get("reward_shaping"):
+        with logger.accumulate_means("reward_shaping"):
+            train_reward_net(reward_net, venv, policy, args_dict, cfg)
+            return
+
     learner_rewards_before_training, _ = evaluate_policy(
-        learner, venv, 100, return_episode_rewards=True
+        learner, venv, n_eval_episodes, return_episode_rewards=True
     )
-    airl_trainer.train(N_RL_TRAIN_STEPS)
-    venv.seed(SEED)
+
+    airl_trainer.train(n_rl_train_steps)
+
+    venv.seed(seed)
     learner_rewards_after_training, _ = evaluate_policy(
-        learner, venv, 100, return_episode_rewards=True
+        learner, venv, n_eval_episodes=n_eval_episodes, return_episode_rewards=True
     )
 
     print(
@@ -149,12 +358,56 @@ def main():
         "+/-",
         np.std(learner_rewards_before_training),
     )
+
     print(
-        "Rewards after training:",
+        f"Rewards after training",
         np.mean(learner_rewards_after_training),
         "+/-",
         np.std(learner_rewards_after_training),
     )
+    wandb.finish()
+
+def main():
+    unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
+    shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
+    
+    args_dict = dict(
+        copy_weights = True,
+        test_ppo = False,
+        reward_shaping = True,
+        reward_shaping_lr = 5e-4,
+        agent_dir = shifted_agent_dir,
+        use_wandb = True,
+        seed = 42,
+        fast = True,
+        log_path = "results/",
+        # learner arguments:
+        # ppo_batch_size = 64,
+        # ppo_ent_coef = 0.0,
+        # ppo_learning_rate = 0.0005,
+        # ppo_gamma = 0.95,
+        # ppo_clip_range = 0.1,
+        # ppo_vf_coef = 0.1,
+        # ppo_n_epochs = 5,
+        # ppo_n_steps = 2048,
+        # reward_net arguments:
+        n_reward_net_epochs = 10000,
+        reward_hid_sizes = (128,128,128),
+        potential_hid_sizes = (128, 128, 128, 128),
+        use_action_reward_net = False,
+        # AIRL arguments:
+        demo_batch_size = 2048,
+        gen_replay_buffer_capacity = 512,
+        n_disc_updates_per_round = 16,
+        allow_variable_horizon = True,
+        irl_steps_low = int(2e19 + 1),
+        irl_steps_high = 2_000_000,
+        # Eval args:
+        n_eval_episodes = 100,
+    )
+    
+    lirl(args_dict)
+
 
 
 if __name__ == "__main__":

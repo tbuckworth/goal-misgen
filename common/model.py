@@ -184,3 +184,11 @@ class GRU(nn.Module):
             hxs = hxs.squeeze(0)
 
         return x, hxs
+
+
+class IdentityModel(nn.Module):
+    def __init__(self):
+        super(IdentityModel, self).__init__()
+
+    def forward(self, x):
+        return x
