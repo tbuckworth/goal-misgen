@@ -87,3 +87,6 @@ experiments/results
 videos
 
 private_login.py
+wandb/
+venv/
+results/
