@@ -39,21 +39,22 @@ def get_config(logdir):
     return np.load(os.path.join(logdir, "config.npy"), allow_pickle='TRUE').item()
 
 
-def get_env_args(logdir):
+def get_env_args(cfg):
     # manual implementation for now
-    warnings.warn("manually selecting env_args for now \n\nINCORRECT FOR SHIFTED AGENT\n\n")
+    warnings.warn("\n\nUSING UNSHIFTED ENV\n\n")
     env_args = {
-        "val_env_name": "coinrun",
-        "env_name": "coinrun",
-        "num_levels": 10000,
-        "start_level": 0,
-        "distribution_mode": "hard",
-        "num_threads": 8,
-        "random_percent": 0,
-        "step_penalty": 0,
-        "key_penalty": 0,
-        "rand_region": 0,
-        "param_name": "hard-500",
+        "val_env_name": cfg["val_env_name"],
+        "env_name": cfg["env_name"],
+        "num_levels": cfg["num_levels"],
+        "start_level": cfg["start_level"],
+        "distribution_mode": cfg["distribution_mode"],
+        "num_threads": cfg["num_threads"],
+        #UNSHIFTED ENV!
+        "random_percent": 0,#cfg["random_percent"],
+        "step_penalty": cfg["step_penalty"],
+        "key_penalty": cfg["key_penalty"],
+        "rand_region": cfg["rand_region"],
+        "param_name": cfg["param_name"],
     }
     return DictToArgs(env_args)
 
@@ -192,8 +193,7 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
 def lirl(args_dict):
     agent_dir = args_dict.get("agent_dir")
     cfg = get_config(agent_dir)
-    #TODO: this is manually overriden:
-    args = get_env_args(agent_dir)
+    args = get_env_args(cfg)
     hyperparameters = cfg
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
