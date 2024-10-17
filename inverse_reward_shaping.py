@@ -5,7 +5,11 @@ import einops
 #%%
 n_states = 10
 n_actions = 5
+<<<<<<< HEAD
 deterministic = False
+=======
+deterministic = True
+>>>>>>> 589da7ec430f253fc3a70e0bf43ae7e94a2cab81
 
 #%%
 if deterministic:
@@ -17,8 +21,12 @@ if deterministic:
             T[i, j, k] = 1
 else:
     T = torch.randn(n_states, n_actions, n_states)
+<<<<<<< HEAD
     T = T.softmax(dim=2)
     # T = T / T.sum(dim=2, keepdim=True)
+=======
+    T = T / T.sum(dim=2, keepdim=True)
+>>>>>>> 589da7ec430f253fc3a70e0bf43ae7e94a2cab81
 
 assert T.sum(dim=2).allclose(torch.ones(n_states, n_actions))
 
@@ -34,6 +42,7 @@ def q_value_iteration(T, R, gamma, n_iterations=1000):
 
     for i in range(n_iterations):
         old_Q = Q
+<<<<<<< HEAD
         # old_V = V
         V = Q.max(dim=1).values
         # Q = einops.repeat(R, 'states -> states actions', actions=n_actions)
@@ -46,6 +55,18 @@ def q_value_iteration(T, R, gamma, n_iterations=1000):
     return Q,V, pi
 
 Q, V, pi = q_value_iteration(T, true_R, gamma)
+=======
+        old_V = V
+        V = Q.max(dim=1).values
+        Q = einops.repeat(R, 'states -> states actions', actions=n_actions) + gamma * einops.einsum(T, V, 'states actions states, states -> states actions')
+        if (Q - old_Q).abs().max() < 1e-5:
+            print(f'Q-value iteration converged in {i} iterations')
+            break
+    pi = Q.argmax(dim=1)
+    return Q,V, pi
+
+Q,V, pi = q_value_iteration(T, true_R, gamma)
+>>>>>>> 589da7ec430f253fc3a70e0bf43ae7e94a2cab81
 
 
 # %%
@@ -56,8 +77,14 @@ def soft_q_value_iteration(T, R, gamma, n_iterations=1000):
 
     for i in range(n_iterations):
         old_Q = Q
+<<<<<<< HEAD
         V = Q.logsumexp(dim=-1)
         Q = einops.einsum(T, gamma * V, 'states actions next_states, next_states -> states actions') + R.unsqueeze(1)
+=======
+        old_V = V
+        V = Q.logsumexp(dim=-1)
+        Q = einops.einsum(T, R+gamma*V, 'states actions states, states -> states actions')
+>>>>>>> 589da7ec430f253fc3a70e0bf43ae7e94a2cab81
         if (Q - old_Q).abs().max() < 1e-5:
             print(f'soft value iteration converged in {i} iterations')
             pi = Q.softmax(dim=1)
