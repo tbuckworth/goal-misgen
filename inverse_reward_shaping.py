@@ -135,7 +135,7 @@ def implicit_policy_learning(T, R, gamma, n_iterations=10000):
     optimizer = torch.optim.Adam([PI,V], lr=1e-3)
     for i in range(n_iterations):
         A = PI.softmax(dim=-1).log()
-        R_hat = A - V.unsqueeze(1) + gamma *einops.einsum(T, V, "states actions next_states, next_states -> states actions")
+        R_hat = A + V.unsqueeze(1) - gamma *einops.einsum(T, V, "states actions next_states, next_states -> states actions")
         loss = ((R_hat - R)**2).mean()
         loss.backward()
         optimizer.step()
@@ -145,5 +145,7 @@ def implicit_policy_learning(T, R, gamma, n_iterations=10000):
 learned_A, learned_V = implicit_policy_learning(T, true_R, gamma)
 
 torch.corrcoef(torch.stack((learned_A.flatten(), soft_A.flatten())))
+
+torch.corrcoef(torch.stack((learned_V, soft_V)))
 
 # %%
