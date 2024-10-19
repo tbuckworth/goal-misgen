@@ -109,15 +109,6 @@ def inverse_reward_shaping(T, A, gamma, n_iterations=10000):
         optimizer.step()
         optimizer.zero_grad()
     return R, H
-        # B = torch.stack((R,H+))
-        # X = torch.linalg.solve(B,A)
-        # R = -A - H.unsqueeze(1) + gamma * H[Next_States]
-        
-        # H = -A - R + gamma * H[Next_States]
-        # H[Next_States] = - (A + R + H)/gamma
-    return R, H
-        # if (Q - old_Q).abs().max() < 1e-5:
-        #     print(f'Inverse reward shaping converged in {i} iterations')
 
 
 
@@ -134,5 +125,25 @@ plt.plot(true_R.cpu().numpy(), label='True R')
 plt.plot(learned_R.detach().cpu().numpy(), label='Learned R')
 plt.legend()
 plt.savefig('inverse_reward_shaping.png')
+
+# %%
+def implicit_policy_learning(T, R, gamma, n_iterations=10000):
+    PI = torch.zeros(n_states, n_actions, requires_grad=True)
+    V = torch.randn(n_states, requires_grad=True)
+    R = R.unsqueeze(-1)
+    R.requires_grad = False
+    optimizer = torch.optim.Adam([PI,V], lr=1e-3)
+    for i in range(n_iterations):
+        A = PI.softmax(dim=-1).log()
+        R_hat = A - V.unsqueeze(1) + gamma *einops.einsum(T, V, "states actions next_states, next_states -> states actions")
+        loss = ((R_hat - R)**2).mean()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+    return A, V
+
+learned_A, learned_V = implicit_policy_learning(T, true_R, gamma)
+
+torch.corrcoef(torch.stack((learned_A.flatten(), soft_A.flatten())))
 
 # %%
