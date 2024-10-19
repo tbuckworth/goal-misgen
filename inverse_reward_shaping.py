@@ -1,12 +1,13 @@
 #%%
+import numpy as np
 import torch
 import einops
 
 #%%
 n_states = 10
 n_actions = 5
-deterministic = False
-
+deterministic = True
+sparse_reward = True
 
 #%%
 if deterministic:
@@ -25,6 +26,10 @@ else:
 assert T.sum(dim=2).allclose(torch.ones(n_states, n_actions))
 
 true_R = torch.randn(n_states)
+if sparse_reward:
+    true_R = torch.zeros_like(true_R)
+    true_R[np.random.randint(n_states)] = 1.
+
 
 # true_h = torch.randn(n_states)
 gamma = 0.9
@@ -127,7 +132,7 @@ plt.legend()
 plt.savefig('inverse_reward_shaping.png')
 
 # %%
-def implicit_policy_learning(T, R, gamma, n_iterations=10000):
+def implicit_policy_learning(T, R, gamma, n_iterations=30000):
     PI = torch.zeros(n_states, n_actions, requires_grad=True)
     V = torch.randn(n_states, requires_grad=True)
     R = R.unsqueeze(-1)
