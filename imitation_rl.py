@@ -10,7 +10,7 @@ from torch import nn
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
 from common.model import IdentityModel
 from common.policy import PolicyWrapperIRL
-from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_hyperparameters
+from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_config
 from stable_baselines3.common.policies import ActorCriticPolicy
 from matplotlib import pyplot as plt
 try:
@@ -23,20 +23,13 @@ except ImportError:
 # shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
 
 import numpy as np
-from imitation.policies.serialize import load_policy
-from imitation.util.util import make_vec_env
 from imitation.data import rollout
 from imitation.algorithms.adversarial.airl import AIRL
 from imitation.rewards.reward_nets import BasicShapedRewardNet
 from imitation.util.networks import RunningNorm
 from stable_baselines3 import PPO
-from stable_baselines3.ppo import MlpPolicy
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.vec_env import VecMonitor
-
-
-def get_config(logdir):
-    return np.load(os.path.join(logdir, "config.npy"), allow_pickle='TRUE').item()
 
 
 def get_env_args(cfg):

@@ -4,6 +4,7 @@ import re
 
 import gym
 import gymnasium
+import numpy as np
 import yaml
 from procgen import ProcgenEnv
 
@@ -74,3 +75,7 @@ def get_hyperparameters(param_name):
     with open('hyperparams/procgen/config.yml', 'r') as f:
         hyperparameters = yaml.safe_load(f)[param_name]
     return hyperparameters
+
+
+def get_config(logdir):
+    return np.load(os.path.join(logdir, "config.npy"), allow_pickle='TRUE').item()

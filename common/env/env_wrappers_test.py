@@ -4,8 +4,8 @@ import numpy as np
 import torch
 
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
-from helper_local import create_venv, initialize_policy
-from imitation_rl import get_config, get_env_args
+from helper_local import create_venv, initialize_policy, get_config
+from imitation_rl import get_env_args
 
 
 class MyTestCase(unittest.TestCase):
