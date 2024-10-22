@@ -9,7 +9,7 @@ from torch import nn
 
 from common import orthogonal_init
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
-from common.model import IdentityModel, MlpModel, SeqModel
+from common.model import IdentityModel, MlpModel, SeqModel, Flatten
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_config
 from stable_baselines3.common.policies import ActorCriticPolicy
@@ -124,6 +124,8 @@ def generate_data(agent, env, n):
 
 def reward_forward(reward_net, states, actions, next_states, dones, device):
     s = torch.FloatTensor(states).to(device=device)
+    s = Flatten()(s)
+    s = nn.ReLU()(s)
     # make one-hot:
     act = torch.LongTensor(actions).to(device=device)
     a = nn.functional.one_hot(act)
@@ -172,8 +174,11 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg, data_size, mini_e
             "adv_corr": adv_corr,
             "reward_corr": reward_corr,
         })
-        print(
-            f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tLoss V:{loss_v:.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
+        print(f"Epoch {epoch}\t"
+              f"\tLoss: {loss.item():.4f}"
+              f"\tLoss V:{loss_v:.4f}"
+              f"\tAdvantage-True Reward Correlation:{adv_corr:.2f}"
+              f"\tReward Correlation:{reward_corr:.2f}")
         if epoch % save_every == 0:
             # save reward net:
             torch.save(reward_net.state_dict(), os.path.join(logdir, "reward_net.pth"))
@@ -347,6 +352,7 @@ def lirl(args_dict):
         potential_hid_sizes=potential_hid_sizes,  # (32, 32),
         use_action=args_dict.get("use_action_reward_net"),
     )
+    reward_net.to(device)
 
     # We generate some expert trajectories, that the discriminator needs to distinguish from the learner's trajectories.
     logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
