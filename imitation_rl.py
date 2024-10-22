@@ -7,12 +7,16 @@ import imitation.util.logger
 import torch
 from torch import nn
 
+from common import orthogonal_init
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
-from common.model import IdentityModel
+from common.model import IdentityModel, MlpModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_config
 from stable_baselines3.common.policies import ActorCriticPolicy
 from matplotlib import pyplot as plt
+
+from train import train
+
 try:
     import wandb
     from private_login import wandb_login
@@ -42,14 +46,15 @@ def get_env_args(cfg):
         "start_level": cfg["start_level"],
         "distribution_mode": cfg["distribution_mode"],
         "num_threads": cfg["num_threads"],
-        #UNSHIFTED ENV!
-        "random_percent": 0,#cfg["random_percent"],
+        # UNSHIFTED ENV!
+        "random_percent": 0,  # cfg["random_percent"],
         "step_penalty": cfg["step_penalty"],
         "key_penalty": cfg["key_penalty"],
         "rand_region": cfg["rand_region"],
         "param_name": cfg["param_name"],
     }
     return DictToArgs(env_args)
+
 
 def predict(policy, obs):
     with torch.no_grad():
@@ -64,7 +69,7 @@ def collect_data(policy, venv, n):
     obs = venv.reset()
     states = obs
     start = True
-    while(len(states) < n):
+    while (len(states) < n):
         log_probs, action = predict(policy, obs)
         next_obs, rew, done, info = venv.step(action)
         if start:
@@ -84,9 +89,10 @@ def collect_data(policy, venv, n):
         states = np.append(states, next_obs, 0)
     return states[:-len(next_obs)], actions, next_states, dones, lp, rews
 
+
 def generate_data(agent, env, n):
     X, _ = env.reset()
-    X = np.expand_dims(X,0)
+    X = np.expand_dims(X, 0)
     agent.reset()
     act = env.action_space.sample()
     A = np.expand_dims(act.copy(), 0)
@@ -115,6 +121,7 @@ def generate_data(agent, env, n):
 
     return M_in, M_out, U_in, U_out, Loss
 
+
 def reward_forward(reward_net, states, actions, next_states, dones, device):
     s = torch.FloatTensor(states).to(device=device)
     # make one-hot:
@@ -123,6 +130,7 @@ def reward_forward(reward_net, states, actions, next_states, dones, device):
     n = torch.FloatTensor(next_states).to(device=device)
     d = torch.FloatTensor(dones).to(device=device)
     return reward_net(s, a, n, d)
+
 
 def train_reward_net(reward_net, venv, policy, args_dict, cfg):
     loss_function = nn.CrossEntropyLoss()
@@ -138,7 +146,7 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
         # idx = torch.randperm(len(states))
 
         advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device)
-        act_log_prob = log_probs[torch.arange(len(actions)),torch.tensor(actions)]
+        act_log_prob = log_probs[torch.arange(len(actions)), torch.tensor(actions)]
 
         loss = loss_function(advantages, act_log_prob)
         # loss = loss_function(advantages, torch.FloatTensor(true_rewards).to(device=policy.device))
@@ -156,16 +164,17 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
             "adv_corr": adv_corr,
             "reward_corr": reward_corr,
         })
-        print(f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
+        print(
+            f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
     end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
 
-    for s,e in zip(start_weights, end_weights):
+    for s, e in zip(start_weights, end_weights):
         assert (s == e).all(), "policy has changed!"
 
     data = [[x, y] for (x, y) in zip(true_rewards, rewards.cpu().numpy())]
     table = wandb.Table(data=data, columns=["True Rewards", "Learned Rewards"])
-    wandb.log({"Rewards": wandb.plot.scatter(table, "True Rewards", "Learned Rewards", title="True Rewards vs Learned Rewards")})
-    
+    wandb.log({"Rewards": wandb.plot.scatter(table, "True Rewards", "Learned Rewards",
+                                             title="True Rewards vs Learned Rewards")})
 
     plt.scatter(true_rewards, rewards.cpu().numpy())
     # plt.scatter(true_rewards, advantages.detach().cpu().numpy())
@@ -178,7 +187,64 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
         os.makedirs(logdir)
 
     # save reward net:
-    torch.save(reward_net.state_dict(), os.path.join(logdir,"reward_net.pth"))
+    torch.save(reward_net.state_dict(), os.path.join(logdir, "reward_net.pth"))
+    np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
+    np.save(os.path.join(logdir, "config.npy"), cfg)
+
+
+def train_next_val_func(next_val_net, venv, policy, args_dict, cfg):
+    loss_function = nn.MSELoss()
+    optimizer = torch.optim.Adam(next_val_net.parameters(), lr=args_dict["reward_shaping_lr"])
+
+    next_val_net.train()
+    start_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+    states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=10000)
+    next_states = torch.FloatTensor(next_states).to(device=policy.device)
+    states = torch.FloatTensor(states).to(device=policy.device)
+    for epoch in range(args_dict.get("n_reward_net_epochs")):
+        # collect data
+        # idx = torch.randperm(len(states))
+
+        _, true_next_value, _ = policy(next_states, None, None)
+        next_val_hat = next_val_net.value(states)
+
+        loss = loss_function(next_val_hat, true_next_value)
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        # reward_corr = np.corrcoef(true_rewards, rewards.cpu().numpy())[0, 1]
+        # adv_corr = np.corrcoef(true_rewards, advantages.detach().cpu().numpy())[0, 1]
+        wandb.log({
+            "epoch": epoch,
+            "loss": loss.item(),
+            # "adv_corr": adv_corr,
+            # "reward_corr": reward_corr,
+        })
+        print(
+            f"Epoch {epoch}\tLoss: {loss.item():.4f}")
+    end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
+
+    for s, e in zip(start_weights, end_weights):
+        assert (s == e).all(), "policy has changed!"
+
+    # data = [[x, y] for (x, y) in zip(true_rewards, rewards.cpu().numpy())]
+    # table = wandb.Table(data=data, columns=["True Rewards", "Learned Rewards"])
+    # wandb.log({"Rewards": wandb.plot.scatter(table, "True Rewards", "Learned Rewards",
+    #                                          title="True Rewards vs Learned Rewards")})
+    #
+    # plt.scatter(true_rewards, rewards.cpu().numpy())
+    # # plt.scatter(true_rewards, advantages.detach().cpu().numpy())
+    # plt.savefig("results/reward_shaping_scatter.png")
+
+    logdir = os.path.join('logs', 'next_val_finding', cfg["env_name"], cfg["exp_name"])
+    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
+    logdir = os.path.join(logdir, run_name)
+    if not (os.path.exists(logdir)):
+        os.makedirs(logdir)
+
+    # save reward net:
+    torch.save(next_val_net.state_dict(), os.path.join(logdir, "reward_net.pth"))
     np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
     np.save(os.path.join(logdir, "config.npy"), cfg)
 
@@ -194,7 +260,6 @@ def lirl(args_dict):
     use_wandb = args_dict.get("use_wandb")
     seed = args_dict.get("seed")
     fast = args_dict.get("fast")
-
 
     log_path = "results/"
 
@@ -239,11 +304,29 @@ def lirl(args_dict):
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
-    policy.embedder = IdentityModel()
+    if args.level in ["block1", "block2", "block3"]:
+        embedder_list = [model.block1.copy()]
+        policy.embedder.block1 = IdentityModel()
+    if args.level == ["block2", "block3"]:
+        embedder_list.append(model.block2.copy())
+        policy.embedder.block2 = IdentityModel()
+    if args.level == ["block3"]:
+        embedder_list.append(model.block3.copy())
+        policy.embedder.block3 = IdentityModel()
+    if args.level == ["embedder"]:
+        embedder_list = [policy.embedder.copy()]
+        policy.embedder = IdentityModel()
+
+    value_network = policy.copy()
+    if args.new_val_weights:
+        orthogonal_init(value_network, gain=1.0).to(device=policy.device)
+
+
+    custom_embedder = nn.Sequential(embedder_list)
 
     expert = PolicyWrapperIRL(policy, device)
 
-    venv = EmbedderWrapper(venv, embedder=model)
+    venv = EmbedderWrapper(venv, embedder=custom_embedder)
     venv = VecRolloutInfoWrapper(venv)
     venv = DummyTerminalObsWrapper(venv)
     venv = VecMonitor(venv=venv)
@@ -296,7 +379,6 @@ def lirl(args_dict):
     )
     logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
 
-
     airl_trainer = AIRL(
         demonstrations=rollouts,
         demo_batch_size=demo_batch_size,
@@ -324,14 +406,20 @@ def lirl(args_dict):
             learner.learn(
                 total_timesteps=int(1e7),
                 reset_num_timesteps=False,
-                callback=None,#self.gen_callback,
-                #**learn_kwargs,
+                callback=None,  # self.gen_callback,
+                # **learn_kwargs,
             )
         return
-    
+
     if args_dict.get("reward_shaping"):
         with logger.accumulate_means("reward_shaping"):
             train_reward_net(reward_net, venv, policy, args_dict, cfg)
+            return
+
+
+    if args_dict.get("next_val_shaping"):
+        with logger.accumulate_means("next_val"):
+            train_next_val_func(value_network, venv, policy, args_dict, cfg)
             return
 
     learner_rewards_before_training, _ = evaluate_policy(
@@ -360,20 +448,23 @@ def lirl(args_dict):
     )
     wandb.finish()
 
+
 def main():
     unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
-    
+
     args_dict = dict(
-        copy_weights = True,
-        test_ppo = False,
-        reward_shaping = True,
-        reward_shaping_lr = 5e-4,
-        agent_dir = shifted_agent_dir,
-        use_wandb = True,
-        seed = 42,
-        fast = True,
-        log_path = "results/",
+        level="block3",
+        copy_weights=True,
+        test_ppo=False,
+        next_val_shaping=True,
+        reward_shaping=False,
+        reward_shaping_lr=5e-4,
+        agent_dir=unshifted_agent_dir,
+        use_wandb=True,
+        seed=42,
+        fast=True,
+        log_path="results/",
         # learner arguments:
         # ppo_batch_size = 64,
         # ppo_ent_coef = 0.0,
@@ -384,23 +475,22 @@ def main():
         # ppo_n_epochs = 5,
         # ppo_n_steps = 2048,
         # reward_net arguments:
-        n_reward_net_epochs = 10000,
-        reward_hid_sizes = (128,128,128),
-        potential_hid_sizes = (128, 128, 128, 128),
-        use_action_reward_net = False,
+        n_reward_net_epochs=10000,
+        reward_hid_sizes=(128, 128, 128),
+        potential_hid_sizes=(128, 128, 128, 128),
+        use_action_reward_net=False,
         # AIRL arguments:
-        demo_batch_size = 2048,
-        gen_replay_buffer_capacity = 512,
-        n_disc_updates_per_round = 16,
-        allow_variable_horizon = True,
-        irl_steps_low = int(2e19 + 1),
-        irl_steps_high = 2_000_000,
+        demo_batch_size=2048,
+        gen_replay_buffer_capacity=512,
+        n_disc_updates_per_round=16,
+        allow_variable_horizon=True,
+        irl_steps_low=int(2e19 + 1),
+        irl_steps_high=2_000_000,
         # Eval args:
-        n_eval_episodes = 100,
+        n_eval_episodes=100,
     )
-    
-    lirl(args_dict)
 
+    lirl(args_dict)
 
 
 if __name__ == "__main__":

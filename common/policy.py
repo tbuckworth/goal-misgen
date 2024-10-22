@@ -38,6 +38,10 @@ class CategoricalPolicy(nn.Module):
         v = self.fc_value(hidden).reshape(-1)
         return p, v, hx
 
+    def value(self, x):
+        hidden = self.embedder(x)
+        v = self.fc_value(hidden).reshape(-1)
+        return v
 
 class PolicyWrapperIRL(nn.Module):
     def __init__(self,policy, device):
