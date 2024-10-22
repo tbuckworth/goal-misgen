@@ -7,7 +7,7 @@ import einops
 n_states = 10
 n_actions = 5
 deterministic = True
-sparse_reward = True
+sparse_reward = False
 
 #%%
 if deterministic:
@@ -30,6 +30,7 @@ if sparse_reward:
     true_R = torch.zeros_like(true_R)
     true_R[np.random.randint(n_states)] = 1.
 
+# true_R = true_R - true_R.min()
 
 # true_h = torch.randn(n_states)
 gamma = 0.9
@@ -114,22 +115,30 @@ def inverse_reward_shaping(T, A, gamma, n_iterations=10000):
         optimizer.step()
         optimizer.zero_grad()
     return R, H
+    # return R - R.min(), H
 
 
 
 
 
 learned_R, learned_H = inverse_reward_shaping(T, soft_A, gamma)
-
-
 torch.corrcoef(torch.stack((true_R,learned_R)))
+
+hard_A = torch.nn.functional.one_hot(soft_A.argmax(dim=-1)).float()
+
+learned_R_opt, _ = inverse_reward_shaping(T, hard_A, gamma)
+torch.corrcoef(torch.stack((true_R,learned_R_opt)))
+
+
+
 # %%
 import matplotlib.pyplot as plt
 
-plt.plot(true_R.cpu().numpy(), label='True R')
-plt.plot(learned_R.detach().cpu().numpy(), label='Learned R')
+plt.scatter(true_R.cpu().numpy(), learned_R_opt.detach().cpu().numpy())
+# plt.plot(learned_R_opt.detach().cpu().numpy(), label='Learned R')
 plt.legend()
-plt.savefig('inverse_reward_shaping.png')
+plt.show()
+# plt.savefig('inverse_reward_shaping.png')
 
 # %%
 def implicit_policy_learning(T, R, gamma, n_iterations=30000):

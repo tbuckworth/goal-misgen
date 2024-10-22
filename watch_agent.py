@@ -1,7 +1,6 @@
 import torch
 
-from helper_local import initialize_policy, get_config, DictToArgs, latest_model_path, create_venv
-from render import create_venv_render
+from helper_local import initialize_policy, get_config, DictToArgs, latest_model_path, create_venv, create_venv_render
 
 def get_env_args(cfg):
     # manual implementation for now
@@ -12,7 +11,7 @@ def get_env_args(cfg):
         "start_level": cfg["start_level"],
         "distribution_mode": cfg["distribution_mode"],
         "num_threads": cfg["num_threads"],
-        "random_percent": cfg["random_percent"],
+        "random_percent": 100,#cfg["random_percent"],
         "step_penalty": cfg["step_penalty"],
         "key_penalty": cfg["key_penalty"],
         "rand_region": cfg["rand_region"],
@@ -31,6 +30,7 @@ def watch_agent(logdir):
     hyperparameters = cfg
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # load env
+    cfg["n_envs"] = 2
     venv = create_venv_render(args, cfg)
     # load agent
     model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
@@ -45,13 +45,14 @@ def watch_agent(logdir):
     p, v, _ = policy(x, None, None)
     while True:
         act = p.sample()
-        obs, rew, done, info = venv.step(act)
+        obs, rew, done, info = venv.step(act.detach().cpu().numpy())
         x = torch.FloatTensor(obs).to(device)
         pn, vn, _ = policy(x, None, None)
+        vn[done] = 0
         predicted_reward = p.log_prob(act) + v - cfg["gamma"] * vn
         p = pn
         v = vn
-        print(f"Reward:{rew}\tPredicted Reward:{predicted_reward}:.2f")
+        print(f"Reward:{rew[0]}\tPredicted Reward:{predicted_reward[0]:.2f}\tValue:{v[0]:.2f}")
 
 if __name__ == "__main__":
     logdir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"

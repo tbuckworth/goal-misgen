@@ -6,7 +6,8 @@ import gym
 import gymnasium
 import numpy as np
 import yaml
-from procgen import ProcgenEnv
+from gym3 import ViewerWrapper, ToBaselinesVecEnv
+from procgen import ProcgenGym3Env, ProcgenEnv
 
 from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, TransposeFrame, ScaledFloatFrame, \
     DummyTerminalObsWrapper
@@ -32,16 +33,46 @@ def create_venv(args, hyperparameters, is_valid=False):
     venv = VecExtractDictObs(venv, "rgb")
     normalize_rew = hyperparameters.get('normalize_rew', True)
     if normalize_rew:
-        venv = VecNormalize(venv, ob=False) # normalizing returns, but not
+        venv = VecNormalize(venv, ob=False)  # normalizing returns, but not
         # the img frames
     venv = TransposeFrame(venv)
     venv = ScaledFloatFrame(venv)
     return venv
 
+def create_venv_render(args, hyperparameters, is_valid=False):
+    val_env_name = args.val_env_name if args.val_env_name else args.env_name
+    # TODO: give this proper seed:
+    #  also check if reset uses the same initial levels
+    start_level_val = random.randint(0, 9999)
+    venv = ProcgenGym3Env(num=hyperparameters.get('n_envs', 256),
+                          env_name=val_env_name if is_valid else args.env_name,
+                          num_levels=0 if is_valid else args.num_levels,
+                          start_level=start_level_val if is_valid else args.start_level,
+                          distribution_mode=args.distribution_mode,
+                          num_threads=args.num_threads,
+                          random_percent=args.random_percent,
+                          step_penalty=args.step_penalty,
+                          key_penalty=args.key_penalty,
+                          rand_region=args.rand_region,
+                          render_mode="rgb_array",
+                          )
+    venv = ViewerWrapper(venv, info_key="rgb")
+    venv = ToBaselinesVecEnv(venv)
+    venv = VecExtractDictObs(venv, "rgb")
+    normalize_rew = hyperparameters.get('normalize_rew', True)
+    if normalize_rew:
+        venv = VecNormalize(venv, ob=False)  # normalizing returns, but not
+        # the img frames
+    venv = TransposeFrame(venv)
+    venv = ScaledFloatFrame(venv)
+    return venv
+
+
 class DictToArgs:
     def __init__(self, input_dict):
         for key in input_dict.keys():
             setattr(self, key, input_dict[key])
+
 
 def latest_model_path(logdir):
     logdir = os.path.join(logdir)
@@ -50,6 +81,7 @@ def latest_model_path(logdir):
     checkpoints = [int(re.search(pattern, x).group(1)) for x in files if re.search(pattern, x)]
     last_model = os.path.join(logdir, f"model_{max(checkpoints)}.pth")
     return last_model
+
 
 def initialize_policy(device, hyperparameters, env, observation_shape):
     architecture = hyperparameters.get('architecture', 'impala')
