@@ -7,6 +7,14 @@ class Flatten(nn.Module):
     def forward(self, x):
         return torch.flatten(x, start_dim=1)
 
+class SeqModel(nn.Module):
+    def __init__(self, list, device):
+        super().__init__()
+        self.layers = nn.Sequential(*list)
+        self.device = device
+
+    def forward(self, x):
+        return self.layers(x)
 
 class MlpModel(nn.Module):
     def __init__(self,

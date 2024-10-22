@@ -9,7 +9,7 @@ from torch import nn
 
 from common import orthogonal_init
 from common.env.procgen_wrappers import VecRolloutInfoWrapper, EmbedderWrapper, DummyTerminalObsWrapper
-from common.model import IdentityModel, MlpModel
+from common.model import IdentityModel, MlpModel, SeqModel
 from common.policy import PolicyWrapperIRL
 from helper_local import create_venv, DictToArgs, initialize_policy, latest_model_path, get_config
 from stable_baselines3.common.policies import ActorCriticPolicy
@@ -304,26 +304,29 @@ def lirl(args_dict):
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
-    if args.level in ["block1", "block2", "block3"]:
-        embedder_list = [model.block1.copy()]
+    if args_dict.get("level") in ["block1", "block2", "block3"]:
+        embedder_list = [copy.deepcopy(model.block1)]
+        del policy.embedder.block1
         policy.embedder.block1 = IdentityModel()
-    if args.level == ["block2", "block3"]:
-        embedder_list.append(model.block2.copy())
+    if args_dict.get("level") in ["block2", "block3"]:
+        embedder_list.append(copy.deepcopy(model.block2))
+        del policy.embedder.block2
         policy.embedder.block2 = IdentityModel()
-    if args.level == ["block3"]:
-        embedder_list.append(model.block3.copy())
+    if args_dict.get("level") in ["block3"]:
+        embedder_list.append(copy.deepcopy(model.block3))
+        del policy.embedder.block3
         policy.embedder.block3 = IdentityModel()
-    if args.level == ["embedder"]:
-        embedder_list = [policy.embedder.copy()]
+    if args_dict.get("level") in ["embedder"]:
+        embedder_list = [copy.deepcopy(policy.embedder)]
+        del policy.embedder
         policy.embedder = IdentityModel()
 
-    value_network = policy.copy()
-    if args.new_val_weights:
+    value_network = copy.deepcopy(policy)
+    if args_dict.get("new_val_weights"):
         orthogonal_init(value_network, gain=1.0).to(device=policy.device)
 
 
-    custom_embedder = nn.Sequential(embedder_list)
-
+    custom_embedder = SeqModel(embedder_list, device).to(device=policy.device)
     expert = PolicyWrapperIRL(policy, device)
 
     venv = EmbedderWrapper(venv, embedder=custom_embedder)
@@ -337,38 +340,6 @@ def lirl(args_dict):
     venv.action_space = gymnasium.spaces.discrete.Discrete(15)
     # venv.observation_space = gymnasium.spaces.box.Box(0.0, 1.0, (3, 64, 64))
 
-    # We generate some expert trajectories, that the discriminator needs to distinguish from the learner's trajectories.
-
-    rollouts = rollout.rollout(
-        expert,
-        venv,
-        rollout.make_sample_until(min_timesteps=None, min_episodes=2048),
-        rng=np.random.default_rng(seed),
-    )
-    # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator.
-    # We evaluate the learner before and after training so we can see if it made any progress.
-
-    # TODO: make this systematic:
-    sb3_policy = lambda *args, **kwargs: ActorCriticPolicy(*args, net_arch=dict(pi=[], vf=[]), **kwargs)
-
-    learner = PPO(
-        env=venv,
-        policy=sb3_policy,  # MlpPolicy,
-        batch_size=ppo_batch_size,
-        ent_coef=ppo_ent_coef,
-        learning_rate=ppo_learning_rate,
-        gamma=ppo_gamma,
-        clip_range=ppo_clip_range,
-        vf_coef=ppo_vf_coef,
-        n_epochs=ppo_n_epochs,
-        seed=seed,
-        n_steps=ppo_n_steps,
-    )
-
-    if args_dict.get("copy_weights"):
-        # copy weights into learner:
-        learner.policy.action_net.load_state_dict(policy.fc_policy.state_dict())
-
     reward_net = BasicShapedRewardNet(
         observation_space=venv.observation_space,
         action_space=venv.action_space,
@@ -377,22 +348,55 @@ def lirl(args_dict):
         potential_hid_sizes=potential_hid_sizes,  # (32, 32),
         use_action=args_dict.get("use_action_reward_net"),
     )
+
+    # We generate some expert trajectories, that the discriminator needs to distinguish from the learner's trajectories.
     logger = imitation.util.logger.configure(log_path, ["stdout", "csv", "tensorboard"])
 
-    airl_trainer = AIRL(
-        demonstrations=rollouts,
-        demo_batch_size=demo_batch_size,
-        gen_replay_buffer_capacity=gen_replay_buffer_capacity,
-        n_disc_updates_per_round=n_disc_updates_per_round,
-        venv=venv,
-        gen_algo=learner,
-        reward_net=reward_net,
-        allow_variable_horizon=allow_variable_horizon,
-        init_tensorboard=True,
-        init_tensorboard_graph=True,
-        log_dir=log_path,
-        custom_logger=logger,
-    )
+    if not args_dict.get("next_val_shaping") and not args_dict.get("reward_shaping"):
+        rollouts = rollout.rollout(
+            expert,
+            venv,
+            rollout.make_sample_until(min_timesteps=None, min_episodes=2048),
+            rng=np.random.default_rng(seed),
+        )
+        # Now we are ready to set up our AIRL trainer. Note, that the reward_net is actually the network of the discriminator.
+        # We evaluate the learner before and after training so we can see if it made any progress.
+
+        # TODO: make this systematic:
+        sb3_policy = lambda *args, **kwargs: ActorCriticPolicy(*args, net_arch=dict(pi=[], vf=[]), **kwargs)
+
+        learner = PPO(
+            env=venv,
+            policy=sb3_policy,  # MlpPolicy,
+            batch_size=ppo_batch_size,
+            ent_coef=ppo_ent_coef,
+            learning_rate=ppo_learning_rate,
+            gamma=ppo_gamma,
+            clip_range=ppo_clip_range,
+            vf_coef=ppo_vf_coef,
+            n_epochs=ppo_n_epochs,
+            seed=seed,
+            n_steps=ppo_n_steps,
+        )
+
+        if args_dict.get("copy_weights"):
+            # copy weights into learner:
+            learner.policy.action_net.load_state_dict(policy.fc_policy.state_dict())
+
+        airl_trainer = AIRL(
+            demonstrations=rollouts,
+            demo_batch_size=demo_batch_size,
+            gen_replay_buffer_capacity=gen_replay_buffer_capacity,
+            n_disc_updates_per_round=n_disc_updates_per_round,
+            venv=venv,
+            gen_algo=learner,
+            reward_net=reward_net,
+            allow_variable_horizon=allow_variable_horizon,
+            init_tensorboard=True,
+            init_tensorboard_graph=True,
+            log_dir=log_path,
+            custom_logger=logger,
+        )
 
     venv.seed(seed)
 
@@ -455,6 +459,7 @@ def main():
 
     args_dict = dict(
         level="block3",
+        new_val_weights=True,
         copy_weights=True,
         test_ppo=False,
         next_val_shaping=True,
