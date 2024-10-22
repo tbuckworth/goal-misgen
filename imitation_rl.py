@@ -319,7 +319,7 @@ def lirl(args_dict):
 
     # evals
     n_eval_episodes = args_dict.get("n_eval_episodes")
-
+    cfg["n_envs"] = args_dict.get("n_envs_override", cfg["n_envs"])
     venv = create_venv(args, cfg)
 
     model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
@@ -498,13 +498,14 @@ def main():
 
     args_dict = dict(
         level="block3",
-        new_val_weights=True,
+        n_envs_override=16,
+        new_val_weights=False,
         data_size=int(3e4),
         mini_epochs=15,
         copy_weights=True,
         test_ppo=False,
-        next_val_shaping=False,
-        reward_shaping=True,
+        next_val_shaping=True,
+        reward_shaping=False,
         reward_shaping_lr=5e-4,
         agent_dir=shifted_agent_dir,
         use_wandb=True,

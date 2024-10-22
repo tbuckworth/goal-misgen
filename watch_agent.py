@@ -27,7 +27,10 @@ def get_env_args(cfg):
 
 
 
-def watch_agent(logdir, next_val_dir):
+def watch_agent(logdir, next_val_dir=None):
+    if next_val_dir is not None:
+        args_dict = get_config(next_val_dir,"args_dict.npy")
+        logdir = args_dict.get("agent_dir")
     # load configs
     agent_dir = logdir
     cfg = get_config(agent_dir)
@@ -46,7 +49,6 @@ def watch_agent(logdir, next_val_dir):
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
     # load next value network:
-    args_dict = get_config(next_val_dir,"args_dict.npy")
     level = args_dict.get("level")
     custom_embedder, next_value_network = decompose_policy(args_dict.get("new_val_weights"), device, level, model, policy)
 
@@ -62,7 +64,8 @@ def watch_agent(logdir, next_val_dir):
     while True:
         act = p.sample()
         obs, rew, done, info = venv.step(act.detach().cpu().numpy())
-        predicted_reward = p.log_prob(act) + v - cfg["gamma"] * vn
+        adv = p.log_prob(act)
+        predicted_reward = adv + v - cfg["gamma"] * vn
         x = torch.FloatTensor(obs).to(device)
         x = custom_embedder(x)
         p, v, _ = policy(x, None, None)
@@ -72,7 +75,7 @@ def watch_agent(logdir, next_val_dir):
         # predicted_reward = p.log_prob(act) + v - cfg["gamma"] * vn
         # p = pn
         # v = vn
-        print(f"Reward:{rew[0]:.2f}\tPredicted Reward:{predicted_reward[0]:.2f}\tValue:{v[0]:.2f}\tNV:{vn[0]:.2f}")
+        print(f"Reward:{rew[0]:.2f}\tPredicted Reward:{predicted_reward[0]:.2f}\tAdv:{adv[0]:.2f}\tValue:{v[0]:.2f}\tNV:{vn[0]:.2f}")
 
 if __name__ == "__main__":
     #TODO: get agent_dir from config
@@ -82,5 +85,6 @@ if __name__ == "__main__":
     logdir = shifted_agent_dir
     # unshifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-30-14__seed_6033"
     # shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-57-56__seed_6033"
+    shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__16-27-10__seed_6033"
     next_val_dir = shifted_val_dir
-    watch_agent(logdir=logdir, next_val_dir=next_val_dir)
+    watch_agent(logdir=None, next_val_dir=next_val_dir)
