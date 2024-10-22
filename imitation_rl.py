@@ -192,7 +192,13 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
     np.save(os.path.join(logdir, "config.npy"), cfg)
 
 
-def train_next_val_func(next_val_net, venv, policy, args_dict, cfg, data_size, mini_epochs):
+def train_next_val_func(next_val_net, venv, policy, args_dict, cfg, data_size, mini_epochs, save_every=50):
+    logdir = os.path.join('logs', 'next_val_finding', cfg["env_name"], cfg["exp_name"])
+    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
+    logdir = os.path.join(logdir, run_name)
+    if not (os.path.exists(logdir)):
+        os.makedirs(logdir)
+    
     loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(next_val_net.parameters(), lr=args_dict["reward_shaping_lr"])
 
@@ -231,6 +237,11 @@ def train_next_val_func(next_val_net, venv, policy, args_dict, cfg, data_size, m
         })
         print(
             f"Epoch {epoch}\tLoss: {loss.item():.4f}\tLoss_V: {loss_v:.4f}")
+        if epoch % save_every == 0:
+            # save reward net:
+            torch.save(next_val_net.state_dict(), os.path.join(logdir, "next_val_net.pth"))
+            np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
+            np.save(os.path.join(logdir, "config.npy"), cfg)
     end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
 
     for s, e in zip(start_weights, end_weights):
@@ -245,11 +256,7 @@ def train_next_val_func(next_val_net, venv, policy, args_dict, cfg, data_size, m
     # # plt.scatter(true_rewards, advantages.detach().cpu().numpy())
     # plt.savefig("results/reward_shaping_scatter.png")
 
-    logdir = os.path.join('logs', 'next_val_finding', cfg["env_name"], cfg["exp_name"])
-    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
-    logdir = os.path.join(logdir, run_name)
-    if not (os.path.exists(logdir)):
-        os.makedirs(logdir)
+
 
     # save reward net:
     torch.save(next_val_net.state_dict(), os.path.join(logdir, "next_val_net.pth"))
@@ -477,7 +484,7 @@ def main():
 
     args_dict = dict(
         level="block3",
-        new_val_weights=False,
+        new_val_weights=True,
         data_size=int(3e4),
         mini_epochs=15,
         copy_weights=True,
