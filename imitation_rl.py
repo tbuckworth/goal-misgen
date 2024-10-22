@@ -466,7 +466,7 @@ def decompose_policy(new_val_weights, device, level, model, policy, modify_polic
     value_network = copy.deepcopy(policy)
     if new_val_weights:
         value_network.apply(orthogonal_init)
-        value_network.to(device=policy.device)
+    value_network.to(device=policy.device)
     custom_embedder = SeqModel(embedder_list, device).to(device=policy.device)
     return custom_embedder, value_network
 
@@ -477,7 +477,7 @@ def main():
 
     args_dict = dict(
         level="block3",
-        new_val_weights=True,
+        new_val_weights=False,
         data_size=int(3e4),
         mini_epochs=15,
         copy_weights=True,
