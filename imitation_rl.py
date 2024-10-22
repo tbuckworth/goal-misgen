@@ -132,28 +132,35 @@ def reward_forward(reward_net, states, actions, next_states, dones, device):
     return reward_net(s, a, n, d)
 
 
-def train_reward_net(reward_net, venv, policy, args_dict, cfg):
+def train_reward_net(reward_net, venv, policy, args_dict, cfg, data_size, mini_epochs, save_every=50):
+    logdir = os.path.join('logs', 'rew_shaping', cfg["env_name"], cfg["exp_name"])
+    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
+    logdir = os.path.join(logdir, run_name)
+    if not (os.path.exists(logdir)):
+        os.makedirs(logdir)
+    np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
+    np.save(os.path.join(logdir, "config.npy"), cfg)
     loss_function = nn.CrossEntropyLoss()
     loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(reward_net.parameters(), lr=args_dict["reward_shaping_lr"])
 
     reward_net.train()
     start_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
-    states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=10000)
 
     for epoch in range(args_dict.get("n_reward_net_epochs")):
         # collect data
         # idx = torch.randperm(len(states))
-
-        advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device)
-        act_log_prob = log_probs[torch.arange(len(actions)), torch.tensor(actions)]
-
-        loss = loss_function(advantages, act_log_prob)
-        # loss = loss_function(advantages, torch.FloatTensor(true_rewards).to(device=policy.device))
-        loss.backward()
-        # torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
-        optimizer.step()
-        optimizer.zero_grad()
+        states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=10000)
+        for mini_epoch in range(mini_epochs):
+            advantages = reward_forward(reward_net, states, actions, next_states, dones, policy.device)
+            act_log_prob = log_probs[torch.arange(len(actions)), torch.tensor(actions)]
+            loss = loss_function(advantages, act_log_prob)
+            if mini_epoch == 0:
+                loss_v = loss.item()
+            loss.backward()
+            # torch.nn.utils.clip_grad_norm_(reward_net.parameters(), 40)
+            optimizer.step()
+            optimizer.zero_grad()
         with torch.no_grad():
             rewards = reward_forward(reward_net.base, states, actions, next_states, dones, policy.device)
         reward_corr = np.corrcoef(true_rewards, rewards.cpu().numpy())[0, 1]
@@ -161,11 +168,16 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
         wandb.log({
             "epoch": epoch,
             "loss": loss.item(),
+            "loss_v": loss_v,
             "adv_corr": adv_corr,
             "reward_corr": reward_corr,
         })
         print(
-            f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
+            f"Epoch {epoch}\tLoss: {loss.item():.4f}\n\tLoss V:{loss_v:.4f}\n\tAdvantage-True Reward Correlation:{adv_corr:.2f}\tReward Correlation:{reward_corr:.2f}")
+        if epoch % save_every == 0:
+            # save reward net:
+            torch.save(reward_net.state_dict(), os.path.join(logdir, "reward_net.pth"))
+
     end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
 
     for s, e in zip(start_weights, end_weights):
@@ -178,18 +190,11 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
 
     plt.scatter(true_rewards, rewards.cpu().numpy())
     # plt.scatter(true_rewards, advantages.detach().cpu().numpy())
-    plt.savefig("results/reward_shaping_scatter.png")
+    # plt.savefig("results/reward_shaping_scatter.png")
 
-    logdir = os.path.join('logs', 'rew_shaping', cfg["env_name"], cfg["exp_name"])
-    run_name = time.strftime("%Y-%m-%d__%H-%M-%S") + f'__seed_{args_dict["seed"]}'
-    logdir = os.path.join(logdir, run_name)
-    if not (os.path.exists(logdir)):
-        os.makedirs(logdir)
 
-    # save reward net:
-    torch.save(reward_net.state_dict(), os.path.join(logdir, "reward_net.pth"))
-    np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
-    np.save(os.path.join(logdir, "config.npy"), cfg)
+
+
 
 
 def train_next_val_func(next_val_net, venv, policy, args_dict, cfg, data_size, mini_epochs, save_every=50):
@@ -411,7 +416,10 @@ def lirl(args_dict):
 
     if args_dict.get("reward_shaping"):
         with logger.accumulate_means("reward_shaping"):
-            train_reward_net(reward_net, venv, policy, args_dict, cfg)
+            train_reward_net(reward_net, venv, policy, args_dict, cfg,
+                                data_size=args_dict.get("data_size"),
+                                mini_epochs=args_dict.get("mini_epochs"),
+                                )
             return
 
     if args_dict.get("next_val_shaping"):
@@ -489,8 +497,8 @@ def main():
         mini_epochs=15,
         copy_weights=True,
         test_ppo=False,
-        next_val_shaping=True,
-        reward_shaping=False,
+        next_val_shaping=False,
+        reward_shaping=True,
         reward_shaping_lr=5e-4,
         agent_dir=shifted_agent_dir,
         use_wandb=True,

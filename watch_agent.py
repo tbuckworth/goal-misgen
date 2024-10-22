@@ -75,10 +75,12 @@ def watch_agent(logdir, next_val_dir):
         print(f"Reward:{rew[0]:.2f}\tPredicted Reward:{predicted_reward[0]:.2f}\tValue:{v[0]:.2f}\tNV:{vn[0]:.2f}")
 
 if __name__ == "__main__":
+    #TODO: get agent_dir from config
+    # have shifted explicit
     unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
     logdir = shifted_agent_dir
-    unshifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-30-14__seed_6033"
-    shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-57-56__seed_6033"
+    # unshifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-30-14__seed_6033"
+    # shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-57-56__seed_6033"
     next_val_dir = shifted_val_dir
     watch_agent(logdir=logdir, next_val_dir=next_val_dir)
