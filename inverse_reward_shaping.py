@@ -6,7 +6,7 @@ import einops
 #%%
 n_states = 10
 n_actions = 5
-deterministic = True
+deterministic = False
 sparse_reward = False
 
 #%%
@@ -163,3 +163,36 @@ torch.corrcoef(torch.stack((learned_A.flatten(), soft_A.flatten())))
 torch.corrcoef(torch.stack((learned_V, soft_V)))
 
 # %%
+
+def look_ahead_inverse_reward_shaping(T, A, gamma, n_iterations=10000):
+    R = torch.zeros(n_states, requires_grad=True)
+    V = torch.randn(n_states, requires_grad=True)
+    VN = torch.randn(n_states, n_actions, requires_grad=True)
+
+    A.requires_grad = False
+    optimizer = torch.optim.Adam([R,V,VN], lr=1e-3)
+    for i in range(n_iterations):
+        # TODO: works in stochastic case -> generalize theorem C.1 of AIRL paper
+        A_hat = R.unsqueeze(1) - V.unsqueeze(1) + gamma * VN
+        true_VN = einops.einsum(T, V, "states actions next_states, next_states -> states actions")
+        v_loss = ((VN-true_VN)**2).mean()
+                 # einops.einsum(T, H, "states actions next_states, next_states -> states actions"))
+        loss = ((A_hat - A)**2).mean() + v_loss
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+    return R, V
+
+learned_R, _ = inverse_reward_shaping(T, soft_A, gamma)
+torch.corrcoef(torch.stack((true_R,learned_R)))
+
+plt.scatter(true_R.cpu().numpy(), learned_R.detach().cpu().numpy())
+# plt.plot(learned_R_opt.detach().cpu().numpy(), label='Learned R')
+plt.legend()
+plt.show()
+
+
+hard_A = torch.nn.functional.one_hot(soft_A.argmax(dim=-1)).float()
+
+learned_R_opt, _ = inverse_reward_shaping(T, hard_A, gamma)
+torch.corrcoef(torch.stack((true_R,learned_R_opt)))
