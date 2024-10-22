@@ -109,5 +109,5 @@ def get_hyperparameters(param_name):
     return hyperparameters
 
 
-def get_config(logdir):
-    return np.load(os.path.join(logdir, "config.npy"), allow_pickle='TRUE').item()
+def get_config(logdir, pathname="config.npy"):
+    return np.load(os.path.join(logdir, pathname), allow_pickle='TRUE').item()

@@ -192,37 +192,45 @@ def train_reward_net(reward_net, venv, policy, args_dict, cfg):
     np.save(os.path.join(logdir, "config.npy"), cfg)
 
 
-def train_next_val_func(next_val_net, venv, policy, args_dict, cfg):
+def train_next_val_func(next_val_net, venv, policy, args_dict, cfg, data_size, mini_epochs):
     loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(next_val_net.parameters(), lr=args_dict["reward_shaping_lr"])
 
     next_val_net.train()
     start_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
-    states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=10000)
-    next_states = torch.FloatTensor(next_states).to(device=policy.device)
-    states = torch.FloatTensor(states).to(device=policy.device)
+
+    timesteps=0
     for epoch in range(args_dict.get("n_reward_net_epochs")):
+        states, actions, next_states, dones, log_probs, true_rewards = collect_data(policy, venv, n=data_size)
+        next_states = torch.FloatTensor(next_states).to(device=policy.device)
+        states = torch.FloatTensor(states).to(device=policy.device)
         # collect data
         # idx = torch.randperm(len(states))
+        for mini_epoch in range(mini_epochs):
+            _, true_next_value, _ = policy(next_states, None, None)
+            true_next_value[dones] = 0
+            next_val_hat = next_val_net.value(states)
 
-        _, true_next_value, _ = policy(next_states, None, None)
-        next_val_hat = next_val_net.value(states)
+            loss = loss_function(next_val_hat, true_next_value)
+            if mini_epoch == 0:
+                loss_v = loss.item()
 
-        loss = loss_function(next_val_hat, true_next_value)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        timesteps += len(states)
         # reward_corr = np.corrcoef(true_rewards, rewards.cpu().numpy())[0, 1]
         # adv_corr = np.corrcoef(true_rewards, advantages.detach().cpu().numpy())[0, 1]
         wandb.log({
             "epoch": epoch,
+            "timesteps": timesteps,
             "loss": loss.item(),
+            "loss_v": loss_v,
             # "adv_corr": adv_corr,
             # "reward_corr": reward_corr,
         })
         print(
-            f"Epoch {epoch}\tLoss: {loss.item():.4f}")
+            f"Epoch {epoch}\tLoss: {loss.item():.4f}\tLoss_V: {loss_v:.4f}")
     end_weights = [copy.deepcopy(x.detach()) for x in policy.parameters()]
 
     for s, e in zip(start_weights, end_weights):
@@ -244,7 +252,7 @@ def train_next_val_func(next_val_net, venv, policy, args_dict, cfg):
         os.makedirs(logdir)
 
     # save reward net:
-    torch.save(next_val_net.state_dict(), os.path.join(logdir, "reward_net.pth"))
+    torch.save(next_val_net.state_dict(), os.path.join(logdir, "next_val_net.pth"))
     np.save(os.path.join(logdir, "args_dict.npy"), args_dict)
     np.save(os.path.join(logdir, "config.npy"), cfg)
 
@@ -304,29 +312,8 @@ def lirl(args_dict):
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
-    if args_dict.get("level") in ["block1", "block2", "block3"]:
-        embedder_list = [copy.deepcopy(model.block1)]
-        del policy.embedder.block1
-        policy.embedder.block1 = IdentityModel()
-    if args_dict.get("level") in ["block2", "block3"]:
-        embedder_list.append(copy.deepcopy(model.block2))
-        del policy.embedder.block2
-        policy.embedder.block2 = IdentityModel()
-    if args_dict.get("level") in ["block3"]:
-        embedder_list.append(copy.deepcopy(model.block3))
-        del policy.embedder.block3
-        policy.embedder.block3 = IdentityModel()
-    if args_dict.get("level") in ["embedder"]:
-        embedder_list = [copy.deepcopy(policy.embedder)]
-        del policy.embedder
-        policy.embedder = IdentityModel()
-
-    value_network = copy.deepcopy(policy)
-    if args_dict.get("new_val_weights"):
-        orthogonal_init(value_network, gain=1.0).to(device=policy.device)
-
-
-    custom_embedder = SeqModel(embedder_list, device).to(device=policy.device)
+    level = args_dict.get("level")
+    custom_embedder, value_network = decompose_policy(args_dict.get("new_val_weights"), device, level, model, policy)
     expert = PolicyWrapperIRL(policy, device)
 
     venv = EmbedderWrapper(venv, embedder=custom_embedder)
@@ -420,10 +407,12 @@ def lirl(args_dict):
             train_reward_net(reward_net, venv, policy, args_dict, cfg)
             return
 
-
     if args_dict.get("next_val_shaping"):
         with logger.accumulate_means("next_val"):
-            train_next_val_func(value_network, venv, policy, args_dict, cfg)
+            train_next_val_func(value_network, venv, policy, args_dict, cfg,
+                                data_size=args_dict.get("data_size"),
+                                mini_epochs=args_dict.get("mini_epochs"),
+                                )
             return
 
     learner_rewards_before_training, _ = evaluate_policy(
@@ -453,6 +442,35 @@ def lirl(args_dict):
     wandb.finish()
 
 
+def decompose_policy(new_val_weights, device, level, model, policy, modify_policy=True):
+    if level in ["block1", "block2", "block3"]:
+        embedder_list = [copy.deepcopy(model.block1)]
+        if modify_policy:
+            del policy.embedder.block1
+            policy.embedder.block1 = IdentityModel()
+    if level in ["block2", "block3"]:
+        embedder_list.append(copy.deepcopy(model.block2))
+        if modify_policy:
+            del policy.embedder.block2
+            policy.embedder.block2 = IdentityModel()
+    if level in ["block3"]:
+        embedder_list.append(copy.deepcopy(model.block3))
+        if modify_policy:
+            del policy.embedder.block3
+            policy.embedder.block3 = IdentityModel()
+    if level in ["embedder"]:
+        embedder_list = [copy.deepcopy(policy.embedder)]
+        if modify_policy:
+            del policy.embedder
+            policy.embedder = IdentityModel()
+    value_network = copy.deepcopy(policy)
+    if new_val_weights:
+        value_network.apply(orthogonal_init)
+        value_network.to(device=policy.device)
+    custom_embedder = SeqModel(embedder_list, device).to(device=policy.device)
+    return custom_embedder, value_network
+
+
 def main():
     unshifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
     shifted_agent_dir = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
@@ -460,12 +478,14 @@ def main():
     args_dict = dict(
         level="block3",
         new_val_weights=True,
+        data_size=int(3e4),
+        mini_epochs=15,
         copy_weights=True,
         test_ppo=False,
         next_val_shaping=True,
         reward_shaping=False,
         reward_shaping_lr=5e-4,
-        agent_dir=unshifted_agent_dir,
+        agent_dir=shifted_agent_dir,
         use_wandb=True,
         seed=42,
         fast=True,
