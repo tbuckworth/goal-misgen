@@ -373,7 +373,9 @@ def main(args):
 
             obs_copy, r_grad_vid = apply_saliency(obs, reward_saliency_obs)
             _, v_grad_vid = apply_saliency(obs, value_saliency_obs)
-
+            
+            obs_copy = obs_copy.transpose((1,0,2))
+            obs = next_obs
 
             categories = ["Reward", "Predicted Reward", "Act Advantage", "Value", "Next Value (discounted)"]
             values = [rew.item(), 
@@ -396,9 +398,12 @@ def main(args):
 
             print(vid_stack.shape[0])
 
+            if vid_stack.shape[0] > 100:
+                done = True
+
             if done:
-                output_file = os.path.join(logdir_saliency_value,f"/sal_vid.mp4")
-                save_video_from_array(vid_stack, output_file, fps=30)
+                output_file = logdir_saliency_value + f"/sal_vid{n_vid}.mp4"
+                save_video_from_array(vid_stack, output_file, fps=15)
                 vid_stack = unsqueezed_image
 
         #     agent.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
@@ -420,7 +425,8 @@ def main(args):
 def apply_saliency(obs, reward_saliency_obs):
     reward_saliency_obs = reward_saliency_obs.swapaxes(1, 3)
     obs_copy = obs.swapaxes(1, 3)
-
+    # plt.imshow(obs_copy.squeeze()*255)
+    # plt.show()
     ims_grad = reward_saliency_obs.mean(axis=-1)
 
     percentile = np.percentile(np.abs(ims_grad), 99.9999999)
@@ -455,6 +461,7 @@ def apply_saliency(obs, reward_saliency_obs):
 
     grad_vid = grad_vid + sample_ims_faint
     obs_copy = (obs_copy * 255).astype(np.uint8)
+
     return obs_copy.squeeze(), grad_vid.swapaxes(0,2).squeeze()
 
 if __name__=='__main__':
