@@ -505,7 +505,7 @@ def main():
         copy_weights=True,
         test_ppo=False,
         next_val_shaping=True,
-        reward_shaping=False,
+        reward_shaping=True,
         reward_shaping_lr=5e-4,
         agent_dir=shifted_agent_dir,
         use_wandb=True,

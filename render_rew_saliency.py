@@ -1,9 +1,11 @@
+import copy
 from common.env.procgen_wrappers import *
 from common.logger import Logger
 from common.storage import Storage
-from common.model import NatureModel, ImpalaModel
+from common.model import NatureModel, ImpalaModel, IdentityModel
 from common.policy import CategoricalPolicy
 from common import set_global_seeds, set_global_log_levels
+from imitation_rl import decompose_policy
 
 import os, time, yaml, argparse
 import gym
@@ -164,6 +166,24 @@ def main(args):
     agent.policy.load_state_dict(torch.load(args.model_file, map_location=device)["model_state_dict"])
     agent.n_envs = n_envs
 
+    if args.use_learned_next_val:
+        next_val_net = copy.deepcopy(policy)
+        #we have to strip the embedder to load the state dict, then restore the embedder before using the model
+        if args.level in ["block3"]:
+            next_val_net.embedder.block1 = IdentityModel()
+            next_val_net.embedder.block2 = IdentityModel()
+            next_val_net.embedder.block3 = IdentityModel()
+        else:
+            raise ValueError("Implement the above for levels other than block3")
+        
+        next_val_net.load_state_dict(torch.load(args.next_val_net_file, map_location=device))
+
+        next_val_net.embedder.block1 = policy.embedder.block1
+        next_val_net.embedder.block2 = policy.embedder.block2
+        next_val_net.embedder.block3 = policy.embedder.block3
+
+        print("loaded next val net")
+
     ############
     ## RENDER ##
     ############
@@ -198,6 +218,8 @@ def main(args):
         with open(logdir + "/" + filename, "w") as f:
             f.write(str(scalar))
 
+    
+
 
     obs = agent.env.reset()
     hidden_state = np.zeros((agent.n_envs, agent.storage.hidden_state_size))
@@ -216,7 +238,15 @@ def main(args):
             act, log_prob_act, value, rew_sal_obs = agent.predict_for_rew_saliency(obs, done)
 
             next_obs, rew, done, info = agent.env.step(act)
-            _, _, next_value, _ = agent.predict_for_rew_saliency(next_obs, done)
+
+            if args.use_learned_next_val:
+                _, next_value, _ = next_val_net(rew_sal_obs, None, None)
+
+            else:
+                _, _, next_value, _ = agent.predict_for_rew_saliency(next_obs, done)
+
+                next_value[done] = 0    
+
             pred_reward = log_prob_act + value - agent.gamma * next_value
             pred_reward.backward(retain_graph=True)
 
@@ -277,7 +307,9 @@ def main(args):
                 saliency_save_idx += 1
 
                 if done:
+                
                     print("hello Matt")
+                    print(rew)
 
 
 
@@ -313,6 +345,8 @@ if __name__=='__main__':
     parser.add_argument('--log_level',        type=int, default = int(40), help='[10,20,30,40]')
     parser.add_argument('--num_checkpoints',  type=int, default = int(1), help='number of checkpoints to store')
     parser.add_argument('--logdir',           type=str, default = None)
+    parser.add_argument('--used_learned_next_val',           type=bool, default = False)
+    parser.add_argument('--next_val_net_file', type=str)
 
     #multi threading
     parser.add_argument('--num_threads', type=int, default=8)
@@ -342,13 +376,15 @@ if __name__=='__main__':
 
     shifted_agent = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
     args.model_file = latest_model_path(shifted_agent)
-
+    args.next_val_net_file = "logs/next_val_finding/coinrun/coinrun/2024-10-24__10-19-48__seed_6033/next_val_net.pth"
     args.exp_name = "coinrun_test" 
     args.env_name = "coinrun_aisc"
     args.distribution_mode = "hard"
     args.param_name = "hard-500"
     args.noview = True
     args.value_saliency = True
+    args.use_learned_next_val = True
+    args.level = "block3"
 
 
     main(args)
