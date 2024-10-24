@@ -57,25 +57,25 @@ def watch_agent(logdir, next_val_dir=None):
 
     # run agent in env
     obs = venv.reset()
-    x = torch.FloatTensor(obs).to(device)
-    x = custom_embedder(x)
-    p, v, _ = policy(x, None, None)
-    vn = next_value_network.value(x)
     while True:
-        act = p.sample()
-        obs, rew, done, info = venv.step(act.detach().cpu().numpy())
-        adv = p.log_prob(act)
-        predicted_reward = adv + v - cfg["gamma"] * vn
         x = torch.FloatTensor(obs).to(device)
         x = custom_embedder(x)
         p, v, _ = policy(x, None, None)
         vn = next_value_network.value(x)
-        # # pn, vn, _ = policy(x, None, None)
-        # # vn[done] = 0
-        # predicted_reward = p.log_prob(act) + v - cfg["gamma"] * vn
-        # p = pn
-        # v = vn
-        print(f"Reward:{rew[0]:.2f}\tPredicted Reward:{predicted_reward[0]:.2f}\tAdv:{adv[0]:.2f}\tValue:{v[0]:.2f}\tNV:{vn[0]:.2f}")
+        act = p.sample()
+
+        adv = p.log_prob(act)
+        predicted_reward = adv + v - cfg["gamma"] * vn
+        obs, rew, done, info = venv.step(act.detach().cpu().numpy())
+
+        # These metrics are for the obs and action you just saw and took (not the state you can currently see rendered)
+        print(f"Reward:{rew[0]:.2f}\tPredicted Reward:{predicted_reward[0]:.2f}\tAdv:{adv[0]:.2f}\tValue:{v[0]:.2f}\tNV:{vn[0]:.2f}\tEntropy:{p.entropy()[0]:.2f}")
+        
+        # x = torch.FloatTensor(obs).to(device)
+        # x = custom_embedder(x)
+        # p, v, _ = policy(x, None, None)
+        # vn = next_value_network.value(x)
+
 
 if __name__ == "__main__":
     #TODO: get agent_dir from config
@@ -86,5 +86,6 @@ if __name__ == "__main__":
     # unshifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-30-14__seed_6033"
     # shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__14-57-56__seed_6033"
     shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__16-27-10__seed_6033"
+    shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-24__10-19-48__seed_6033"
     next_val_dir = shifted_val_dir
     watch_agent(logdir=None, next_val_dir=next_val_dir)

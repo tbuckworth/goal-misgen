@@ -19,6 +19,128 @@ import torchvision as tv
 
 from gym3 import ViewerWrapper, VideoRecorderWrapper, ToBaselinesVecEnv
 
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def save_video_from_array(video_array, output_file, fps=30):
+    """
+    Converts a 4D numpy array (num_frames, height, width, channels) into an .mp4 file.
+
+    Parameters:
+    video_array (np.array): 4D array containing video frames (num_frames, height, width, 3).
+    output_file (str): The output video file path.
+    fps (int): Frames per second for the video.
+    """
+    # Get dimensions from the video array
+    num_frames, height, width, channels = video_array.shape
+
+    if channels != 3:
+        raise ValueError("Expected an array with 3 channels (RGB), but got {} channels.".format(channels))
+
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 'mp4v' is for .mp4 format
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+
+    for i in range(num_frames):
+        frame = video_array[i]
+
+        # Ensure frame is in the right data type (uint8)
+        if frame.dtype != np.uint8:
+            frame = (255 * np.clip(frame, 0, 1)).astype(np.uint8)  # Scale to 0-255 if needed
+
+        out.write(frame)  # Write the frame to the video
+
+    out.release()  # Release the video writer object
+    print(f"Video saved as {output_file}")
+
+
+def save_video_with_text(video_array, output_file, texts, fps=30, font=cv2.FONT_HERSHEY_SIMPLEX):
+    """
+    Converts a 4D numpy array (num_frames, height, width, channels) into an .mp4 file with overlayed text.
+
+    Parameters:
+    video_array (np.array): 4D array containing video frames (num_frames, height, width, 3).
+    output_file (str): The output video file path.
+    texts (list): List of strings to overlay on each frame.
+    fps (int): Frames per second for the video.
+    font (int): OpenCV font type for the overlayed text.
+    """
+    # Get dimensions from the video array
+    num_frames, height, width, channels = video_array.shape
+
+    if channels != 3:
+        raise ValueError("Expected an array with 3 channels (RGB), but got {} channels.".format(channels))
+
+    if len(texts) != num_frames:
+        raise ValueError("The length of the texts list must match the number of frames.")
+
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+
+    for i in range(num_frames):
+        frame = video_array[i]
+
+        # Ensure frame is in the right data type (uint8)
+        if frame.dtype != np.uint8:
+            frame = (255 * np.clip(frame, 0, 1)).astype(np.uint8)
+
+        # Add text to the frame
+        text = texts[i]
+        position = (50, 50)  # Position of the text (x, y)
+        font_scale = 1
+        color = (255, 255, 255)  # White text
+        thickness = 2
+
+        # Overlay the text on the frame
+        cv2.putText(frame, text, position, font, font_scale, color, thickness, lineType=cv2.LINE_AA)
+
+        # Write the frame to the video
+        out.write(frame)
+
+    out.release()  # Release the video writer object
+    print(f"Video with overlayed text saved as {output_file}")
+
+
+def create_barchart_as_numpy(categories, values, width_pixels, height_pixels, dpi=100):
+    plt.switch_backend('Agg')
+
+    # # Sample data
+    # categories = ['A', 'B', 'C', 'D']
+    # values = [3, 7, 2, 5]
+
+    # Calculate size in inches from pixels and DPI
+    width_in = width_pixels / dpi
+    height_in = height_pixels / dpi
+
+    # Create the bar chart with specified figure size
+    fig, ax = plt.subplots(figsize=(width_in, height_in), dpi=dpi)
+    ax.bar(categories, values)
+    ax.set_title('Sample Bar Chart')
+    ax.set_xlabel('Category')
+    ax.set_ylabel('Values')
+
+    # Draw the canvas to the figure
+    fig.canvas.draw()
+
+    # Convert canvas to a NumPy array
+    img_array = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8).reshape(height_pixels, width_pixels, 4)
+
+    # Convert ARGB to RGBA for proper color channel order
+    img_array = np.roll(img_array, 3, axis=2)
+
+    plt.close(fig)  # Close the figure to free memory
+
+    return img_array[..., :3]
+
+# # Example usage:
+# width_pixels = 640  # Desired width in pixels
+# height_pixels = 480  # Desired height in pixels
+# barchart_array = create_barchart_as_numpy(width_pixels, height_pixels, dpi=100)
+# print(barchart_array.shape)  # Should print (480, 640, 4)
+
 
 def main(args):
 
@@ -218,23 +340,17 @@ def main(args):
         with open(logdir + "/" + filename, "w") as f:
             f.write(str(scalar))
 
-    
-
 
     obs = agent.env.reset()
     hidden_state = np.zeros((agent.n_envs, agent.storage.hidden_state_size))
     done = np.zeros(agent.n_envs)
 
-
-    individual_value_idx = 1001
-    save_frequency = 1
-    saliency_save_idx = 0
-    epoch_idx = 0
-    while True:
+    vid_stack = None
+    for n_vid in range(args.n_vids):
         agent.policy.eval()
-        for _ in range(agent.n_steps):  # = 256
-
-            # act, log_prob_act, value, next_hidden_state, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
+        done = False
+        while not done: # = 256
+            _, _, _, _, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
             act, log_prob_act, value, rew_sal_obs = agent.predict_for_rew_saliency(obs, done)
 
             next_obs, rew, done, info = agent.env.step(act)
@@ -255,81 +371,91 @@ def main(args):
             log_prob_act = log_prob_act.detach().cpu().numpy()
             value = value.detach().cpu().numpy()
 
+            obs_copy, r_grad_vid = apply_saliency(obs, reward_saliency_obs)
+            _, v_grad_vid = apply_saliency(obs, value_saliency_obs)
 
-            if saliency_save_idx % save_frequency == 0:
-                suffix = ""
-                if done:
-                    suffix = "done"
-                reward_saliency_obs = reward_saliency_obs.swapaxes(1, 3)
-                obs_copy = obs.swapaxes(1, 3)
 
-                ims_grad = reward_saliency_obs.mean(axis=-1)
+            categories = ["Reward", "Predicted Reward", "Act Advantage", "Value", "Next Value (discounted)"]
+            values = [rew.item(), 
+                      pred_reward.detach().cpu().numpy().item(), 
+                      log_prob_act.item(), 
+                      value.item(), 
+                      agent.gamma * next_value.detach().cpu().numpy().item()
+                      ]
+            bar_array = create_barchart_as_numpy(categories, values, 64, 64)
+            
+            top_image = np.concatenate((obs_copy, r_grad_vid), axis=1)
+            bot_image = np.concatenate((v_grad_vid, bar_array), axis=1)
+            full_image = np.concatenate((top_image, bot_image), axis=0)
+            unsqueezed_image = np.expand_dims(full_image, 0)
 
-                percentile = np.percentile(np.abs(ims_grad), 99.9999999)
-                ims_grad = ims_grad.clip(-percentile, percentile) / percentile
-                ims_grad = torch.tensor(ims_grad)
-                blurrer = tv.transforms.GaussianBlur(
+            if vid_stack is None:
+                vid_stack = unsqueezed_image
+            else:
+                vid_stack = np.append(vid_stack, unsqueezed_image, 0)
+
+            print(vid_stack.shape[0])
+
+            if done:
+                output_file = os.path.join(logdir_saliency_value,f"/sal_vid.mp4")
+                save_video_from_array(vid_stack, output_file, fps=30)
+                vid_stack = unsqueezed_image
+
+        #     agent.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
+        #     obs = next_obs
+
+        # _, _, last_val, hidden_state = agent.predict(obs, hidden_state, done)
+        # agent.storage.store_last(obs, hidden_state, last_val)
+
+        # if args.save_value_individual:
+        #     individual_value_idx = save_value_estimates_individual(agent.storage, epoch_idx, individual_value_idx)
+
+        # if args.save_value:
+        #     save_value_estimates(agent.storage, epoch_idx)
+        #     epoch_idx += 1
+
+        # agent.storage.compute_estimates(agent.gamma, agent.lmbda, agent.use_gae,
+        #                                agent.normalize_adv)
+
+def apply_saliency(obs, reward_saliency_obs):
+    reward_saliency_obs = reward_saliency_obs.swapaxes(1, 3)
+    obs_copy = obs.swapaxes(1, 3)
+
+    ims_grad = reward_saliency_obs.mean(axis=-1)
+
+    percentile = np.percentile(np.abs(ims_grad), 99.9999999)
+    ims_grad = ims_grad.clip(-percentile, percentile) / percentile
+    ims_grad = torch.tensor(ims_grad)
+    blurrer = tv.transforms.GaussianBlur(
                     kernel_size=5,
                     sigma=5.)  # (5, sigma=(5., 6.))
-                ims_grad = blurrer(ims_grad).squeeze().unsqueeze(-1)
+    ims_grad = blurrer(ims_grad).squeeze().unsqueeze(-1)
 
-                pos_grads = ims_grad.where(ims_grad > 0.,
+    pos_grads = ims_grad.where(ims_grad > 0.,
                                             torch.zeros_like(ims_grad))
-                neg_grads = ims_grad.where(ims_grad < 0.,
+    neg_grads = ims_grad.where(ims_grad < 0.,
                                             torch.zeros_like(ims_grad)).abs()
 
 
                 # Make a couple of copies of the original im for later
-                sample_ims_faint = torch.tensor(obs_copy.mean(-1)) * 0.2
-                sample_ims_faint = torch.stack([sample_ims_faint] * 3, axis=-1)
-                sample_ims_faint = sample_ims_faint * 255
-                sample_ims_faint = sample_ims_faint.clone().detach().type(
+    sample_ims_faint = torch.tensor(obs_copy.mean(-1)) * 0.2
+    sample_ims_faint = torch.stack([sample_ims_faint] * 3, axis=-1)
+    sample_ims_faint = sample_ims_faint * 255
+    sample_ims_faint = sample_ims_faint.clone().detach().type(
                     torch.uint8).cpu().numpy()
 
-                grad_scale = 9.
-                grad_vid = np.zeros_like(sample_ims_faint)
-                pos_grads = pos_grads * grad_scale * 255
-                neg_grads = neg_grads * grad_scale * 255
-                grad_vid[:, :, :, 2] = pos_grads.squeeze().clone().detach().type(
+    grad_scale = 9.
+    grad_vid = np.zeros_like(sample_ims_faint)
+    pos_grads = pos_grads * grad_scale * 255
+    neg_grads = neg_grads * grad_scale * 255
+    grad_vid[:, :, :, 2] = pos_grads.squeeze().clone().detach().type(
                     torch.uint8).cpu().numpy()
-                grad_vid[:, :, :, 0] = neg_grads.squeeze().clone().detach().type(
+    grad_vid[:, :, :, 0] = neg_grads.squeeze().clone().detach().type(
                     torch.uint8).cpu().numpy()
 
-                grad_vid = grad_vid + sample_ims_faint
-
-                grad_vid = Image.fromarray(grad_vid.swapaxes(0,2).squeeze())
-                grad_vid.save(logdir_saliency_value + f"/sal_obs_{saliency_save_idx:05d}_grad_{suffix}.png")
-
-                obs_copy = (obs_copy * 255).astype(np.uint8)
-                obs_copy = Image.fromarray(obs_copy.swapaxes(0,2).squeeze())
-                obs_copy.save(logdir_saliency_value + f"/sal_obs_{saliency_save_idx:05d}_raw_{suffix}.png")
-
-                saliency_save_idx += 1
-
-                if done:
-                
-                    print("hello Matt")
-                    print(rew)
-
-
-
-            # next_obs, rew, done, info = agent.env.step(act)
-
-            agent.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
-            obs = next_obs
-
-        _, _, last_val, hidden_state = agent.predict(obs, hidden_state, done)
-        agent.storage.store_last(obs, hidden_state, last_val)
-
-        if args.save_value_individual:
-            individual_value_idx = save_value_estimates_individual(agent.storage, epoch_idx, individual_value_idx)
-
-        if args.save_value:
-            save_value_estimates(agent.storage, epoch_idx)
-            epoch_idx += 1
-
-        agent.storage.compute_estimates(agent.gamma, agent.lmbda, agent.use_gae,
-                                       agent.normalize_adv)
+    grad_vid = grad_vid + sample_ims_faint
+    obs_copy = (obs_copy * 255).astype(np.uint8)
+    return obs_copy.squeeze(), grad_vid.swapaxes(0,2).squeeze()
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
@@ -385,7 +511,7 @@ if __name__=='__main__':
     args.value_saliency = True
     args.use_learned_next_val = True
     args.level = "block3"
-
+    args.n_vids = 3
 
     main(args)
     
