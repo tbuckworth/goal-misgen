@@ -19,16 +19,9 @@ from gym3 import ViewerWrapper, VideoRecorderWrapper, ToBaselinesVecEnv
 
 
 def main(args):
-    shifted_agent = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
-    args.model_file = latest_model_path(shifted_agent)
 
-    exp_name = "coinrun_test" 
-    args.env_name = "coinrun_aisc"
-    args.distribution_mode = "hard"
-    args.param_name = "hard-500"
-    args.noview = True
-    args.value_saliency = True
 
+    exp_name = args.exp_name
     env_name = args.env_name
     start_level = args.start_level
     num_levels = args.num_levels
@@ -218,67 +211,80 @@ def main(args):
     while True:
         agent.policy.eval()
         for _ in range(agent.n_steps):  # = 256
-            if not args.value_saliency:
-                act, log_prob_act, value, next_hidden_state = agent.predict(obs, hidden_state, done)
-            else:
-                act, log_prob_act, value, next_hidden_state, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
-                if saliency_save_idx % save_frequency == 0:
-                    suffix = ""
-                    if done:
-                        suffix = "done"
-                    value_saliency_obs = value_saliency_obs.swapaxes(1, 3)
-                    obs_copy = obs.swapaxes(1, 3)
 
-                    ims_grad = value_saliency_obs.mean(axis=-1)
+            # act, log_prob_act, value, next_hidden_state, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
+            act, log_prob_act, value, rew_sal_obs = agent.predict_for_rew_saliency(obs, done)
 
-                    percentile = np.percentile(np.abs(ims_grad), 99.9999999)
-                    ims_grad = ims_grad.clip(-percentile, percentile) / percentile
-                    ims_grad = torch.tensor(ims_grad)
-                    blurrer = tv.transforms.GaussianBlur(
-                        kernel_size=5,
-                        sigma=5.)  # (5, sigma=(5., 6.))
-                    ims_grad = blurrer(ims_grad).squeeze().unsqueeze(-1)
+            next_obs, rew, done, info = agent.env.step(act)
+            _, _, next_value, _ = agent.predict_for_rew_saliency(next_obs, done)
+            pred_reward = log_prob_act + value - agent.gamma * next_value
+            pred_reward.backward(retain_graph=True)
 
-                    pos_grads = ims_grad.where(ims_grad > 0.,
-                                               torch.zeros_like(ims_grad))
-                    neg_grads = ims_grad.where(ims_grad < 0.,
-                                               torch.zeros_like(ims_grad)).abs()
+            reward_saliency_obs = rew_sal_obs.grad.data.detach().cpu().numpy()
+
+            log_prob_act = log_prob_act.detach().cpu().numpy()
+            value = value.detach().cpu().numpy()
 
 
-                    # Make a couple of copies of the original im for later
-                    sample_ims_faint = torch.tensor(obs_copy.mean(-1)) * 0.2
-                    sample_ims_faint = torch.stack([sample_ims_faint] * 3, axis=-1)
-                    sample_ims_faint = sample_ims_faint * 255
-                    sample_ims_faint = sample_ims_faint.clone().detach().type(
-                        torch.uint8).cpu().numpy()
+            if saliency_save_idx % save_frequency == 0:
+                suffix = ""
+                if done:
+                    suffix = "done"
+                reward_saliency_obs = reward_saliency_obs.swapaxes(1, 3)
+                obs_copy = obs.swapaxes(1, 3)
 
-                    grad_scale = 9.
-                    grad_vid = np.zeros_like(sample_ims_faint)
-                    pos_grads = pos_grads * grad_scale * 255
-                    neg_grads = neg_grads * grad_scale * 255
-                    grad_vid[:, :, :, 2] = pos_grads.squeeze().clone().detach().type(
-                        torch.uint8).cpu().numpy()
-                    grad_vid[:, :, :, 0] = neg_grads.squeeze().clone().detach().type(
-                        torch.uint8).cpu().numpy()
+                ims_grad = reward_saliency_obs.mean(axis=-1)
 
-                    grad_vid = grad_vid + sample_ims_faint
+                percentile = np.percentile(np.abs(ims_grad), 99.9999999)
+                ims_grad = ims_grad.clip(-percentile, percentile) / percentile
+                ims_grad = torch.tensor(ims_grad)
+                blurrer = tv.transforms.GaussianBlur(
+                    kernel_size=5,
+                    sigma=5.)  # (5, sigma=(5., 6.))
+                ims_grad = blurrer(ims_grad).squeeze().unsqueeze(-1)
 
-                    grad_vid = Image.fromarray(grad_vid.swapaxes(0,2).squeeze())
-                    grad_vid.save(logdir_saliency_value + f"/sal_obs_{saliency_save_idx:05d}_grad_{suffix}.png")
+                pos_grads = ims_grad.where(ims_grad > 0.,
+                                            torch.zeros_like(ims_grad))
+                neg_grads = ims_grad.where(ims_grad < 0.,
+                                            torch.zeros_like(ims_grad)).abs()
 
-                    obs_copy = (obs_copy * 255).astype(np.uint8)
-                    obs_copy = Image.fromarray(obs_copy.swapaxes(0,2).squeeze())
-                    obs_copy.save(logdir_saliency_value + f"/sal_obs_{saliency_save_idx:05d}_raw_{suffix}.png")
+
+                # Make a couple of copies of the original im for later
+                sample_ims_faint = torch.tensor(obs_copy.mean(-1)) * 0.2
+                sample_ims_faint = torch.stack([sample_ims_faint] * 3, axis=-1)
+                sample_ims_faint = sample_ims_faint * 255
+                sample_ims_faint = sample_ims_faint.clone().detach().type(
+                    torch.uint8).cpu().numpy()
+
+                grad_scale = 9.
+                grad_vid = np.zeros_like(sample_ims_faint)
+                pos_grads = pos_grads * grad_scale * 255
+                neg_grads = neg_grads * grad_scale * 255
+                grad_vid[:, :, :, 2] = pos_grads.squeeze().clone().detach().type(
+                    torch.uint8).cpu().numpy()
+                grad_vid[:, :, :, 0] = neg_grads.squeeze().clone().detach().type(
+                    torch.uint8).cpu().numpy()
+
+                grad_vid = grad_vid + sample_ims_faint
+
+                grad_vid = Image.fromarray(grad_vid.swapaxes(0,2).squeeze())
+                grad_vid.save(logdir_saliency_value + f"/sal_obs_{saliency_save_idx:05d}_grad_{suffix}.png")
+
+                obs_copy = (obs_copy * 255).astype(np.uint8)
+                obs_copy = Image.fromarray(obs_copy.swapaxes(0,2).squeeze())
+                obs_copy.save(logdir_saliency_value + f"/sal_obs_{saliency_save_idx:05d}_raw_{suffix}.png")
 
                 saliency_save_idx += 1
 
+                if done:
+                    print("hello Matt")
 
 
-            next_obs, rew, done, info = agent.env.step(act)
+
+            # next_obs, rew, done, info = agent.env.step(act)
 
             agent.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
             obs = next_obs
-            hidden_state = next_hidden_state
 
         _, _, last_val, hidden_state = agent.predict(obs, hidden_state, done)
         agent.storage.store_last(obs, hidden_state, last_val)
@@ -331,5 +337,19 @@ if __name__=='__main__':
 
 
     args = parser.parse_args()
+
+
+
+    shifted_agent = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
+    args.model_file = latest_model_path(shifted_agent)
+
+    args.exp_name = "coinrun_test" 
+    args.env_name = "coinrun_aisc"
+    args.distribution_mode = "hard"
+    args.param_name = "hard-500"
+    args.noview = True
+    args.value_saliency = True
+
+
     main(args)
     

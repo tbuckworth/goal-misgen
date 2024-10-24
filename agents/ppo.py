@@ -76,6 +76,17 @@ class PPO(BaseAgent):
 
         return act.detach().cpu().numpy(), log_prob_act.detach().cpu().numpy(), value.detach().cpu().numpy(), hidden_state.detach().cpu().numpy(), obs.grad.data.detach().cpu().numpy()
 
+    def predict_for_rew_saliency(self, obs, done):
+        obs = torch.FloatTensor(obs).to(device=self.device)
+        obs.requires_grad_()
+        obs.retain_grad()
+        dist, value, hidden_state = self.policy(obs, None, None)
+        act = dist.sample()
+        log_prob_act = dist.log_prob(act)
+
+        return act.detach().cpu().numpy(), log_prob_act, value, obs
+
+
     def optimize(self):
         pi_loss_list, value_loss_list, entropy_loss_list = [], [], []
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
