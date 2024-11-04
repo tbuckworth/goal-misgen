@@ -1,5 +1,6 @@
 
 
+from matplotlib import pyplot as plt
 import numpy as np
 from scipy.special import softmax, log_softmax
 import torch
@@ -113,41 +114,64 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
         obs = nobs
     # Obs = concat_data(Obs, nobs)
 
-    next_reward = MlpModel(input_dims=7, hidden_dims=[64,1])
-    critic = MlpModel(input_dims=6, output_dims=[64, 1])
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    next_reward = MlpModel(input_dims=7, hidden_dims=[64,64,1])
+    critic = MlpModel(input_dims=6, hidden_dims=[64, 64, 1])
+
+    next_reward.to(device)
+    critic.to(device)
 
     optimizer = torch.optim.Adam(list(next_reward.parameters())+ list(critic.parameters()), lr = learning_rate)
 
-    obs = torch.FloatTensor(Obs)
-    next_obs = torch.FloatTensor(Nobs)
-    next_next_obs = torch.FloatTensor(Nobs[1:]) # add zero
-    acts = torch.FloatTensor(Actions)
-    next_actions = torch.FloatTensor(Nactions)
+    obs = torch.FloatTensor(Obs[:-1]).to(device)
+    next_obs = torch.FloatTensor(Nobs[:-1]).to(device)
+    next_next_obs = torch.FloatTensor(Nobs[1:]).to(device) # add zero
+    acts = torch.FloatTensor(Actions[:-1]).to(device)
+    next_actions = torch.FloatTensor(Nactions[:-1]).to(device)
 
     next_action_idx = [tuple(n for n in range(len(next_actions))),tuple(1 if x == 1 else 0 for x in next_actions)]
-    log_probs = torch.FloatTensor(policy.forward(next_obs))
+    log_probs = torch.FloatTensor(policy.forward(next_obs.detach().cpu().numpy())).to(device)
     log_prob_acts = log_probs[next_action_idx]
     log_prob_acts.requires_grad = False
 
     obs_acts = torch.concat((obs,acts.unsqueeze(-1)),-1)
     losses = []
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(epochs):    
         rew_hat = next_reward(obs_acts)
         next_val = critic(next_obs)
         next_next_val = critic(next_next_obs)
+        flt = Done[:-1]
+        # next_next_val[flt] = 0
+        adv_dones = rew_hat[flt] - next_val[flt]
 
-        adv = rew_hat - next_val + gamma * next_next_val
+        adv = rew_hat[~flt] - next_val[~flt] + gamma * next_next_val[~flt]
 
-        loss = torch.MSELoss(adv, log_prob_acts)
+        loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_acts[~flt])
 
-        loss.backward()
+        loss2 = (adv_dones.squeeze()**2).mean()
+
+        coef = flt.mean()
+        coef = flt.mean()
+
+        total_loss = loss + coef * loss2
+
+        total_loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
 
-        losses.append(loss.item())
-        print(f"Epoch:{epoch}\tLoss{loss.item():.4f}")
+        losses.append(total_loss.item())
+        if epoch % 100 == 0:
+            print(f"Epoch:{epoch}\tLoss{total_loss.item():.4f}\tAdv dones:{adv_dones.mean():.4f}\tAdv:{adv.mean():.4f}\tRew_hat:{rew_hat[flt].mean():.4f}")
+            
+            # r = next_reward(obs_acts.unique(dim=0))
+            # print(r)
+            # print(f"s_0 l, s_0 r, s_1 l, s_1 r, s_2 l, s_3 r, s_4 l, s_4 r")
 
+            # plt.hist(rew_hat.detach().cpu().numpy())
+            # plt.show()
 
 if __name__ == "__main__":
     main()
