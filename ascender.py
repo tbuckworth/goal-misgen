@@ -83,7 +83,7 @@ def concat_data(Obs, obs):
     obs = np.array(obs)
     if Obs is None:
         return np.expand_dims(obs,axis=0)
-    return np.concatenate(Obs, np.expand_dims(obs, axis=0))
+    return np.concatenate((Obs, np.expand_dims(obs, axis=0)),axis=0)
 
 def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
     env = AscentEnv(shifted=False)
@@ -116,7 +116,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
     next_reward = MlpModel(input_dims=7, hidden_dims=[64,1])
     critic = MlpModel(input_dims=6, output_dims=[64, 1])
 
-    optimizer = torch.optim.adam([next_reward.parameters,critic.parameters], lr = learning_rate)
+    optimizer = torch.optim.Adam(list(next_reward.parameters())+ list(critic.parameters()), lr = learning_rate)
 
     obs = torch.FloatTensor(Obs)
     next_obs = torch.FloatTensor(Nobs)
@@ -124,16 +124,18 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
     acts = torch.FloatTensor(Actions)
     next_actions = torch.FloatTensor(Nactions)
 
+    next_action_idx = [tuple(n for n in range(len(next_actions))),tuple(1 if x == 1 else 0 for x in next_actions)]
+    log_probs = torch.FloatTensor(policy.forward(next_obs))
+    log_prob_acts = log_probs[next_action_idx]
+    log_prob_acts.requires_grad = False
+
+    obs_acts = torch.concat((obs,acts.unsqueeze(-1)),-1)
+    losses = []
     for epoch in range(epochs):    
-        rew_hat = next_reward(obs, acts)
+        rew_hat = next_reward(obs_acts)
         next_val = critic(next_obs)
         next_next_val = critic(next_next_obs)
 
-        log_probs = torch.FloatTensor(policy.forward(next_obs))
-        log_prob_acts = log_probs[...,torch.relu(next_actions)]
-        log_prob_acts.requires_grad = False
-        
-        
         adv = rew_hat - next_val + gamma * next_next_val
 
         loss = torch.MSELoss(adv, log_prob_acts)
@@ -142,6 +144,10 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
 
         optimizer.step()
         optimizer.zero_grad()
+
+        losses.append(loss.item())
+        print(f"Epoch:{epoch}\tLoss{loss.item():.4f}")
+
 
 if __name__ == "__main__":
     main()
