@@ -15,11 +15,11 @@ def coin_flipper():
     cum_probs = np.cumprod(p_tab, axis=1)
     cum_tab = np.cumsum(btab, axis=1)
 
-    
+
 
 
     for n_tosses in reversed(range(10)):
-
+        pass
 
 
 
