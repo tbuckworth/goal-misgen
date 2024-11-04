@@ -40,7 +40,7 @@ def save_video_from_array(video_array, output_file, fps=30):
         raise ValueError("Expected an array with 3 channels (RGB), but got {} channels.".format(channels))
 
     # Define the codec and create a VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 'mp4v' is for .mp4 format
+    fourcc = cv2.VideoWriter_fourcc(*"FFV1")#*'mp4v')  # 'mp4v' is for .mp4 format
     out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
 
     for i in range(num_frames):
@@ -77,7 +77,7 @@ def save_video_with_text(video_array, output_file, texts, fps=30, font=cv2.FONT_
         raise ValueError("The length of the texts list must match the number of frames.")
 
     # Define the codec and create a VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"FFV1")#*'mp4v')
     out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
 
     for i in range(num_frames):
@@ -142,7 +142,7 @@ def create_barchart_as_numpy(categories, values, width_pixels, height_pixels, dp
 # print(barchart_array.shape)  # Should print (480, 640, 4)
 
 
-def main(args):
+def main(args, barchart=False):
 
 
     exp_name = args.exp_name
@@ -352,6 +352,9 @@ def main(args):
         while not done: # = 256
             _, _, _, _, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
             act, log_prob_act, value, rew_sal_obs = agent.predict_for_rew_saliency(obs, done)
+            act, log_prob_act, value, log_sal_obs = agent.predict_for_logit_saliency(obs, done)
+
+            
 
             next_obs, rew, done, info = agent.env.step(act)
 
@@ -367,27 +370,33 @@ def main(args):
             pred_reward.backward(retain_graph=True)
 
             reward_saliency_obs = rew_sal_obs.grad.data.detach().cpu().numpy()
+            logit_saliency_obs = log_sal_obs.grad.data.detach().cpu().numpy()
 
             log_prob_act = log_prob_act.detach().cpu().numpy()
             value = value.detach().cpu().numpy()
 
             obs_copy, r_grad_vid = apply_saliency(obs, reward_saliency_obs)
             _, v_grad_vid = apply_saliency(obs, value_saliency_obs)
-            
+            _, l_grad_vid = apply_saliency(obs, logit_saliency_obs)
+
             obs_copy = obs_copy.transpose((1,0,2))
             obs = next_obs
-
-            categories = ["Reward", "Predicted Reward", "Act Advantage", "Value", "Next Value (discounted)"]
-            values = [rew.item(), 
-                      pred_reward.detach().cpu().numpy().item(), 
-                      log_prob_act.item(), 
-                      value.item(), 
-                      agent.gamma * next_value.detach().cpu().numpy().item()
-                      ]
-            bar_array = create_barchart_as_numpy(categories, values, 64, 64)
+            if barchart:
+                categories = ["Reward", "Predicted Reward", "Act Advantage", "Value", "Next Value (discounted)"]
+                values = [rew.item(), 
+                        pred_reward.detach().cpu().numpy().item(), 
+                        log_prob_act.item(), 
+                        value.item(), 
+                        agent.gamma * next_value.detach().cpu().numpy().item()
+                        ]
+                bar_array = create_barchart_as_numpy(categories, values, 64, 64)
             
             top_image = np.concatenate((obs_copy, r_grad_vid), axis=1)
-            bot_image = np.concatenate((v_grad_vid, bar_array), axis=1)
+            if barchart:
+                bot_image = np.concatenate((v_grad_vid, bar_array), axis=1)
+            else:
+                bot_image = np.concatenate((v_grad_vid, l_grad_vid), axis=1)
+            
             full_image = np.concatenate((top_image, bot_image), axis=0)
             unsqueezed_image = np.expand_dims(full_image, 0)
 
@@ -402,7 +411,7 @@ def main(args):
                 done = True
 
             if done:
-                output_file = logdir_saliency_value + f"/sal_vid{n_vid}.mp4"
+                output_file = logdir_saliency_value + f"/sal_vid{n_vid}.avi"
                 save_video_from_array(vid_stack, output_file, fps=15)
                 vid_stack = unsqueezed_image
 
