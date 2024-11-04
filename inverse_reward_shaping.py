@@ -104,6 +104,31 @@ pi_A = pi_Q - pi_V.unsqueeze(-1)
 torch.allclose(soft_A, pi_A)
 torch.corrcoef(torch.stack((pi_pi.flatten(),soft_pi.flatten())))
 
+# %%
+def soft_q_value_iteration_with_pi_no_v(T, R, gamma, n_iterations=1000):
+    Q = torch.zeros(n_states, n_actions)
+    # V = torch.zeros(n_states)
+    # normal method
+
+    for i in range(n_iterations):
+        old_Q = Q
+        PI = Q.softmax(dim=-1)
+        Q = einops.einsum(PI, T, gamma * Q.logsumexp(dim=-1),
+                          'states actions, states actions next_states, next_states -> states actions') + R.unsqueeze(1)
+
+        if (Q - old_Q).abs().max() < 1e-10:
+            print(f'soft value iteration with pi no v converged in {i} iterations')
+            pi = Q.softmax(dim=1)
+            return Q, Q.logsumexp(dim=-1), pi
+    print('soft value iteration did not converge after', n_iterations, 'iterations')
+
+
+pi_Q, pi_V, pi_pi = soft_q_value_iteration_with_pi_no_v(T, true_R, gamma, 10000)
+
+soft_A = soft_Q - soft_V.unsqueeze(-1)
+pi_A = pi_Q - pi_V.unsqueeze(-1)
+torch.allclose(soft_A, pi_A)
+torch.corrcoef(torch.stack((pi_pi.flatten(),soft_pi.flatten())))
 
 
 # %%
@@ -261,15 +286,15 @@ def implicit_policy_learning2(T, R, gamma, alpha=0.1, n_iterations=10000):
             plt.show()
     return A, corr_list
 
-learned_A, corr_list = implicit_policy_learning2(T, true_R, gamma, 0.1, 100000)
+# learned_A, corr_list = implicit_policy_learning2(T, true_R, gamma, 0.1, 100000)
 
-torch.corrcoef(torch.stack((A.exp().flatten(), soft_A.exp().flatten())))[0, 1].item()
+# torch.corrcoef(torch.stack((A.exp().flatten(), soft_A.exp().flatten())))[0, 1].item()
 
-plt.scatter(learned_A.exp().flatten().detach().cpu().numpy(), soft_A.exp().flatten().detach().cpu().numpy())
-plt.show()
+# plt.scatter(learned_A.exp().flatten().detach().cpu().numpy(), soft_A.exp().flatten().detach().cpu().numpy())
+# plt.show()
 
-plt.plot(corr_list)
-plt.show()
+# plt.plot(corr_list)
+# plt.show()
 
 
 

@@ -48,6 +48,16 @@ cd -
 python train.py --exp_name coinrun --env_name coinrun --num_levels 100000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 6033 --random_percent 0
 ```
 
+maze variant 1 - misgeneralizing:
+```
+python train.py --exp_name maze1 --env_name maze_aisc --num_levels 100000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 1080 --rand_region 0 --use_wandb
+```
+maze variant1 - generalizing:
+```
+python train.py --exp_name maze1 --env_name maze_aisc --num_levels 100000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 1080 --rand_region 16 --use_wandb
+```
+
+
 # Matt Notes
 
 My env is in /vol/bitbucket/mjm121/goal-misgenv
