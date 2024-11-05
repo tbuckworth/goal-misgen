@@ -234,8 +234,8 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         nr_optimizer.zero_grad()
         if epoch % 100 == 0:
             print(f"Distill Loss:{current_state_reward_loss.item():.4f}\t")
-            pred_R = next_reward(obs_acts.unique(dim=0)).squeeze().detach().cpu().numpy().round(2)
-            print(pred_R-pred_R.min())
+            pred_R = next_reward(obs_acts.unique(dim=0)).squeeze().detach().cpu().numpy()
+            print((pred_R-pred_R.min()).round(2))
 
 if __name__ == "__main__":
     main()
