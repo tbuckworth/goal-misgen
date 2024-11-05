@@ -89,7 +89,7 @@ def concat_data(Obs, obs):
 
 def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=False)
-    policy = Policy(misgen=True)
+    policy = Policy(misgen=False)
     done = True 
 
     Obs = Rew = Done = Nobs = Actions = Nactions = None
@@ -134,6 +134,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
     acts = torch.FloatTensor(Actions[:-1]).to(device)
     next_actions = torch.FloatTensor(Nactions[:-1]).to(device)
     flt = Done[:-1]
+    # flt = np.concatenate((Done[2:],np.array([False])))
 
     action_idx = [tuple(n for n in range(len(next_actions))),tuple(1 if x == 1 else 0 for x in acts)]
     log_probs = torch.FloatTensor(policy.forward(obs.detach().cpu().numpy())).to(device)
@@ -154,7 +155,6 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
 
 
     for epoch in range(epochs):
-        # rew_from_last_obs = next_reward(obs_acts)
         rew_hat = current_state_reward(obs)
         val = critic(obs)
         next_val = critic(next_obs)
@@ -181,15 +181,18 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         optimizer.step()
         optimizer.zero_grad()
 
-        # current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_hat.detach())
-        # current_state_reward_loss.backward()
-        # nr_optimizer.step()
-        # nr_optimizer.zero_grad()
+        rew_from_last_obs = next_reward(obs_acts)
+        rew_learned = current_state_reward(next_obs).detach()
+
+        current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_learned)
+        current_state_reward_loss.backward()
+        nr_optimizer.step()
+        nr_optimizer.zero_grad()
 
         losses.append(total_loss.item())
         if epoch % 100 == 0:
             print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\t"
-                  # f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
+                  f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
                   f"Adv dones:{adv_dones.mean():.4f}\t"
                   f"Adv:{adv.mean():.4f}\t"
                   f"Rew_hat:{rew_hat.mean():.4f}\t"
