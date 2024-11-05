@@ -233,6 +233,9 @@ def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=0.9
     prefenv = "Un" if not shifted else ""
     print(f"Env: {prefenv}shifted\tAgent: {prefix}gen")
     print(f"Loss: {total_loss.item():.4f}\tDistill Loss: {current_state_reward_loss.item():.4f}")
+    torch_embedder = lambda x: x @ torch.FloatTensor(policy.embedder).to(device)
+    next_reward.embedder = torch_embedder
+    critic.embedder = torch_embedder
     return next_reward, critic
 
 
@@ -268,18 +271,22 @@ class UniformPolicy():
     def act(self, obs):
         return np.random.choice([-1, 1], p=[0.5,0.5])
 
+    def embed(self, obs):
+        return obs
+
 def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     env = AscentEnv(shifted=True)
     uniform_policy = UniformPolicy()
     Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, uniform_policy, verbose=False)
 
-    obs_acts = torch.FloatTensor(np.concatenate((Obs, Actions), dim=-1)).to(device)
+    obs = torch.FloatTensor(Obs).to(device)
+    acts = torch.FloatTensor(Actions).to(device)
 
-    misgen_rew = misgen_fwd_reward(obs_acts).detach().cpu().numpy()
-    gen_rew = gen_fwd_reward(obs_acts).detach().cpu().numpy()
+    misgen_rew = misgen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
+    gen_rew = gen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
 
-    correls = np.corrcoef(np.stack(Rew,misgen_rew, gen_rew))
+    correls = np.corrcoef(np.stack((Rew,misgen_rew, gen_rew)))
     print(correls)
 
     plt.scatter(x=Rew, y=misgen_rew, alpha=0.5, c='b', label='Misgen')

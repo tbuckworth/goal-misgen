@@ -57,7 +57,7 @@ class MlpModelNoFinalRelu(nn.Module):
         use_batchnorm: (bool) whether to use batchnorm
         """
         super(MlpModelNoFinalRelu, self).__init__()
-
+        self.embedder = lambda x: x
         # Hidden layers
         hidden_dims = [input_dims] + hidden_dims
         layers = []
@@ -76,6 +76,12 @@ class MlpModelNoFinalRelu(nn.Module):
             x = layer(x)
         return x
 
+    def embed_and_forward(self, obs, action):
+        x = self.embedder(obs)
+        x = torch.concat((x, action.unsqueeze(-1)), dim=-1)
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 class NatureModel(nn.Module):
     def __init__(self,
