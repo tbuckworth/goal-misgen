@@ -66,12 +66,19 @@ class Policy():
             self.embedder[3, 1] = 1.
             self.embedder[5, 2] = 1.
 
-    def forward(self, obs):
-        logits = obs @ self.embedder @ self.actor
+    def embed(self, obs):
+        return obs @ self.embedder
+
+    def forward(self, obs, embed=True):
+        if embed:
+            h = self.embed(obs)
+        else:
+            h = obs
+        logits = h @ self.actor
         return log_softmax(logits, axis=-1)
 
-    def act(self, obs):
-        logits = self.forward(obs)
+    def act(self, obs, embed=True):
+        logits = self.forward(obs, embed=embed)
         p = np.exp(logits)
         return np.random.choice([-1, 1], p=p)
         r = np.random.random(1)
@@ -87,39 +94,19 @@ def concat_data(Obs, obs):
     return np.concatenate((Obs, np.expand_dims(obs, axis=0)), axis=0)
 
 
-def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1):
-    env = AscentEnv(shifted=False)
-    policy = Policy(misgen=False)
-    done = True
+def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=0.99, epochs=5000, learning_rate=1e-3, inv_temp=1):
+    env = AscentEnv(shifted=shifted)
+    policy = Policy(misgen=misgen)
 
-    Obs = Rew = Done = Nobs = Actions = Nactions = None
-    for i in range(10000):
-        if done:
-            obs = env.reset()
-            if verbose:
-                print(env.state, obs)
 
-        action = policy.act(obs)
-        nobs, rew, done, info = env.step(action)
-        if verbose:
-            print(env.state, nobs, rew, done)
-
-        next_action = policy.act(nobs)
-
-        Obs = concat_data(Obs, obs)
-        Actions = concat_data(Actions, action)
-        Nobs = concat_data(Nobs, nobs)
-        Nactions = concat_data(Nactions, next_action)
-        Rew = concat_data(Rew, rew)
-        Done = concat_data(Done, done)
-        obs = nobs
+    Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, verbose)
     # Obs = concat_data(Obs, nobs)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    critic = MlpModelNoFinalRelu(input_dims=6, hidden_dims=[256, 256, 1])
-    current_state_reward = MlpModelNoFinalRelu(input_dims=6, hidden_dims=[256, 256, 1])
-    next_reward = MlpModelNoFinalRelu(input_dims=7, hidden_dims=[256, 256, 1])
+    critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
+    current_state_reward = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
+    next_reward = MlpModelNoFinalRelu(input_dims=4, hidden_dims=[256, 256, 1])
 
     critic.to(device)
     next_reward.to(device)
@@ -137,7 +124,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
     # flt = np.concatenate((Done[2:],np.array([False])))
 
     action_idx = [tuple(n for n in range(len(next_actions))), tuple(1 if x == 1 else 0 for x in acts)]
-    log_probs = torch.FloatTensor(policy.forward(obs.detach().cpu().numpy())).to(device)
+    log_probs = torch.FloatTensor(policy.forward(obs.detach().cpu().numpy(), embed=False)).to(device)
     log_prob_acts = log_probs[action_idx]
     log_prob_acts.requires_grad = False
 
@@ -184,7 +171,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         optimizer.zero_grad()
 
         losses.append(total_loss.item())
-        if epoch % 100 == 0:
+        if epoch % 100 == 0 and verbose:
             print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\t"
                   # f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
                   f"Adv dones:{adv_dones.mean():.4f}\t"
@@ -226,23 +213,89 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
             # plt.show()
 
     rew_learned = current_state_reward(next_obs).detach()
-    for epoch in range(epochs):
+    for epoch in range(epochs//5):
         rew_from_last_obs = next_reward(obs_acts)
 
         current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_learned)
         current_state_reward_loss.backward()
         nr_optimizer.step()
         nr_optimizer.zero_grad()
-        # if epoch % 100 == 0:
-    print(f"Distill Loss:{current_state_reward_loss.item():.4f}\t")
-    oa = obs_acts.unique(dim=0)
-    print(oa)
-    pred_R = next_reward(oa).squeeze().detach().cpu().numpy()
-    print((pred_R - pred_R.min()).round(2))
-    plt.scatter(rew_learned.detach().cpu().numpy(), rew_from_last_obs.detach().cpu().numpy())
+        if epoch % 100 == 0 and verbose:
+            print(f"Epoch:{epoch}\tDistill Loss:{current_state_reward_loss.item():.4f}\t")
+            oa = obs_acts.unique(dim=0)
+            # print(oa)
+            pred_R = next_reward(oa).squeeze().detach().cpu().numpy()
+            print((pred_R - pred_R.min()).round(2))
+            # plt.scatter(rew_learned.detach().cpu().numpy(), rew_from_last_obs.detach().cpu().numpy())
+            # plt.show()
+            # print("done")
+    prefix = "Mis" if misgen else ""
+    prefenv = "Un" if not shifted else ""
+    print(f"Env: {prefenv}shifted\tAgent: {prefix}gen")
+    print(f"Loss: {total_loss.item():.4f}\tDistill Loss: {current_state_reward_loss.item():.4f}")
+    return next_reward, critic
+
+
+def collect_rollouts(env, policy, verbose):
+    done = True
+    Obs = Rew = Done = Nobs = Actions = Nactions = None
+    for i in range(10000):
+        if done:
+            obs = env.reset()
+            if verbose:
+                print(env.state, obs)
+
+        action = policy.act(obs)
+        nobs, rew, done, info = env.step(action)
+        if verbose:
+            print(env.state, nobs, rew, done)
+
+        next_action = policy.act(nobs)
+
+        Obs = concat_data(Obs, policy.embed(obs))
+        Actions = concat_data(Actions, action)
+        Nobs = concat_data(Nobs, policy.embed(nobs))
+        Nactions = concat_data(Nactions, next_action)
+        Rew = concat_data(Rew, rew)
+        Done = concat_data(Done, done)
+        obs = nobs
+    return Actions, Done, Nactions, Nobs, Obs, Rew
+
+class UniformPolicy():
+    def __init__(self):
+        pass
+
+    def act(self, obs):
+        return np.random.choice([-1, 1], p=[0.5,0.5])
+
+def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    env = AscentEnv(shifted=True)
+    uniform_policy = UniformPolicy()
+    Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, uniform_policy, verbose=False)
+
+    obs_acts = torch.FloatTensor(np.concatenate((Obs, Actions), dim=-1)).to(device)
+
+    misgen_rew = misgen_fwd_reward(obs_acts).detach().cpu().numpy()
+    gen_rew = gen_fwd_reward(obs_acts).detach().cpu().numpy()
+
+    correls = np.corrcoef(np.stack(Rew,misgen_rew, gen_rew))
+    print(correls)
+
+    plt.scatter(x=Rew, y=misgen_rew, alpha=0.5, c='b', label='Misgen')
+    plt.scatter(x=Rew, y=gen_rew, alpha=0.5, c='r', label='Gen')
     plt.show()
+
     print("done")
 
 
+
+
+
 if __name__ == "__main__":
-    main()
+    misgen_fwd_reward, misgen_critic = inverse_reward_shaping(shifted=False, misgen=True)
+    gen_fwd_reward, gen_critic = inverse_reward_shaping(shifted=False, misgen=False)
+
+    evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward)
+
+    print("end")
