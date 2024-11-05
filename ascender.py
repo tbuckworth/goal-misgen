@@ -144,18 +144,18 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
         next_next_val = critic(next_next_obs)
         flt = Done[:-1]
         # next_next_val[flt] = 0
-        adv_dones = rew_hat[flt] - next_val[flt]
+        adv_dones =  rew_hat[flt] - next_val[flt] #+ np.log(2)
 
         adv = rew_hat[~flt] - next_val[~flt] + gamma * next_next_val[~flt]
 
         loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_acts[~flt])
 
-        loss2 = (adv_dones.squeeze()**2).mean()
+        loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), torch.log(torch.tensor(2)).to(device))
+        # loss2 = (adv_dones.squeeze()**2).mean()
 
         coef = flt.mean()
-        coef = flt.mean()
 
-        total_loss = loss + coef * loss2
+        total_loss = (1-coef) * loss + coef * loss2
 
         total_loss.backward()
 
@@ -164,9 +164,25 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-5):
 
         losses.append(total_loss.item())
         if epoch % 100 == 0:
-            print(f"Epoch:{epoch}\tLoss{total_loss.item():.4f}\tAdv dones:{adv_dones.mean():.4f}\tAdv:{adv.mean():.4f}\tRew_hat:{rew_hat[flt].mean():.4f}")
+            print(f"Epoch:{epoch}\tLoss{total_loss.item():.4f}\t"
+                  f"Adv dones:{adv_dones.mean():.4f}\t"
+                  f"Adv:{adv.mean():.4f}\t"
+                  f"Rew_hat:{rew_hat.mean():.4f}\t"
+                  f"Next_val:{next_val.mean():.4f}\t"
+                  f"Next_Next_val:{next_next_val.mean():.4f}\t"
+                  )
             
-            # r = next_reward(obs_acts.unique(dim=0))
+                # r = next_reward(obs_acts.unique(dim=0)).squeeze()
+                #
+                # # next_obs.unique(dim=0)
+                # values = critic(obs.unique(dim=0)).squeeze()
+                #
+                # for i in range(4):
+                #     print(f"\nstate {i}")
+                #     print(f"value = {values[i]}")
+                #     print(f"r(left) = {r[2*i]}")
+                #     print(f"r(right) = {r[2 * i + 1]}")
+
             # print(r)
             # print(f"s_0 l, s_0 r, s_1 l, s_1 r, s_2 l, s_3 r, s_4 l, s_4 r")
 
