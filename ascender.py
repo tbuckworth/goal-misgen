@@ -1,5 +1,3 @@
-
-
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.special import softmax, log_softmax
@@ -9,23 +7,23 @@ from common.model import MlpModel, MlpModelNoFinalRelu
 
 
 class AscentEnv():
-    def __init__(self, shifted=False, n_states = 5):
+    def __init__(self, shifted=False, n_states=5):
         self.shifted = shifted
         self.n_states = n_states
         self.states = np.arange(n_states)
         self.state = 0
-        
+
     def obs(self, state):
         if state == self.n_states - 1:
             return np.zeros((6,))
-        return np.concatenate([self.features(state-1),self.features(state),self.features(state+1)]) 
-    
+        return np.concatenate([self.features(state - 1), self.features(state), self.features(state + 1)])
+
     def features(self, state):
-        if state<0 or state >= self.n_states:
+        if state < 0 or state >= self.n_states:
             return -np.ones((2,))
         if not self.shifted:
-            return np.full((2,), state + 1 )
-        return  np.array((state + 1 , self.n_states - state))
+            return np.full((2,), state + 1)
+        return np.array((state + 1, self.n_states - state))
 
     def reward(self, state):
         if state == self.n_states - 1:
@@ -44,7 +42,7 @@ class AscentEnv():
         if done:
             self.reset()
         return obs, rew, done, info
-    
+
     def reset(self):
         self.state = 0
         return self.obs(self.state)
@@ -55,37 +53,39 @@ class AscentEnv():
 
 class Policy():
     def __init__(self, misgen=False):
-        self.embedder = np.zeros((6,3))
-        self.actor = np.zeros((3,2))
-        self.actor[0,0] = 1.
-        self.actor[2,1] = 1.
+        self.embedder = np.zeros((6, 3))
+        self.actor = np.zeros((3, 2))
+        self.actor[0, 0] = 1.
+        self.actor[2, 1] = 1.
         if not misgen:
-            self.embedder[0,0] = 1.
-            self.embedder[2,1] = 1.
-            self.embedder[4,2] = 1.
+            self.embedder[0, 0] = 1.
+            self.embedder[2, 1] = 1.
+            self.embedder[4, 2] = 1.
         else:
-            self.embedder[1,0] = 1.
-            self.embedder[3,1] = 1.
-            self.embedder[5,2] = 1.
+            self.embedder[1, 0] = 1.
+            self.embedder[3, 1] = 1.
+            self.embedder[5, 2] = 1.
 
     def forward(self, obs):
         logits = obs @ self.embedder @ self.actor
         return log_softmax(logits, axis=-1)
-    
+
     def act(self, obs):
         logits = self.forward(obs)
         p = np.exp(logits)
-        return np.random.choice([-1,1], p=p)
+        return np.random.choice([-1, 1], p=p)
         r = np.random.random(1)
         if p[0] < r:
             return -1
         return 1
 
+
 def concat_data(Obs, obs):
     obs = np.array(obs)
     if Obs is None:
-        return np.expand_dims(obs,axis=0)
-    return np.concatenate((Obs, np.expand_dims(obs, axis=0)),axis=0)
+        return np.expand_dims(obs, axis=0)
+    return np.concatenate((Obs, np.expand_dims(obs, axis=0)), axis=0)
+
 
 def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=False)
@@ -125,25 +125,28 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
     next_reward.to(device)
     current_state_reward.to(device)
 
-    optimizer = torch.optim.Adam(list(current_state_reward.parameters())+ list(critic.parameters()), lr = learning_rate)
+    optimizer = torch.optim.Adam(list(current_state_reward.parameters()) + list(critic.parameters()), lr=learning_rate)
     nr_optimizer = torch.optim.Adam(next_reward.parameters(), lr=learning_rate)
 
     obs = torch.FloatTensor(Obs[:-1]).to(device)
     next_obs = torch.FloatTensor(Nobs[:-1]).to(device)
-    next_next_obs = torch.FloatTensor(Nobs[1:]).to(device) # add zero
+    next_next_obs = torch.FloatTensor(Nobs[1:]).to(device)  # add zero
     acts = torch.FloatTensor(Actions[:-1]).to(device)
     next_actions = torch.FloatTensor(Nactions[:-1]).to(device)
     flt = Done[:-1]
     # flt = np.concatenate((Done[2:],np.array([False])))
 
-    action_idx = [tuple(n for n in range(len(next_actions))),tuple(1 if x == 1 else 0 for x in acts)]
+    action_idx = [tuple(n for n in range(len(next_actions))), tuple(1 if x == 1 else 0 for x in acts)]
     log_probs = torch.FloatTensor(policy.forward(obs.detach().cpu().numpy())).to(device)
     log_prob_acts = log_probs[action_idx]
     log_prob_acts.requires_grad = False
 
     log_prob_acts *= inv_temp
 
-    obs_acts = torch.concat((obs,acts.unsqueeze(-1)),-1)
+    obs_acts = torch.concat((obs, acts.unsqueeze(-1)), -1)
+
+    # torch.concat((obs_acts,next_obs),dim=-1).unique(dim=0)
+
     losses = []
     # torch.autograd.set_detect_anomaly(True)
 
@@ -153,20 +156,19 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
 
     tobs_act = torch.stack([tobs_left, tobs_right], dim=0)
 
-
     for epoch in range(epochs):
         rew_hat = current_state_reward(obs)
         val = critic(obs)
         next_val = critic(next_obs)
         # next_val[flt] = 0
-        adv_dones =  rew_hat[flt] - val[flt] + np.log(2)
+        adv_dones = rew_hat[flt] - val[flt] + np.log(2)
 
         adv = rew_hat[~flt] - val[~flt] + gamma * next_val[~flt]
 
         loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_acts[~flt])
 
         # loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), torch.zeros_like(adv_dones.squeeze()))
-        loss2 = (adv_dones.squeeze()**2).mean()
+        loss2 = (adv_dones.squeeze() ** 2).mean()
 
         coef = flt.mean()
 
@@ -174,14 +176,12 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         #
         # loss3 = torch.nn.MSELoss()(terminal_next_rew, torch.zeros_like(terminal_next_rew))
 
-        total_loss = (1-coef) * loss + coef * loss2 # + loss3 #no coef for loss3 for now
+        total_loss = (1 - coef) * loss + coef * loss2  # + loss3 #no coef for loss3 for now
 
         total_loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
-
-
 
         losses.append(total_loss.item())
         if epoch % 100 == 0:
@@ -196,12 +196,13 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
 
             # nr = next_reward(obs_acts.unique(dim=0)).squeeze()
 
-            r = current_state_reward(next_obs.unique(dim=0)).squeeze()
+            no = next_obs.unique(dim=0)
+            r = current_state_reward(no).squeeze()
 
             # next_obs.unique(dim=0)
             values = critic(obs.unique(dim=0)).squeeze()
-
-            print("Rewards", (r-r.min()).detach().cpu().numpy().round(2))
+            print(no)
+            print("Rewards", (r - r.min()).detach().cpu().numpy().round(2))
             print("Values", values.detach().cpu().numpy().round(2))
             # for i in range(4):
             #     print(f"\nstate {i}")
@@ -232,10 +233,16 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         current_state_reward_loss.backward()
         nr_optimizer.step()
         nr_optimizer.zero_grad()
-        if epoch % 100 == 0:
-            print(f"Distill Loss:{current_state_reward_loss.item():.4f}\t")
-            pred_R = next_reward(obs_acts.unique(dim=0)).squeeze().detach().cpu().numpy()
-            print((pred_R-pred_R.min()).round(2))
+        # if epoch % 100 == 0:
+    print(f"Distill Loss:{current_state_reward_loss.item():.4f}\t")
+    oa = obs_acts.unique(dim=0)
+    print(oa)
+    pred_R = next_reward(oa).squeeze().detach().cpu().numpy()
+    print((pred_R - pred_R.min()).round(2))
+    plt.scatter(rew_learned.detach().cpu().numpy(), rew_from_last_obs.detach().cpu().numpy())
+    plt.show()
+    print("done")
+
 
 if __name__ == "__main__":
     main()
