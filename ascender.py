@@ -286,12 +286,21 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
     misgen_rew = misgen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
     gen_rew = gen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
 
-    correls = np.corrcoef(np.stack((Rew,misgen_rew, gen_rew)))
+    stacked_rewards = np.stack((Rew, misgen_rew, gen_rew))
+    correls = np.corrcoef(stacked_rewards)
     print(correls)
 
-    plt.scatter(x=Rew, y=misgen_rew, alpha=0.5, c='b', label='Misgen')
-    plt.scatter(x=Rew, y=gen_rew, alpha=0.5, c='r', label='Gen')
-    plt.show()
+    stacked_info = np.stack((Nobs[:, 2], Rew-Rew.min(), misgen_rew-misgen_rew.min(), gen_rew-gen_rew.min()))
+    np.unique(stacked_info, axis=1).T.round(2)
+
+
+    Rew, Done
+
+
+
+    # plt.scatter(x=Rew, y=misgen_rew, alpha=0.5, c='b', label='Misgen')
+    # plt.scatter(x=Rew, y=gen_rew, alpha=0.5, c='r', label='Gen')
+    # plt.show()
 
     print("done")
 

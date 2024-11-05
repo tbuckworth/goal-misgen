@@ -76,9 +76,10 @@ class MlpModelNoFinalRelu(nn.Module):
             x = layer(x)
         return x
 
-    def embed_and_forward(self, obs, action):
+    def embed_and_forward(self, obs, action=None):
         x = self.embedder(obs)
-        x = torch.concat((x, action.unsqueeze(-1)), dim=-1)
+        if action is not None:
+            x = torch.concat((x, action.unsqueeze(-1)), dim=-1)
         for layer in self.layers:
             x = layer(x)
         return x
