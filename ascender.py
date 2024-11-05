@@ -90,7 +90,7 @@ def concat_data(Obs, obs):
 def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=False)
     policy = Policy(misgen=False)
-    done = True 
+    done = True
 
     Obs = Rew = Done = Nobs = Actions = Nactions = None
     for i in range(10000):
@@ -103,7 +103,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         nobs, rew, done, info = env.step(action)
         if verbose:
             print(env.state, nobs, rew, done)
-        
+
         next_action = policy.act(nobs)
 
         Obs = concat_data(Obs, obs)
@@ -140,7 +140,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
     log_probs = torch.FloatTensor(policy.forward(obs.detach().cpu().numpy())).to(device)
     log_prob_acts = log_probs[action_idx]
     log_prob_acts.requires_grad = False
-    
+
     log_prob_acts *= inv_temp
 
     obs_acts = torch.concat((obs,acts.unsqueeze(-1)),-1)
@@ -181,25 +181,19 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         optimizer.step()
         optimizer.zero_grad()
 
-        rew_from_last_obs = next_reward(obs_acts)
-        rew_learned = current_state_reward(next_obs).detach()
 
-        current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_learned)
-        current_state_reward_loss.backward()
-        nr_optimizer.step()
-        nr_optimizer.zero_grad()
 
         losses.append(total_loss.item())
         if epoch % 100 == 0:
             print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\t"
-                  f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
+                  # f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
                   f"Adv dones:{adv_dones.mean():.4f}\t"
                   f"Adv:{adv.mean():.4f}\t"
                   f"Rew_hat:{rew_hat.mean():.4f}\t"
                   f"Val:{val.mean():.4f}\t"
                   f"Next_val:{next_val.mean():.4f}\t"
                   )
-            
+
             # nr = next_reward(obs_acts.unique(dim=0)).squeeze()
 
             r = current_state_reward(next_obs.unique(dim=0)).squeeze()
@@ -229,6 +223,19 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
 
             # plt.hist(rew_hat.detach().cpu().numpy())
             # plt.show()
+
+    rew_learned = current_state_reward(next_obs).detach()
+    for epoch in range(epochs):
+        rew_from_last_obs = next_reward(obs_acts)
+
+        current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_learned)
+        current_state_reward_loss.backward()
+        nr_optimizer.step()
+        nr_optimizer.zero_grad()
+        if epoch % 100 == 0:
+            print(f"Distill Loss:{current_state_reward_loss.item():.4f}\t")
+            pred_R = next_reward(obs_acts.unique(dim=0)).squeeze().detach().cpu().numpy().round(2)
+            print(pred_R-pred_R.min())
 
 if __name__ == "__main__":
     main()
