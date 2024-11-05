@@ -5,7 +5,7 @@ import torch
 
 from common.model import MlpModel, MlpModelNoFinalRelu
 
-
+gamma = 0.99
 class AscentEnv():
     def __init__(self, shifted=False, n_states=5):
         self.shifted = shifted
@@ -94,7 +94,7 @@ def concat_data(Obs, obs):
     return np.concatenate((Obs, np.expand_dims(obs, axis=0)), axis=0)
 
 
-def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=0.99, epochs=5000, learning_rate=1e-3, inv_temp=1):
+def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=shifted)
     policy = Policy(misgen=misgen)
 
@@ -288,13 +288,32 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
 
     stacked_rewards = np.stack((Rew, misgen_rew, gen_rew))
     correls = np.corrcoef(stacked_rewards)
-    print(correls)
+    print(f"reward correlations: \n{correls}")
 
     stacked_info = np.stack((Nobs[:, 2], Rew-Rew.min(), misgen_rew-misgen_rew.min(), gen_rew-gen_rew.min()))
     np.unique(stacked_info, axis=1).T.round(2)
 
 
-    Rew, Done
+    true_mc_vals = np.zeros(len(Rew))
+    misgen_mc_vals = np.zeros(len(Rew))
+    gen_mc_vals = np.zeros(len(Rew))
+    for i in range(len(obs))[::-1]:
+        if i==len(obs)-1 or Done[i]:
+            true_mc_vals[i] = Rew[i]
+            misgen_mc_vals[i] = misgen_rew[i]
+            gen_mc_vals[i] = gen_rew[i]
+        else:
+            true_mc_vals[i] = Rew[i] + gamma*true_mc_vals[i+1]
+            misgen_mc_vals[i] = misgen_rew[i]
+            gen_mc_vals[i] = gen_rew[i]
+        # print(f"i = {i}\trew = {Rew[i]}\t Done = {Done[i]}\t true_mc_val = {true_mc_vals[i]}")
+
+    stacked_mc_vals = np.stack((true_mc_vals, misgen_mc_vals, gen_mc_vals))
+    val_correls = np.corrcoef(stacked_mc_vals)
+    print(f"mc value correlations: \n{val_correls}")
+
+    #conclusion: the mc value correlations look a bit worse than the reward correlations.
+    # But maybe that's due to the uniform policy making value a silly metric
 
 
 
