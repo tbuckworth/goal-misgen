@@ -5,7 +5,8 @@ import numpy as np
 from scipy.special import softmax, log_softmax
 import torch
 
-from common.model import MlpModel
+from common.model import MlpModel, MlpModelNoFinalRelu
+
 
 class AscentEnv():
     def __init__(self, shifted=False, n_states = 5):
@@ -88,7 +89,7 @@ def concat_data(Obs, obs):
 
 def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=False)
-    policy = Policy(misgen=False)
+    policy = Policy(misgen=True)
     done = True 
 
     Obs = Rew = Done = Nobs = Actions = Nactions = None
@@ -116,9 +117,9 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    critic = MlpModel(input_dims=6, hidden_dims=[256, 256, 1])
-    current_state_reward = MlpModel(input_dims=6, hidden_dims=[256, 256, 1])
-    next_reward = MlpModel(input_dims=7, hidden_dims=[256, 256, 1])
+    critic = MlpModelNoFinalRelu(input_dims=6, hidden_dims=[256, 256, 1])
+    current_state_reward = MlpModelNoFinalRelu(input_dims=6, hidden_dims=[256, 256, 1])
+    next_reward = MlpModelNoFinalRelu(input_dims=7, hidden_dims=[256, 256, 1])
 
     critic.to(device)
     next_reward.to(device)
@@ -132,17 +133,18 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
     next_next_obs = torch.FloatTensor(Nobs[1:]).to(device) # add zero
     acts = torch.FloatTensor(Actions[:-1]).to(device)
     next_actions = torch.FloatTensor(Nactions[:-1]).to(device)
+    flt = Done[:-1]
 
-    next_action_idx = [tuple(n for n in range(len(next_actions))),tuple(1 if x == 1 else 0 for x in next_actions)]
-    log_probs = torch.FloatTensor(policy.forward(next_obs.detach().cpu().numpy())).to(device)
-    log_prob_acts = log_probs[next_action_idx]
+    action_idx = [tuple(n for n in range(len(next_actions))),tuple(1 if x == 1 else 0 for x in acts)]
+    log_probs = torch.FloatTensor(policy.forward(obs.detach().cpu().numpy())).to(device)
+    log_prob_acts = log_probs[action_idx]
     log_prob_acts.requires_grad = False
     
     log_prob_acts *= inv_temp
 
     obs_acts = torch.concat((obs,acts.unsqueeze(-1)),-1)
     losses = []
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
 
     terminal_obs = torch.zeros(6).to(device)
     tobs_left = torch.concat([terminal_obs, torch.tensor((-1,)).to(device)], dim=0)
@@ -152,15 +154,14 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
 
 
     for epoch in range(epochs):
-        rew_from_last_obs = next_reward(obs_acts)
-        rew_hat = current_state_reward(next_obs)
+        # rew_from_last_obs = next_reward(obs_acts)
+        rew_hat = current_state_reward(obs)
+        val = critic(obs)
         next_val = critic(next_obs)
-        next_next_val = critic(next_next_obs)
-        flt = Done[:-1]
-        # next_next_val[flt] = 0
-        adv_dones =  rew_hat[flt] - next_val[flt] + np.log(2)
+        # next_val[flt] = 0
+        adv_dones =  rew_hat[flt] - val[flt] + np.log(2)
 
-        adv = rew_hat[~flt] - next_val[~flt] + gamma * next_next_val[~flt]
+        adv = rew_hat[~flt] - val[~flt] + gamma * next_val[~flt]
 
         loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_acts[~flt])
 
@@ -180,7 +181,7 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         optimizer.step()
         optimizer.zero_grad()
 
-        current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_hat.detach())
+        # current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_hat.detach())
         # current_state_reward_loss.backward()
         # nr_optimizer.step()
         # nr_optimizer.zero_grad()
@@ -188,33 +189,35 @@ def main(verbose=False, gamma=0.99, epochs=10000, learning_rate=1e-3, inv_temp=1
         losses.append(total_loss.item())
         if epoch % 100 == 0:
             print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\t"
-                  f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
+                  # f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
                   f"Adv dones:{adv_dones.mean():.4f}\t"
                   f"Adv:{adv.mean():.4f}\t"
                   f"Rew_hat:{rew_hat.mean():.4f}\t"
+                  f"Val:{val.mean():.4f}\t"
                   f"Next_val:{next_val.mean():.4f}\t"
-                  f"Next_Next_val:{next_next_val.mean():.4f}\t"
                   )
             
-            nr = next_reward(obs_acts.unique(dim=0)).squeeze()
+            # nr = next_reward(obs_acts.unique(dim=0)).squeeze()
 
             r = current_state_reward(next_obs.unique(dim=0)).squeeze()
 
             # next_obs.unique(dim=0)
             values = critic(obs.unique(dim=0)).squeeze()
 
-            for i in range(4):
-                print(f"\nstate {i}")
-                print(f"value = {values[i]}")
-                print(f"r = {r[i]}")
-                # print(f"r(left) = {nr[2*i]}")
-                # print(f"r(right) = {nr[2 * i + 1]}")
-
-
-
-            print(f"\nstate {4}")
-            print(f"value = {critic(terminal_obs).squeeze()}")
-            print(f"r = {current_state_reward(terminal_obs).squeeze()}")
+            print("Rewards", (r-r.min()).detach().cpu().numpy().round(2))
+            print("Values", values.detach().cpu().numpy().round(2))
+            # for i in range(4):
+            #     print(f"\nstate {i}")
+            #     print(f"value = {values[i]}")
+            #     print(f"r = {r[i]}")
+            #     # print(f"r(left) = {nr[2*i]}")
+            #     # print(f"r(right) = {nr[2 * i + 1]}")
+            #
+            #
+            #
+            # print(f"\nstate {4}")
+            # print(f"value = {critic(terminal_obs).squeeze()}")
+            # print(f"r = {current_state_reward(terminal_obs).squeeze()}")
             # print(f"rn(left) = {next_reward(tobs_left).squeeze()}")
             # print(f"rn(right) = {next_reward(tobs_left).squeeze()}")
 
