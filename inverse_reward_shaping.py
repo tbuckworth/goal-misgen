@@ -1,15 +1,16 @@
-#%%
+# %%
 import numpy as np
 import torch
 import einops
 
-#%%
+# %%
 n_states = 10
 n_actions = 5
 deterministic = True
 sparse_reward = True
+ascender = True
 
-#%%
+# %%
 if deterministic:
     T = torch.zeros(n_states, n_actions, n_states)
     next_states = torch.randint(0, n_states, (n_states, n_actions))
@@ -22,7 +23,6 @@ else:
     T = T.softmax(dim=2)
     # T = T / T.sum(dim=2, keepdim=True)
 
-
 assert T.sum(dim=2).allclose(torch.ones(n_states, n_actions))
 
 true_R = torch.randn(n_states)
@@ -34,7 +34,30 @@ if sparse_reward:
 
 # true_h = torch.randn(n_states)
 gamma = 0.9
-#%%
+# %%
+if ascender:
+    n_states = 6
+    n_actions = 2
+    T = torch.zeros(n_states, n_actions, n_states)
+    for i in range(n_states - 2):
+        T[i, 1, i + 1] = 1
+
+    for i in range(1, n_states - 2):
+        T[i, 0, i - 1] = 1
+
+    T[4, :, 5] = 1
+    T[5, :, 5] = 1
+    T[0, 0, 0] = 1
+
+assert (T.sum(-1) == 1).all(), T
+
+true_R = torch.zeros(n_states)
+true_R[4] = 10
+
+gamma = 0.99
+
+
+# %%
 
 def q_value_iteration(T, R, gamma, n_iterations=1000):
     Q = torch.zeros(n_states, n_actions)
@@ -51,17 +74,17 @@ def q_value_iteration(T, R, gamma, n_iterations=1000):
             print(f'Q-value iteration converged in {i} iterations')
             break
     pi = torch.nn.functional.one_hot(Q.argmax(dim=1)).float()
-    return Q,V, pi
+    return Q, V, pi
+
 
 Q, V, pi = q_value_iteration(T, true_R, gamma)
-
 
 
 # %%
 def soft_q_value_iteration(T, R, gamma, n_iterations=1000):
     Q = torch.zeros(n_states, n_actions)
     V = torch.zeros(n_states)
-    #normal method
+    # normal method
 
     for i in range(n_iterations):
         old_Q = Q
@@ -71,11 +94,12 @@ def soft_q_value_iteration(T, R, gamma, n_iterations=1000):
         if (Q - old_Q).abs().max() < 1e-5:
             print(f'soft value iteration converged in {i} iterations')
             pi = Q.softmax(dim=1)
-            return Q,V, pi
+            return Q, V, pi
     print('soft value iteration did not converge after', n_iterations, 'iterations')
-        
-    
+
+
 soft_Q, soft_V, soft_pi = soft_q_value_iteration(T, true_R, gamma, 10000)
+
 
 # %%
 def soft_q_value_iteration_with_pi(T, R, gamma, n_iterations=1000):
@@ -102,7 +126,8 @@ pi_Q, pi_V, pi_pi = soft_q_value_iteration_with_pi(T, true_R, gamma, 10000)
 soft_A = soft_Q - soft_V.unsqueeze(-1)
 pi_A = pi_Q - pi_V.unsqueeze(-1)
 torch.allclose(soft_A, pi_A)
-torch.corrcoef(torch.stack((pi_pi.flatten(),soft_pi.flatten())))
+torch.corrcoef(torch.stack((pi_pi.flatten(), soft_pi.flatten())))
+
 
 # %%
 def soft_q_value_iteration_with_pi_no_v(T, R, gamma, n_iterations=1000):
@@ -128,27 +153,28 @@ pi_Q, pi_V, pi_pi = soft_q_value_iteration_with_pi_no_v(T, true_R, gamma, 10000)
 soft_A = soft_Q - soft_V.unsqueeze(-1)
 pi_A = pi_Q - pi_V.unsqueeze(-1)
 torch.allclose(soft_A, pi_A)
-torch.corrcoef(torch.stack((pi_pi.flatten(),soft_pi.flatten())))
+torch.corrcoef(torch.stack((pi_pi.flatten(), soft_pi.flatten())))
 
 
 # %%
 
-#%%
+# %%
 def evaluate_policy(T, R, gamma, pi, n_iterations=1000):
     V = torch.zeros(n_states)
     for i in range(n_iterations):
         old_V = V.clone()
         V = einops.einsum(T, pi, gamma * V, 'states actions next_states, states actions, next_states -> states') + R
         if torch.abs(V - old_V).max() < 1e-5:
-            print(f'Policy evaluation converged in {i+1} iterations')
+            print(f'Policy evaluation converged in {i + 1} iterations')
             return V
     return V
+
 
 V_pi_opt = evaluate_policy(T, true_R, gamma, pi)
 
 V_pi_soft = evaluate_policy(T, true_R, gamma, soft_pi)
 # %%
-torch.corrcoef(torch.stack((V_pi_opt,V_pi_soft)))
+torch.corrcoef(torch.stack((V_pi_opt, V_pi_soft)))
 
 soft_A = soft_Q - soft_V.unsqueeze(1)
 A = Q - V.unsqueeze(1)
@@ -156,34 +182,49 @@ A = Q - V.unsqueeze(1)
 torch.corrcoef(torch.stack((A.flatten(), soft_A.flatten())))
 
 
-def inverse_reward_shaping(T, A, gamma, n_iterations=10000):
+def inverse_reward_shaping(T, A, gamma, n_iterations=30000):
     R = torch.zeros(n_states, requires_grad=True)
     H = torch.randn(n_states, requires_grad=True)
 
     A.requires_grad = False
-    optimizer = torch.optim.Adam([R,H], lr=1e-3)
+    optimizer = torch.optim.Adam([R, H], lr=1e-3)
     for i in range(n_iterations):
         # TODO: works in stochastic case -> generalize theorem C.1 of AIRL paper
-        A_hat = R.unsqueeze(1) - H.unsqueeze(1) + gamma *einops.einsum(T, H, "states actions next_states, next_states -> states actions")
-        loss = ((A_hat - A)**2).mean()
+        A_hat = R.unsqueeze(1) - H.unsqueeze(1) + gamma * einops.einsum(T, H,
+                                                                        "states actions next_states, next_states -> states actions")
+        loss = ((A_hat - A) ** 2).mean()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-    return R, H
-    # return R - R.min(), H
-
-
-
+        if i % 100 == 0:
+            print((R - R.min()).detach().cpu().numpy().round(decimals=2))
+    # return R, H
+    return R - R.min(), H
 
 
 learned_R, learned_H = inverse_reward_shaping(T, soft_A, gamma)
-torch.corrcoef(torch.stack((true_R,learned_R)))
+torch.corrcoef(torch.stack((true_R, learned_R))).round(decimals=4)
+#%%
+cust_list = [[-1, 2],
+             [0, 2],
+             [0, 2],
+             [0, 2],
+             [0, 0],
+             [0, 0],
+             ]
+# [0.06 4.01 0.   4.03 3.7  2.44]
 
-hard_A = torch.nn.functional.one_hot(soft_A.argmax(dim=-1)).float()
+cust_A = (1*torch.FloatTensor(cust_list)).log_softmax(dim=-1)
+cust_R, cust_H = inverse_reward_shaping(T, cust_A, gamma)
+torch.corrcoef(torch.stack((true_R, cust_R))).round(decimals=4)
 
-learned_R_opt, _ = inverse_reward_shaping(T, hard_A, gamma)
-torch.corrcoef(torch.stack((true_R,learned_R_opt)))
 
+# hard_A = torch.nn.functional.one_hot(soft_A.argmax(dim=-1)).float()
+#
+# learned_R_opt, _ = inverse_reward_shaping(T, hard_A, gamma)
+# torch.corrcoef(torch.stack((true_R,learned_R_opt)))
+
+# %%
 
 
 # %%
@@ -193,6 +234,8 @@ plt.scatter(true_R.cpu().numpy(), learned_R_opt.detach().cpu().numpy())
 # plt.plot(learned_R_opt.detach().cpu().numpy(), label='Learned R')
 plt.legend()
 plt.show()
+
+
 # plt.savefig('inverse_reward_shaping.png')
 
 # %%
@@ -201,13 +244,14 @@ def implicit_policy_learning(T, R, gamma, n_iterations=30000):
     V = torch.randn(n_states, requires_grad=True)
     R = R.unsqueeze(-1)
     R.requires_grad = False
-    optimizer = torch.optim.Adam([Q,V], lr=1e-3)
+    optimizer = torch.optim.Adam([Q, V], lr=1e-3)
     for i in range(n_iterations):
         old_Q = Q.detach().clone()
         PI = Q.softmax(dim=-1)
         A = PI.log()
-        R_hat = A + V.unsqueeze(1) - gamma *einops.einsum(PI, T, V, "states actions, states actions next_states, next_states -> states actions")
-        loss = ((R_hat - R)**2).mean()
+        R_hat = A + V.unsqueeze(1) - gamma * einops.einsum(PI, T, V,
+                                                           "states actions, states actions next_states, next_states -> states actions")
+        loss = ((R_hat - R) ** 2).mean()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
@@ -216,11 +260,13 @@ def implicit_policy_learning(T, R, gamma, n_iterations=30000):
             return A, V
     return A, V
 
+
 learned_A, learned_V = implicit_policy_learning(T, true_R, gamma)
 
 torch.corrcoef(torch.stack((learned_A.flatten(), soft_A.flatten())))
 
 torch.corrcoef(torch.stack((learned_V, soft_V)))
+
 
 # %%
 
@@ -230,32 +276,33 @@ def look_ahead_inverse_reward_shaping(T, A, gamma, n_iterations=10000):
     VN = torch.randn(n_states, n_actions, requires_grad=True)
 
     A.requires_grad = False
-    optimizer = torch.optim.Adam([R,V,VN], lr=1e-3)
+    optimizer = torch.optim.Adam([R, V, VN], lr=1e-3)
     for i in range(n_iterations):
         # TODO: works in stochastic case -> generalize theorem C.1 of AIRL paper
         A_hat = R.unsqueeze(1) - V.unsqueeze(1) + gamma * VN
         true_VN = einops.einsum(T, V, "states actions next_states, next_states -> states actions")
-        v_loss = ((VN-true_VN)**2).mean()
-                 # einops.einsum(T, H, "states actions next_states, next_states -> states actions"))
-        loss = ((A_hat - A)**2).mean() + v_loss
+        v_loss = ((VN - true_VN) ** 2).mean()
+        # einops.einsum(T, H, "states actions next_states, next_states -> states actions"))
+        loss = ((A_hat - A) ** 2).mean() + v_loss
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
     return R, V
 
+
 learned_R, _ = inverse_reward_shaping(T, soft_A, gamma)
-torch.corrcoef(torch.stack((true_R,learned_R)))
+torch.corrcoef(torch.stack((true_R, learned_R)))
 
 plt.scatter(true_R.cpu().numpy(), learned_R.detach().cpu().numpy())
 # plt.plot(learned_R_opt.detach().cpu().numpy(), label='Learned R')
 plt.legend()
 plt.show()
 
-
 hard_A = torch.nn.functional.one_hot(soft_A.argmax(dim=-1)).float()
 
 learned_R_opt, _ = inverse_reward_shaping(T, hard_A, gamma)
-torch.corrcoef(torch.stack((true_R,learned_R_opt)))
+torch.corrcoef(torch.stack((true_R, learned_R_opt)))
+
 
 # %%
 def implicit_policy_learning2(T, R, gamma, alpha=0.1, n_iterations=10000):
@@ -266,14 +313,15 @@ def implicit_policy_learning2(T, R, gamma, alpha=0.1, n_iterations=10000):
     optimizer = torch.optim.Adam([Q, F], lr=1e-3)
     corr_list = []
     for i in range(n_iterations):
-        PI = (Q/alpha).softmax(dim=-1)
+        PI = (Q / alpha).softmax(dim=-1)
         A = PI.log()
         R_hat = Q - gamma * F
-        Qn = einops.einsum(PI, T, Q, "states actions, states actions next_states, next_states actions -> states next_states actions")
-        Vn = Qn.exp().sum(dim=-2).log()#.unsqueeze(-1) # ?
+        Qn = einops.einsum(PI, T, Q,
+                           "states actions, states actions next_states, next_states actions -> states next_states actions")
+        Vn = Qn.exp().sum(dim=-2).log()  # .unsqueeze(-1) # ?
         # R_hat = A + V.unsqueeze(1) - gamma *einops.einsum(T, V, "states actions next_states, next_states -> states actions")
-        loss1 = ((R_hat - R)**2).mean()
-        loss2 = ((Vn-F)**2).mean()
+        loss1 = ((R_hat - R) ** 2).mean()
+        loss2 = ((Vn - F) ** 2).mean()
         loss = loss1 + loss2
         loss.backward()
         optimizer.step()
@@ -295,7 +343,6 @@ def implicit_policy_learning2(T, R, gamma, alpha=0.1, n_iterations=10000):
 
 # plt.plot(corr_list)
 # plt.show()
-
 
 
 # %%
