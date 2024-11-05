@@ -304,13 +304,20 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
             gen_mc_vals[i] = gen_rew[i]
         else:
             true_mc_vals[i] = Rew[i] + gamma*true_mc_vals[i+1]
-            misgen_mc_vals[i] = misgen_rew[i]
-            gen_mc_vals[i] = gen_rew[i]
+            misgen_mc_vals[i] = misgen_rew[i] + gamma*misgen_mc_vals[i+1]
+            gen_mc_vals[i] = gen_rew[i] + gamma*gen_mc_vals[i+1]
         # print(f"i = {i}\trew = {Rew[i]}\t Done = {Done[i]}\t true_mc_val = {true_mc_vals[i]}")
 
     stacked_mc_vals = np.stack((true_mc_vals, misgen_mc_vals, gen_mc_vals))
     val_correls = np.corrcoef(stacked_mc_vals)
     print(f"mc value correlations: \n{val_correls}")
+
+    stacked_info = np.stack((Nobs[:, 2], true_mc_vals, misgen_mc_vals, gen_mc_vals))
+    import pandas as pd
+    df = pd.DataFrame(stacked_info.T, columns=["state", "true val", "misgen val", "gen val"])
+    grouped_df = df.groupby('state').mean().reset_index()
+
+    grouped_df.corr()
 
     #conclusion: the mc value correlations look a bit worse than the reward correlations.
     # But maybe that's due to the uniform policy making value a silly metric
