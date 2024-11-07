@@ -86,8 +86,14 @@ class Policy():
 class LearnablePolicy():
     def __init__(self, device):
         self.device = device
-        self.embedder = torch.nn.Parameter(torch.randn((6, 3)).to(self.device), requires_grad=True)
-        self.actor = torch.nn.Parameter(torch.randn((3, 2)).to(self.device), requires_grad=True)
+
+        self.embedder = torch.nn.Parameter(torch.rand((6, 3)).to(self.device), requires_grad=True)
+        self.actor = torch.nn.Parameter(torch.rand((3, 2)).to(self.device), requires_grad=True)
+
+
+
+        # torch.nn.init.kaiming_uniform_(self.embedder)
+        # torch.nn.init.kaiming_uniform_(self.actor)
         self.params = [self.embedder, self.actor]
 
     def embed(self, obs):
@@ -97,11 +103,16 @@ class LearnablePolicy():
         return obs @ self.embedder
 
     def forward(self, obs, embed=True):
+        if isinstance(obs, np.ndarray):
+            obs = torch.FloatTensor(obs).to(self.device)
         if embed:
             h = self.embed(obs)
         else:
             h = obs
         logits = h @ self.actor
+
+        if isinstance(obs, np.ndarray):
+            logits.log_softmax(dim=-1).detach().cpu().numpy()
         return logits.log_softmax(dim=-1)
 
     def act(self, obs, embed=True):
@@ -117,14 +128,14 @@ def concat_data(Obs, obs):
         return np.expand_dims(obs, axis=0)
     return np.concatenate((Obs, np.expand_dims(obs, axis=0)), axis=0)
 
-def implicit_policy_learning(verbose=False, gamma=gamma, epochs=1000, sub_epochs=10, learning_rate=1e-3, inv_temp=1, l1_coef=0.):
+def implicit_policy_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=100, learning_rate=1e-3, inv_temp=1, l1_coef=0., rollout_size=1000):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     env = AscentEnv(shifted=False)
     policy = LearnablePolicy(device)
 
     for epoch in range(epochs):
-        Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, False, 1000)
+        Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, False, rollout_size)
 
         critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
         
@@ -175,7 +186,7 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=1000, sub_epochs
             optimizer.zero_grad()
 
             losses.append(total_loss.item())
-            if sub_epoch % 1 == 0 and verbose:
+            if sub_epoch % 10 == 0 and verbose:
                 print(f"\tEpoch:{epoch}\tSub_Epoch:{sub_epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
         print(f"Reward:{Rew.mean():.2f}")
     return policy
@@ -427,7 +438,7 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
 
 
 if __name__ == "__main__":
-    learned_policy = implicit_policy_learning(verbose=True)
+    learned_policy = implicit_policy_learning(verbose=True, sub_epochs=100, l1_coef=0.00, learning_rate=1e-3, rollout_size=100)
 
     misgen_fwd_reward, misgen_critic = inverse_reward_shaping(shifted=False, misgen=True)
     gen_fwd_reward, gen_critic = inverse_reward_shaping(shifted=False, misgen=False)
