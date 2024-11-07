@@ -86,8 +86,8 @@ class Policy():
 class LearnablePolicy():
     def __init__(self, device):
         self.device = device
-        self.embedder = torch.nn.Parameter(torch.randn((6, 3)), requires_grad=True).to(self.device)
-        self.actor = torch.nn.Parameter(torch.randn((3, 2)), requires_grad=True).to(self.device)
+        self.embedder = torch.nn.Parameter(torch.randn((6, 3)).to(self.device), requires_grad=True)
+        self.actor = torch.nn.Parameter(torch.randn((3, 2)).to(self.device), requires_grad=True)
         self.params = [self.embedder, self.actor]
 
     def embed(self, obs):
@@ -124,7 +124,7 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=1000, sub_epochs
     policy = LearnablePolicy(device)
 
     for epoch in range(epochs):
-        Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, verbose, 1000)
+        Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, False, 1000)
 
         critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
         
