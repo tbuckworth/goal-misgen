@@ -81,10 +81,34 @@ class Policy():
         logits = self.forward(obs, embed=embed)
         p = np.exp(logits)
         return np.random.choice([-1, 1], p=p)
-        r = np.random.random(1)
-        if p[0] < r:
-            return -1
-        return 1
+
+
+class LearnablePolicy():
+    def __init__(self, device):
+        self.device = device
+        self.embedder = torch.nn.Parameter(torch.randn((6, 3)), requires_grad=True).to(self.device)
+        self.actor = torch.nn.Parameter(torch.randn((3, 2)), requires_grad=True).to(self.device)
+        self.params = [self.embedder, self.actor]
+
+    def embed(self, obs):
+        if isinstance(obs, np.ndarray):
+            obs = torch.FloatTensor(obs).to(self.device)
+            return (obs @ self.embedder).detach().cpu().numpy()
+        return obs @ self.embedder
+
+    def forward(self, obs, embed=True):
+        if embed:
+            h = self.embed(obs)
+        else:
+            h = obs
+        logits = h @ self.actor
+        return logits.log_softmax(dim=-1)
+
+    def act(self, obs, embed=True):
+        obs = torch.FloatTensor(obs).to(self.device)
+        logits = self.forward(obs, embed=embed)
+        p = logits.exp().detach().cpu().numpy()
+        return np.random.choice([-1, 1], p=p)
 
 
 def concat_data(Obs, obs):
@@ -92,6 +116,72 @@ def concat_data(Obs, obs):
     if Obs is None:
         return np.expand_dims(obs, axis=0)
     return np.concatenate((Obs, np.expand_dims(obs, axis=0)), axis=0)
+
+def implicit_policy_learning(verbose=False, gamma=gamma, epochs=1000, sub_epochs=10, learning_rate=1e-3, inv_temp=1, l1_coef=0.):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    env = AscentEnv(shifted=False)
+    policy = LearnablePolicy(device)
+
+    for epoch in range(epochs):
+        Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, verbose, 1000)
+
+        critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
+        
+
+        critic.to(device)
+
+        optimizer = torch.optim.Adam(policy.params + list(critic.parameters()), lr=learning_rate)
+
+        obs = torch.FloatTensor(Obs).to(device)
+        next_obs = torch.FloatTensor(Nobs).to(device)
+        acts = torch.FloatTensor(Actions).to(device)
+        rew = torch.FloatTensor(Rew).to(device)
+        flt = Done
+
+        action_idx = [tuple(n for n in range(len(acts))), tuple(1 if x == 1 else 0 for x in acts)]
+        
+
+        # log_prob_acts *= inv_temp
+
+        losses = []
+
+        for sub_epoch in range(sub_epochs):
+            val = critic(obs)
+            next_val = critic(next_obs)
+            log_probs = policy.forward(obs, embed=False)
+            adv = log_probs[action_idx]
+            
+            rew_hat_dones = adv[flt] + val[flt] - gamma * next_val[flt]
+
+            rew_hat = adv[~flt] + val[~flt] - gamma * next_val[~flt]
+
+
+            loss = torch.nn.MSELoss()(rew[~flt], rew_hat)
+            loss2 = torch.nn.MSELoss()(rew[flt], rew_hat_dones)
+            
+            coef = flt.mean()
+            l1_loss = 0
+            for param in policy.params:
+                l1_loss += torch.sum(torch.abs(param))
+                
+
+            total_loss = (1 - coef) * loss + coef * loss2 + l1_loss * l1_coef
+
+
+            total_loss.backward()
+
+            optimizer.step()
+            optimizer.zero_grad()
+
+            losses.append(total_loss.item())
+            if sub_epoch % 1 == 0 and verbose:
+                print(f"\tEpoch:{epoch}\tSub_Epoch:{sub_epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
+        print(f"Reward:{Rew.mean():.2f}")
+    return policy
+        # if epoch % 100 == 0 and verbose:
+        #     print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
+
 
 
 def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
@@ -137,11 +227,11 @@ def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gam
     losses = []
     # torch.autograd.set_detect_anomaly(True)
 
-    terminal_obs = torch.zeros(6).to(device)
-    tobs_left = torch.concat([terminal_obs, torch.tensor((-1,)).to(device)], dim=0)
-    tobs_right = torch.concat([terminal_obs, torch.tensor((1,)).to(device)], dim=0)
+    # terminal_obs = torch.zeros(6).to(device)
+    # tobs_left = torch.concat([terminal_obs, torch.tensor((-1,)).to(device)], dim=0)
+    # tobs_right = torch.concat([terminal_obs, torch.tensor((1,)).to(device)], dim=0)
 
-    tobs_act = torch.stack([tobs_left, tobs_right], dim=0)
+    # tobs_act = torch.stack([tobs_left, tobs_right], dim=0)
 
     for epoch in range(epochs):
         rew_hat = current_state_reward(obs)
@@ -239,10 +329,11 @@ def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gam
     return next_reward, critic
 
 
-def collect_rollouts(env, policy, verbose):
+def collect_rollouts(env, policy, verbose, timesteps = 10000):
     done = True
     Obs = Rew = Done = Nobs = Actions = Nactions = None
-    for i in range(10000):
+    
+    for i in range(timesteps):
         if done:
             obs = env.reset()
             if verbose:
@@ -291,8 +382,9 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
     print(f"reward correlations: \n{correls}")
 
     stacked_info = np.stack((Nobs[:, 2], Rew-Rew.min(), misgen_rew-misgen_rew.min(), gen_rew-gen_rew.min()))
-    np.unique(stacked_info, axis=1).T.round(2)
+    print(f"Rewards by state: \n{np.unique(stacked_info, axis=1).T.round(2)}")
 
+    return
 
     true_mc_vals = np.zeros(len(Rew))
     misgen_mc_vals = np.zeros(len(Rew))
@@ -335,6 +427,8 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
 
 
 if __name__ == "__main__":
+    learned_policy = implicit_policy_learning(verbose=True)
+
     misgen_fwd_reward, misgen_critic = inverse_reward_shaping(shifted=False, misgen=True)
     gen_fwd_reward, gen_critic = inverse_reward_shaping(shifted=False, misgen=False)
 
