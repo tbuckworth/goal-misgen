@@ -158,8 +158,8 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=
         losses = []
 
         for sub_epoch in range(sub_epochs):
-            val = critic(obs)
-            next_val = critic(next_obs)
+            val = critic(obs).squeeze()
+            next_val = critic(next_obs).squeeze()
             log_probs = policy.forward(obs, embed=False)
             adv = log_probs[action_idx]
             
@@ -438,7 +438,7 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
 
 
 if __name__ == "__main__":
-    learned_policy = implicit_policy_learning(verbose=True, sub_epochs=10, l1_coef=0.00, learning_rate=1e-3, rollout_size=1000)
+    learned_policy = implicit_policy_learning(verbose=True, sub_epochs=20, l1_coef=0.00, learning_rate=1e-3, rollout_size=100)
 
     misgen_fwd_reward, misgen_critic = inverse_reward_shaping(shifted=False, misgen=True)
     gen_fwd_reward, gen_critic = inverse_reward_shaping(shifted=False, misgen=False)
