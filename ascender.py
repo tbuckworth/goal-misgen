@@ -6,17 +6,25 @@ import torch
 from common.model import MlpModel, MlpModelNoFinalRelu
 from common.policy import orthogonal_init
 gamma = 0.99
+
 class AscentEnv():
     def __init__(self, shifted=False, n_states=5):
         self.shifted = shifted
         self.n_states = n_states
         self.states = np.arange(n_states)
         self.state = 0
+        self.mirror = False
+
+    def close():
+        pass
 
     def obs(self, state):
         if state == self.n_states - 1:
             return np.zeros((6,))
-        return np.concatenate([self.features(state - 1), self.features(state), self.features(state + 1)])
+        obs = np.concatenate([self.features(state - 1), self.features(state), self.features(state + 1)])
+        if self.mirror:
+            return obs[::-1].copy()
+        return obs
 
     def features(self, state):
         if state < 0 or state >= self.n_states:
@@ -36,6 +44,8 @@ class AscentEnv():
         return False
 
     def step(self, action):
+        if self.mirror:
+            action *= -1
         self.state = min(max(self.state + action, 0), self.n_states - 1)
 
         obs, rew, done, info = self.observe()
@@ -45,6 +55,7 @@ class AscentEnv():
 
     def reset(self):
         self.state = 0
+        self.mirror = not self.mirror
         return self.obs(self.state)
 
     def observe(self):
@@ -124,6 +135,47 @@ class LearnablePolicy(torch.nn.Module):
         p = logits.exp().detach().cpu().numpy()
         return np.random.choice([-1, 1], p=p)
 
+class QPolicy(torch.nn.Module):
+    def __init__(self, device, inv_temp):
+        super(QPolicy, self).__init__()
+
+        self.device = device
+        self.inv_temp = inv_temp
+        # self.embedder = torch.nn.Parameter(torch.rand((6, 3)).to(self.device), requires_grad=True)
+        # self.actor = torch.nn.Parameter(torch.rand((3, 2)).to(self.device), requires_grad=True)
+
+        self.embedder = MlpModel(input_dims=6, hidden_dims=[64,3])
+        self.q_value = orthogonal_init(torch.nn.Linear(3, 2), gain=0.01)
+        # self.params = [self.embedder, self.actor]
+
+    # def parameters(self):
+        # return self.params
+
+    def embed(self, obs):
+        if isinstance(obs, np.ndarray):
+            obs = torch.FloatTensor(obs).to(self.device)
+            return (self.embedder(obs)).detach().cpu().numpy()
+        return self.embedder(obs)
+
+    def forward(self, obs, embed=True):
+        if isinstance(obs, np.ndarray):
+            obs = torch.FloatTensor(obs).to(self.device)
+        if embed:
+            h = self.embed(obs)
+        else:
+            h = obs
+        q_vals = self.q_value(h)
+
+        if isinstance(obs, np.ndarray):
+            return q_vals.detach().cpu().numpy()
+        return q_vals
+
+    def act(self, obs, embed=True):
+        obs = torch.FloatTensor(obs).to(self.device)
+        q_vals = self.forward(obs, embed=embed)
+        logits = q_vals * self.inv_temp
+        p = logits.softmax(dim=-1).detach().cpu().numpy()
+        return np.random.choice([-1, 1], p=p)
 
 def concat_data(Obs, obs):
     obs = np.array(obs)
@@ -135,6 +187,7 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     env = AscentEnv(shifted=False)
+    # shifted_env = AscentEnv(shifted=True)
     policy = LearnablePolicy(device)
     critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
     
@@ -143,13 +196,20 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=
     optimizer = torch.optim.Adam(list(policy.parameters()) + list(critic.parameters()), lr=learning_rate)
 
     for epoch in range(epochs):
-        Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, False, rollout_size)
+        Obs, Actions, Rew, Done = collect_rollouts_simple(env, policy, False, rollout_size)
+        # mean_rew_shifted = collect_rollouts(shifted_env, policy, False, rollout_size)[-1].mean()
+
+        # obs = torch.FloatTensor(Obs[1:]).to(device)
+        # next_obs = torch.FloatTensor(Nobs[1:]).to(device)
+        # acts = torch.FloatTensor(Actions[1:]).to(device)
+        # rew = torch.FloatTensor(Rew[:-1]).to(device) * inv_temp
+        # flt = Done[:-1]
 
         obs = torch.FloatTensor(Obs).to(device)
-        next_obs = torch.FloatTensor(Nobs).to(device)
         acts = torch.FloatTensor(Actions).to(device)
-        rew = torch.FloatTensor(Rew).to(device)
-        flt = Done
+        rew = torch.FloatTensor(Rew).to(device) * inv_temp
+        # rew = torch.concat((torch.FloatTensor([0]), rew[:-1]))
+        flt = Done#[:-1]
 
         action_idx = [tuple(n for n in range(len(acts))), tuple(1 if x == 1 else 0 for x in acts)]
         
@@ -159,16 +219,17 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=
 
         for sub_epoch in range(sub_epochs):
             val = critic(obs).squeeze()
-            next_val = critic(next_obs).squeeze()
+            next_val = val[1:]
+            # next_val = critic().squeeze()
             log_probs = policy.forward(obs, embed=False)
             adv = log_probs[action_idx]
             
-            rew_hat_dones = adv[flt] + val[flt] - gamma * next_val[flt]
+            rew_hat_dones = adv[flt] + val[flt] #- gamma * next_val[flt]
 
-            rew_hat = adv[~flt] + val[~flt] - gamma * next_val[~flt]
+            rew_hat = adv[~flt][:-1] + val[~flt][:-1] - gamma * next_val[~flt[1:]]
 
 
-            loss = torch.nn.MSELoss()(rew[~flt], rew_hat)
+            loss = torch.nn.MSELoss()(rew[~flt][:-1], rew_hat)
             loss2 = torch.nn.MSELoss()(rew[flt], rew_hat_dones)
             
             coef = flt.mean()
@@ -188,8 +249,84 @@ def implicit_policy_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=
             losses.append(total_loss.item())
             if sub_epoch % 1 == 0 and verbose:
                 print(f"\tEpoch:{epoch}\tSub_Epoch:{sub_epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
-        print(f"Reward:{Rew.mean():.2f}")
-    return policy
+
+        mean_rew = Rew.mean()
+        entropy = -(log_probs.exp()*log_probs).mean()
+        print(f"Reward:{mean_rew:.2f}\tEnt:{entropy:.2f}\tRew + Ent:{mean_rew + entropy:.2f}\tLoss:{total_loss.item():.4f}")
+        # print(f"Shifted Rew:{mean_rew_shifted:.2f}\tGen Gap:{mean_rew-mean_rew_shifted:.2f}")
+    return policy, log_probs.exp()
+        # if epoch % 100 == 0 and verbose:
+        #     print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
+
+
+
+def q_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=10, learning_rate=1e-3, inv_temp=1, l1_coef=0., rollout_size=1000):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    env = AscentEnv(shifted=False)
+    # shifted_env = AscentEnv(shifted=True)
+    policy = QPolicy(device, inv_temp)
+    # critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
+    
+    # critic.to(device)
+    policy.to(device)
+    optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
+
+    for epoch in range(epochs):
+        Obs, Actions, Rew, Done = collect_rollouts_simple(env, policy, False, rollout_size)
+
+        obs = torch.FloatTensor(Obs).to(device)
+        acts = torch.FloatTensor(Actions).to(device)
+        rew = torch.FloatTensor(Rew).to(device) * inv_temp
+
+        flt = Done
+
+        action_idx = [tuple(n for n in range(len(acts))), tuple(1 if x == 1 else 0 for x in acts)]
+        
+
+        losses = []
+
+        for sub_epoch in range(sub_epochs):
+            q_vals = policy.forward(obs, embed=False)
+            q_vals_acts = q_vals[action_idx]
+
+            # target = torch.zeros_like(rew)
+            # target[flt] = rew[flt]
+            # target[~flt] = rew[~flt] + next_soft_value[~flt]
+            if sub_epoch == 0:
+                soft_value = (1/inv_temp)*(inv_temp*q_vals).logsumexp(dim=-1)
+                next_soft_value = soft_value[1:]
+
+                target = rew
+                target[~flt] = target[~flt] + next_soft_value[~flt]
+                target = target.detach()
+
+
+            loss = torch.nn.MSELoss()(q_vals_acts, target)
+
+            l1_loss = 0
+            for param in policy.parameters():
+                l1_loss += torch.sum(torch.abs(param))
+                
+
+            total_loss = loss + l1_loss * l1_coef
+
+
+            total_loss.backward()
+
+            optimizer.step()
+            optimizer.zero_grad()
+
+            losses.append(total_loss.item())
+            if sub_epoch % 10 == 0 and verbose:
+                print(f"\tEpoch:{epoch}\tSub_Epoch:{sub_epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
+
+        mean_rew = Rew.mean()
+        act_probs = (inv_temp * q_vals).softmax(dim=-1)
+        entropy = -(act_probs * act_probs.log()).mean()
+        print(f"Reward:{mean_rew:.2f}\tEnt:{entropy:.2f}\tRew + Ent:{mean_rew + entropy:.2f}\tLoss:{total_loss.item():.4f}")
+        # print(f"Shifted Rew:{mean_rew_shifted:.2f}\tGen Gap:{mean_rew-mean_rew_shifted:.2f}")
+    return policy, act_probs
         # if epoch % 100 == 0 and verbose:
         #     print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\tL1:{l1_loss.item():.2f}")
 
@@ -340,13 +477,13 @@ def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gam
     return next_reward, critic
 
 
-def collect_rollouts(env, policy, verbose, timesteps = 10000):
+def collect_rollouts(env, policy, verbose, timesteps = 10000, embed=True):
     done = True
     Obs = Rew = Done = Nobs = Actions = Nactions = None
     
     for i in range(timesteps):
         if done:
-            obs = env.reset()
+            obs = env.observe()[0]
             if verbose:
                 print(env.state, obs)
 
@@ -357,14 +494,46 @@ def collect_rollouts(env, policy, verbose, timesteps = 10000):
 
         next_action = policy.act(nobs)
 
-        Obs = concat_data(Obs, policy.embed(obs))
+        Obs = concat_data(Obs, (policy.embed(obs) if embed else obs))
         Actions = concat_data(Actions, action)
-        Nobs = concat_data(Nobs, policy.embed(nobs))
+        Nobs = concat_data(Nobs, (policy.embed(nobs) if embed else nobs))
         Nactions = concat_data(Nactions, next_action)
         Rew = concat_data(Rew, rew)
         Done = concat_data(Done, done)
         obs = nobs
     return Actions, Done, Nactions, Nobs, Obs, Rew
+
+
+def collect_rollouts_simple(env, policy, verbose, timesteps = 10000, embed=True):
+    done = False
+    Obs = Rew = Done = Actions = None
+
+    # s0 observation
+    obs, rew, done, info = env.observe()
+
+    for i in range(timesteps):
+        if done:
+            action = policy.act(obs)
+
+            Obs = concat_data(Obs, (policy.embed(obs) if embed else obs))
+            Actions = concat_data(Actions, action)
+            Rew = concat_data(Rew, rew)
+            Done = concat_data(Done, done)
+
+            obs, rew, done, info = env.observe()
+
+        action = policy.act(obs)
+
+        Obs = concat_data(Obs, (policy.embed(obs) if embed else obs))
+        Actions = concat_data(Actions, action)
+        Rew = concat_data(Rew, rew)
+        Done = concat_data(Done, done)
+
+        obs, rew, done, info = env.step(action)
+    
+    Obs = concat_data(Obs, (policy.embed(obs) if embed else obs))
+    return Obs, Actions, Rew, Done
+
 
 class UniformPolicy():
     def __init__(self):
@@ -438,8 +607,8 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
 
 
 if __name__ == "__main__":
-    learned_policy = implicit_policy_learning(verbose=True, sub_epochs=20, l1_coef=0.00, learning_rate=1e-3, rollout_size=100)
-
+    learned_policy, act_probs = q_learning(verbose=True, epochs=100, sub_epochs=100, l1_coef=0, learning_rate=1e-4, rollout_size=1000, inv_temp=1)
+    print(act_probs[:10,])
     misgen_fwd_reward, misgen_critic = inverse_reward_shaping(shifted=False, misgen=True)
     gen_fwd_reward, gen_critic = inverse_reward_shaping(shifted=False, misgen=False)
 
