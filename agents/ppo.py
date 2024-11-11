@@ -81,10 +81,10 @@ class PPO(BaseAgent):
         obs.requires_grad_()
         obs.retain_grad()
         dist, value, hidden_state = self.policy(obs, None, None)
-        log_prob_act = dist.log_prob(act)
+        log_prob_act = dist.log_prob(torch.tensor(act).to(device=self.device))
         log_prob_act.backward(retain_graph=True)
 
-        return act.detach().cpu().numpy(), log_prob_act, value, obs.grad.data.detach().cpu().numpy()
+        return obs.grad.data.detach().cpu().numpy()
 
     def predict_for_rew_saliency(self, obs, done):
         obs = torch.FloatTensor(obs).to(device=self.device)

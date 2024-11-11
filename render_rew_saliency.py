@@ -352,7 +352,7 @@ def main(args, barchart=False):
         while not done: # = 256
             _, _, _, _, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
             act, log_prob_act, value, rew_sal_obs = agent.predict_for_rew_saliency(obs, done)
-            _, _, _, logit_saliency_obs = agent.predict_for_logit_saliency(obs, act)
+            logit_saliency_obs = agent.predict_for_logit_saliency(obs, act)
 
             
 
