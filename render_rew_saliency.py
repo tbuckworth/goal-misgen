@@ -413,6 +413,10 @@ def main(args, barchart=False):
                 output_file = logdir_saliency_value + f"/sal_vid{n_vid}.avi"
                 save_video_from_array(vid_stack, output_file, fps=15)
                 vid_stack = unsqueezed_image
+                plt.imshow(full_image)
+                plt.savefig(logdir_saliency_value + f"/sal_img{n_vid}.png")
+
+
 
         #     agent.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
         #     obs = next_obs
