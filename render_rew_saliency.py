@@ -352,7 +352,7 @@ def main(args, barchart=False):
         while not done: # = 256
             _, _, _, _, value_saliency_obs = agent.predict_w_value_saliency(obs, hidden_state, done)
             act, log_prob_act, value, rew_sal_obs = agent.predict_for_rew_saliency(obs, done)
-            act, log_prob_act, value, log_sal_obs = agent.predict_for_logit_saliency(obs, done)
+            _, _, _, logit_saliency_obs = agent.predict_for_logit_saliency(obs, act)
 
             
 
@@ -370,7 +370,6 @@ def main(args, barchart=False):
             pred_reward.backward(retain_graph=True)
 
             reward_saliency_obs = rew_sal_obs.grad.data.detach().cpu().numpy()
-            logit_saliency_obs = log_sal_obs.grad.data.detach().cpu().numpy()
 
             log_prob_act = log_prob_act.detach().cpu().numpy()
             value = value.detach().cpu().numpy()
