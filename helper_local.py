@@ -20,7 +20,7 @@ def create_venv(args, hyperparameters, is_valid=False):
     if args.env_name == "ascent":
         return AscentEnv(num_envs=hyperparameters.get('n_envs', 256),
                          shifted=is_valid,
-                         n_states=hyperparameters.get('n_states', 20),
+                         num_positive_states=hyperparameters.get('n_states', 20),
                          )
 
     val_env_name = args.val_env_name if args.val_env_name else args.env_name
@@ -51,7 +51,7 @@ def create_venv_render(args, hyperparameters, is_valid=False):
     if args.env_name == "ascent":
         return AscentEnv(num_envs=hyperparameters.get('n_envs', 256),
                          shifted=is_valid,
-                         n_states=hyperparameters.get('n_states', 20),
+                         num_positive_states=hyperparameters.get('n_states', 20),
                          )
     val_env_name = args.val_env_name if args.val_env_name else args.env_name
     # TODO: give this proper seed:

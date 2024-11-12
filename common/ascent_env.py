@@ -4,13 +4,15 @@ from gym import spaces
 
 
 class AscentEnv():
-    def __init__(self, num_envs=2, shifted=False, n_states=5):
+    def __init__(self, num_envs=2, shifted=False, num_positive_states=5):
         self.observation_space = spaces.Box(-1, 4, (6,))
         self.action_space = spaces.Discrete(2)
         self.num_envs = num_envs
         self.shifted = shifted
-        self.n_states = n_states
-        self.states = np.arange(n_states)
+        self.n_states = num_positive_states * 2 + 1
+        self.n_pos_states = num_positive_states
+        # self.goal_state = self.n_pos_states
+        # self.anti_goal_state = -self.goal_state
         self.state = np.zeros(num_envs)
         self.mirror = np.arange(self.num_envs) % 2 == 0
         self.infos = [{} for _ in range(self.num_envs)]
@@ -29,7 +31,8 @@ class AscentEnv():
             obs[..., 3] = self.n_states - state - 2
             obs[..., 5] = self.n_states - state - 3
 
-        obs[state == self.n_states - 1] = 0
+        obs[state == self.n_pos_states] = 0
+        obs[state == -self.n_pos_states] = 0
 
         obs[self.mirror] = obs[self.mirror][..., ::-1]
 
@@ -37,12 +40,14 @@ class AscentEnv():
 
     def reward(self, state):
         rews = np.zeros(self.num_envs)
-        rews[state == self.n_states - 1] = 10.
+        rews[state == self.n_pos_states] = 10.
+        rews[state == -self.n_pos_states] = -10.
         return rews
 
     def done(self, state):
         dones = np.zeros(self.num_envs)
-        dones[state == self.n_states - 1] = 1
+        dones[state == self.n_pos_states] = 1
+        dones[state == -self.n_pos_states] = 1
         return dones.astype(bool)
 
     def step(self, act):
@@ -53,8 +58,6 @@ class AscentEnv():
         action[self.mirror] *= -1
 
         self.state = self.state + action
-        self.state[self.state < 0] = 0
-        self.state[self.state >= self.num_envs] = self.n_states - 1
 
         rew = self.reward(self.state)
         done = self.done(self.state)
