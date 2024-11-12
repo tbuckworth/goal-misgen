@@ -5,6 +5,9 @@ import torch
 
 from common.model import MlpModel, MlpModelNoFinalRelu
 from common.policy import orthogonal_init
+from watch_agent import load_policy
+from torch.distributions import Categorical
+
 gamma = 0.99
 
 class AscentEnv():
@@ -15,7 +18,7 @@ class AscentEnv():
         self.state = 0
         self.mirror = False
 
-    def close():
+    def close(self):
         pass
 
     def obs(self, state):
@@ -92,6 +95,41 @@ class Policy():
         logits = self.forward(obs, embed=embed)
         p = np.exp(logits)
         return np.random.choice([-1, 1], p=p)
+
+class WrappedPolicy():
+    def __init__(self, policy, device):
+        self.policy = policy
+        self.device = device
+
+
+    def embed(self, obs):
+        if isinstance(obs, np.ndarray):
+            obst = torch.FloatTensor(obs).to(self.device)
+        h = self.policy.embedder(obst)
+        if isinstance(obs, np.ndarray):
+            return h.detach().cpu().numpy()
+        return h
+
+    def forward(self, obs, embed=True):
+        if isinstance(obs, np.ndarray):
+            obst = torch.FloatTensor(obs).to(self.device)
+        if embed:
+            h = self.embed(obst)
+        else:
+            h = obst
+        logits = self.policy.fc_policy(h)
+        log_probs = logits.log_softmax(dim=-1)
+        if isinstance(obs, np.ndarray):
+            return log_probs.detach().cpu().numpy()
+        return log_probs
+
+    def act(self, obs, embed=True):
+        logits = self.forward(obs, embed=embed)
+        act = Categorical(logits=logits).sample()
+        if isinstance(obs, np.ndarray):
+            return act.detach().cpu().numpy()
+        return act
+
 
 
 class LearnablePolicy(torch.nn.Module):
@@ -332,7 +370,136 @@ def q_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=10, learning_r
 
 
 
-def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
+def inverse_reward_shaping(logdir, shifted=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
+    args, cfg, device, model, policy, env = load_policy(logdir, render=False, valid_env=shifted)
+
+    wpolicy = WrappedPolicy(policy, device)
+    Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, wpolicy, verbose)
+
+
+    critic = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
+    current_state_reward = MlpModelNoFinalRelu(input_dims=3, hidden_dims=[256, 256, 1])
+    next_reward = MlpModelNoFinalRelu(input_dims=4, hidden_dims=[256, 256, 1])
+
+    critic.to(device)
+    next_reward.to(device)
+    current_state_reward.to(device)
+
+    optimizer = torch.optim.Adam(list(current_state_reward.parameters()) + list(critic.parameters()), lr=learning_rate)
+    nr_optimizer = torch.optim.Adam(next_reward.parameters(), lr=learning_rate)
+
+    obs = torch.FloatTensor(Obs[:-1]).to(device)
+    next_obs = torch.FloatTensor(Nobs[:-1]).to(device)
+    next_next_obs = torch.FloatTensor(Nobs[1:]).to(device)  # add zero
+    acts = torch.FloatTensor(Actions[:-1]).to(device)
+    next_actions = torch.FloatTensor(Nactions[:-1]).to(device)
+    flt = Done[:-1]
+    # flt = np.concatenate((Done[2:],np.array([False])))
+
+    action_idx = [tuple(n for n in range(len(next_actions))), tuple(1 if x == 1 else 0 for x in acts)]
+    # p, v = policy(obs, None, None)
+    # log_prob_acts = p.log_probs(acts).detach()
+    log_probs = torch.FloatTensor(wpolicy.forward(obs.detach().cpu().numpy(), embed=False)).to(device)
+    log_prob_acts = log_probs[action_idx]
+    log_prob_acts.requires_grad = False
+
+    log_prob_acts *= inv_temp
+
+    obs_acts = torch.concat((obs, acts.unsqueeze(-1)), -1)
+
+    losses = []
+
+    for epoch in range(epochs):
+        rew_hat = current_state_reward(obs)
+        val = critic(obs)
+        next_val = critic(next_obs)
+        # next_val[flt] = 0
+        adv_dones = rew_hat[flt] - val[flt] + np.log(2)
+
+        adv = rew_hat[~flt] - val[~flt] + gamma * next_val[~flt]
+
+        loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_acts[~flt])
+
+        loss2 = (adv_dones.squeeze() ** 2).mean()
+
+        coef = flt.mean()
+
+        total_loss = (1 - coef) * loss + coef * loss2  # + loss3 #no coef for loss3 for now
+
+        total_loss.backward()
+
+        optimizer.step()
+        optimizer.zero_grad()
+
+        losses.append(total_loss.item())
+        if epoch % 100 == 0 and verbose:
+            print(f"Epoch:{epoch}\tLoss:{total_loss.item():.4f}\t"
+                  # f"Next State Reward Loss:{current_state_reward_loss.item():.4f}\t"
+                  f"Adv dones:{adv_dones.mean():.4f}\t"
+                  f"Adv:{adv.mean():.4f}\t"
+                  f"Rew_hat:{rew_hat.mean():.4f}\t"
+                  f"Val:{val.mean():.4f}\t"
+                  f"Next_val:{next_val.mean():.4f}\t"
+                  )
+
+            # nr = next_reward(obs_acts.unique(dim=0)).squeeze()
+
+            no = next_obs.unique(dim=0)
+            r = current_state_reward(no).squeeze()
+
+            # next_obs.unique(dim=0)
+            values = critic(obs.unique(dim=0)).squeeze()
+            print(no)
+            print("Rewards", (r - r.min()).detach().cpu().numpy().round(2))
+            print("Values", values.detach().cpu().numpy().round(2))
+            # for i in range(4):
+            #     print(f"\nstate {i}")
+            #     print(f"value = {values[i]}")
+            #     print(f"r = {r[i]}")
+            #     # print(f"r(left) = {nr[2*i]}")
+            #     # print(f"r(right) = {nr[2 * i + 1]}")
+            #
+            #
+            #
+            # print(f"\nstate {4}")
+            # print(f"value = {critic(terminal_obs).squeeze()}")
+            # print(f"r = {current_state_reward(terminal_obs).squeeze()}")
+            # print(f"rn(left) = {next_reward(tobs_left).squeeze()}")
+            # print(f"rn(right) = {next_reward(tobs_left).squeeze()}")
+
+            # print(r)
+            # print(f"s_0 l, s_0 r, s_1 l, s_1 r, s_2 l, s_3 r, s_4 l, s_4 r")
+
+            # plt.hist(rew_hat.detach().cpu().numpy())
+            # plt.show()
+
+    rew_learned = current_state_reward(next_obs).detach()
+    for epoch in range(epochs//5):
+        rew_from_last_obs = next_reward(obs_acts)
+
+        current_state_reward_loss = torch.nn.MSELoss()(rew_from_last_obs, rew_learned)
+        current_state_reward_loss.backward()
+        nr_optimizer.step()
+        nr_optimizer.zero_grad()
+        if epoch % 100 == 0 and verbose:
+            print(f"Epoch:{epoch}\tDistill Loss:{current_state_reward_loss.item():.4f}\t")
+            oa = obs_acts.unique(dim=0)
+            # print(oa)
+            pred_R = next_reward(oa).squeeze().detach().cpu().numpy()
+            print((pred_R - pred_R.min()).round(2))
+            # plt.scatter(rew_learned.detach().cpu().numpy(), rew_from_last_obs.detach().cpu().numpy())
+            # plt.show()
+            # print("done")
+
+    prefenv = "Un" if not shifted else ""
+    print(f"Env: {prefenv}shifted")
+    print(f"Loss: {total_loss.item():.4f}\tDistill Loss: {current_state_reward_loss.item():.4f}")
+    # torch_embedder = lambda x: x @ torch.FloatTensor(policy.embedder).to(device)
+    next_reward.embedder = policy.embedder
+    critic.embedder = policy.embedder
+    return next_reward, critic
+
+def inverse_reward_shaping_cust_agent(shifted=False, misgen=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=shifted)
     policy = Policy(misgen=misgen)
 
@@ -477,6 +644,8 @@ def inverse_reward_shaping(shifted=False, misgen=False, verbose=False, gamma=gam
     return next_reward, critic
 
 
+
+
 def collect_rollouts(env, policy, verbose, timesteps = 10000, embed=True):
     done = True
     Obs = Rew = Done = Nobs = Actions = Nactions = None
@@ -602,16 +771,23 @@ def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
 
     print("done")
 
+def reward_shaping_for_customized_policies():
+    misgen_fwd_reward, misgen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=True)
+    gen_fwd_reward, gen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=False)
 
+    evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward)
 
 
 
 if __name__ == "__main__":
-    learned_policy, act_probs = q_learning(verbose=True, epochs=100, sub_epochs=100, l1_coef=0, learning_rate=1e-4, rollout_size=1000, inv_temp=1)
-    print(act_probs[:10,])
-    misgen_fwd_reward, misgen_critic = inverse_reward_shaping(shifted=False, misgen=True)
-    gen_fwd_reward, gen_critic = inverse_reward_shaping(shifted=False, misgen=False)
+    # trained misgeneralizing agent:
+    logdir = "logs/train/ascent/ascent/2024-11-12__15-30-49__seed_1080"
+    # learned_policy, act_probs = q_learning(verbose=True, epochs=100, sub_epochs=100, l1_coef=0, learning_rate=1e-4, rollout_size=1000, inv_temp=1)
+    # print(act_probs[:10,])
+    fwd_reward, critic = inverse_reward_shaping(logdir, shifted=False)
+    gen_fwd_reward, gen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=False)
 
-    evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward)
+    evaluate_rew_functions(fwd_reward, gen_fwd_reward)
+
 
     print("end")

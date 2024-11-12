@@ -31,23 +31,7 @@ def watch_agent(logdir, next_val_dir=None):
     if next_val_dir is not None:
         args_dict = get_config(next_val_dir,"args_dict.npy")
         logdir = args_dict.get("agent_dir")
-    # load configs
-    agent_dir = logdir
-    cfg = get_config(agent_dir)
-    args = get_env_args(cfg)
-    hyperparameters = cfg
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    # load env
-    cfg["n_envs"] = 2
-    venv = create_venv_render(args, cfg)
-    # load agent
-    model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
-    model.device = device
-    policy.device = device
-    # load policy
-    last_model = latest_model_path(agent_dir)
-    policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
-
+    args, cfg, device, model, policy, venv = load_policy(logdir)
 
     shenv = create_venv_render(args, cfg, is_valid=True)
     # for i in range(20):
@@ -102,6 +86,29 @@ def watch_agent(logdir, next_val_dir=None):
         # x = custom_embedder(x)
         # p, v, _ = policy(x, None, None)
         # vn = next_value_network.value(x)
+
+
+def load_policy(logdir, render=True, valid_env=False):
+    # load configs
+    agent_dir = logdir
+    cfg = get_config(agent_dir)
+    args = get_env_args(cfg)
+    hyperparameters = cfg
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # load env
+    cfg["n_envs"] = 2
+    if render:
+        venv = create_venv_render(args, cfg, valid_env)
+    else:
+        venv = create_venv(args, cfg, valid_env)
+    # load agent
+    model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
+    model.device = device
+    policy.device = device
+    # load policy
+    last_model = latest_model_path(agent_dir)
+    policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
+    return args, cfg, device, model, policy, venv
 
 
 def print_layers(children, x):
