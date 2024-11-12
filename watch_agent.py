@@ -88,7 +88,7 @@ def watch_agent(logdir, next_val_dir=None):
         # vn = next_value_network.value(x)
 
 
-def load_policy(logdir, render=True, valid_env=False):
+def load_policy(logdir, render=True, valid_env=False, n_envs=2):
     # load configs
     agent_dir = logdir
     cfg = get_config(agent_dir)
@@ -96,7 +96,7 @@ def load_policy(logdir, render=True, valid_env=False):
     hyperparameters = cfg
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # load env
-    cfg["n_envs"] = 2
+    cfg["n_envs"] = n_envs
     if render:
         venv = create_venv_render(args, cfg, valid_env)
     else:

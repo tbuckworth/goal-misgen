@@ -105,6 +105,8 @@ class WrappedPolicy():
     def embed(self, obs):
         if isinstance(obs, np.ndarray):
             obst = torch.FloatTensor(obs).to(self.device)
+        else:
+            obst = obs
         h = self.policy.embedder(obst)
         if isinstance(obs, np.ndarray):
             return h.detach().cpu().numpy()
@@ -113,6 +115,8 @@ class WrappedPolicy():
     def forward(self, obs, embed=True):
         if isinstance(obs, np.ndarray):
             obst = torch.FloatTensor(obs).to(self.device)
+        else:
+            obst = obs
         if embed:
             h = self.embed(obst)
         else:
@@ -125,10 +129,10 @@ class WrappedPolicy():
 
     def act(self, obs, embed=True):
         logits = self.forward(obs, embed=embed)
-        act = Categorical(logits=logits).sample()
         if isinstance(obs, np.ndarray):
+            act = Categorical(logits=torch.FloatTensor(logits).to(self.device)).sample()
             return act.detach().cpu().numpy()
-        return act
+        return Categorical(logits=logits).sample()
 
 
 
@@ -371,7 +375,8 @@ def q_learning(verbose=False, gamma=gamma, epochs=100, sub_epochs=10, learning_r
 
 
 def inverse_reward_shaping(logdir, shifted=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
-    args, cfg, device, model, policy, env = load_policy(logdir, render=False, valid_env=shifted)
+    # TODO: collect rollouts from many envs.
+    args, cfg, device, model, policy, env = load_policy(logdir, render=False, valid_env=shifted, n_envs=1)
 
     wpolicy = WrappedPolicy(policy, device)
     Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, wpolicy, verbose)
@@ -490,14 +495,14 @@ def inverse_reward_shaping(logdir, shifted=False, verbose=False, gamma=gamma, ep
             # plt.scatter(rew_learned.detach().cpu().numpy(), rew_from_last_obs.detach().cpu().numpy())
             # plt.show()
             # print("done")
-
+    prefix = "Trained"
     prefenv = "Un" if not shifted else ""
-    print(f"Env: {prefenv}shifted")
+    print(f"Env: {prefenv}shifted\tAgent: {prefix}")
     print(f"Loss: {total_loss.item():.4f}\tDistill Loss: {current_state_reward_loss.item():.4f}")
     # torch_embedder = lambda x: x @ torch.FloatTensor(policy.embedder).to(device)
     next_reward.embedder = policy.embedder
     critic.embedder = policy.embedder
-    return next_reward, critic
+    return next_reward, critic, env
 
 def inverse_reward_shaping_cust_agent(shifted=False, misgen=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=shifted)
@@ -670,7 +675,7 @@ def collect_rollouts(env, policy, verbose, timesteps = 10000, embed=True):
         Rew = concat_data(Rew, rew)
         Done = concat_data(Done, done)
         obs = nobs
-    return Actions, Done, Nactions, Nobs, Obs, Rew
+    return Actions.squeeze(), Done.squeeze(), Nactions.squeeze(), Nobs.squeeze(), Obs.squeeze(), Rew.squeeze()
 
 
 def collect_rollouts_simple(env, policy, verbose, timesteps = 10000, embed=True):
@@ -714,23 +719,30 @@ class UniformPolicy():
     def embed(self, obs):
         return obs
 
-def evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward):
+def evaluate_rew_functions(rew_funcs, env=None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    env = AscentEnv(shifted=True)
+    if env is None:
+        env = AscentEnv(shifted=True)
     uniform_policy = UniformPolicy()
     Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, uniform_policy, verbose=False)
 
     obs = torch.FloatTensor(Obs).to(device)
     acts = torch.FloatTensor(Actions).to(device)
 
-    misgen_rew = misgen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
-    gen_rew = gen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
+    rews = [Rew] + [x.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze() for x in rew_funcs]
+    # misgen_rew = misgen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
+    # gen_rew = gen_fwd_reward.embed_and_forward(obs, acts).detach().cpu().numpy().squeeze()
 
-    stacked_rewards = np.stack((Rew, misgen_rew, gen_rew))
+    stacked_rewards = np.stack(rews)
     correls = np.corrcoef(stacked_rewards)
     print(f"reward correlations: \n{correls}")
 
-    stacked_info = np.stack((Nobs[:, 2], Rew-Rew.min(), misgen_rew-misgen_rew.min(), gen_rew-gen_rew.min()))
+    norm_rews = [r-r.min() for r in rews]
+
+    stacked_info = np.stack([Nobs[:, 2]] + norm_rews)
+    infos = [x.squeeze() for x in np.split(Nobs.T, Nobs.shape[-1])] + [Actions] + norm_rews
+    stacked_info = np.stack(infos)
+
     print(f"Rewards by state: \n{np.unique(stacked_info, axis=1).T.round(2)}")
 
     return
@@ -775,19 +787,23 @@ def reward_shaping_for_customized_policies():
     misgen_fwd_reward, misgen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=True)
     gen_fwd_reward, gen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=False)
 
-    evaluate_rew_functions(misgen_fwd_reward, gen_fwd_reward)
+    evaluate_rew_functions([misgen_fwd_reward, gen_fwd_reward])
 
-
-
-if __name__ == "__main__":
+def reward_shaping_for_trained_policies():
     # trained misgeneralizing agent:
     logdir = "logs/train/ascent/ascent/2024-11-12__15-30-49__seed_1080"
     # learned_policy, act_probs = q_learning(verbose=True, epochs=100, sub_epochs=100, l1_coef=0, learning_rate=1e-4, rollout_size=1000, inv_temp=1)
     # print(act_probs[:10,])
-    fwd_reward, critic = inverse_reward_shaping(logdir, shifted=False)
+    fwd_reward, critic, env = inverse_reward_shaping(logdir, shifted=False)
+    misgen_fwd_reward, misgen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=True)
     gen_fwd_reward, gen_critic = inverse_reward_shaping_cust_agent(shifted=False, misgen=False)
 
-    evaluate_rew_functions(fwd_reward, gen_fwd_reward)
+    evaluate_rew_functions([fwd_reward, misgen_fwd_reward, gen_fwd_reward], env = env)
+
+
+if __name__ == "__main__":
+    # reward_shaping_for_customized_policies()
+    reward_shaping_for_trained_policies()
 
 
     print("end")
