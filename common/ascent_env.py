@@ -1,54 +1,63 @@
 import numpy as np
 
+
 class AscentEnv():
-    def __init__(self, shifted=False, n_states=5):
+    def __init__(self, num_envs=2, shifted=False, n_states=5):
+        self.num_envs = num_envs
         self.shifted = shifted
         self.n_states = n_states
         self.states = np.arange(n_states)
-        self.state = 0
-        self.mirror = False
+        self.state = np.zeros(num_envs)
+        self.mirror = np.arange(self.num_envs) % 2 == 0
 
-    def close():
+    def close(self):
         pass
 
     def obs(self, state):
-        if state == self.n_states - 1:
-            return np.zeros((6,))
-        obs = np.concatenate([self.features(state - 1), self.features(state), self.features(state + 1)])
-        if self.mirror:
-            return obs[::-1].copy()
+        obs = np.zeros((self.num_envs, 6))
+        obs[..., 2] = state
+        obs[..., 3] = state
+        obs[..., 4:6] = obs[..., 2:4] + 1
+        obs[..., 0:2] = obs[..., 2:4] - 1
+        if self.shifted:
+            obs[..., 1] = self.n_states - state - 1
+            obs[..., 3] = self.n_states - state - 2
+            obs[..., 5] = self.n_states - state - 3
+
+        obs[state == self.n_states - 1] = 0
+
+        obs[self.mirror] = obs[self.mirror][...,::-1]
+
         return obs
 
-    def features(self, state):
-        if state < 0 or state >= self.n_states:
-            return -np.ones((2,))
-        if not self.shifted:
-            return np.full((2,), state + 1)
-        return np.array((state + 1, self.n_states - state))
-
     def reward(self, state):
-        if state == self.n_states - 1:
-            return 10
-        return 0
+        rews = np.zeros(self.num_envs)
+        rews[state == self.n_states - 1] = 10.
+        return rews
 
     def done(self, state):
-        if state == self.n_states - 1:
-            return True
-        return False
+        dones = np.zeros(self.num_envs)
+        dones[state == self.n_states - 1] = 1
+        return dones.astype(bool)
 
     def step(self, action):
-        if self.mirror:
-            action *= -1
-        self.state = min(max(self.state + action, 0), self.n_states - 1)
+        assert len(action) == self.num_envs, "Action batch dimension should match num envs"
+        assert np.all(np.bitwise_or(action==1,action==-1)), "All actions must be -1 or 1"
+        action[self.mirror] *= -1
 
-        obs, rew, done, info = self.observe()
-        if done:
-            self.reset()
-        return obs, rew, done, info
+        self.state = self.state + action
+        self.state[self.state<0] = 0
+        self.state[self.state>=self.num_envs] = self.n_states - 1
+
+        rew = self.reward(self.state)
+        done = self.done(self.state)
+        self.state[done] = 0
+        obs = self.obs(self.state)
+
+        return obs, rew, done, {}
 
     def reset(self):
-        self.state = 0
-        self.mirror = not self.mirror
+        self.state = np.zeros(self.num_envs)
         return self.obs(self.state)
 
     def observe(self):
