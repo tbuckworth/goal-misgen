@@ -41,7 +41,7 @@ class Logger(object):
                            "mean_timeouts"] # collected for both train and val envs
         loss_metrics = ["loss_total","loss_pi", "loss_value", "loss_entropy", "l1_reg"]
         self.log = pd.DataFrame(columns = time_metrics + episode_metrics + \
-                                    ["val_"+m for m in episode_metrics] + [loss_metrics])
+                                    ["val_"+m for m in episode_metrics] + loss_metrics)
 
         self.timesteps = 0
         self.num_episodes = 0

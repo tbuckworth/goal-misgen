@@ -31,11 +31,13 @@ class PPO(BaseAgent):
                  normalize_rew=True,
                  use_gae=True,
                  l1_coef=0.,
+                 anneal_lr=True,
                  **kwargs):
 
         super(PPO, self).__init__(env, policy, logger, storage, device,
                                   n_checkpoints, env_valid, storage_valid)
 
+        self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
         self.n_steps = n_steps
         self.n_envs = n_envs
@@ -130,7 +132,7 @@ class PPO(BaseAgent):
                 v_surr2 = (clipped_value_batch - return_batch).pow(2)
                 value_loss = 0.5 * torch.max(v_surr1, v_surr2).mean()
 
-                l1_reg = sum([param.abs() for param in self.policy.parameters()])
+                l1_reg = sum([param.abs().sum() for param in self.policy.parameters()])
 
                 # Policy Entropy
                 entropy_loss = dist_batch.entropy().mean()
@@ -210,7 +212,8 @@ class PPO(BaseAgent):
                 rew_batch_v = done_batch_v = None
             self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
             self.logger.dump(summary)
-            self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
+            if self.anneal_lr:
+                self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
             # Save the model
             if self.t > ((checkpoint_cnt+1) * save_every):
                 print("Saving model.")
