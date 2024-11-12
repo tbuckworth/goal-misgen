@@ -30,11 +30,13 @@ class PPO(BaseAgent):
                  normalize_adv=True,
                  normalize_rew=True,
                  use_gae=True,
+                 l1_coef=0.,
                  **kwargs):
 
         super(PPO, self).__init__(env, policy, logger, storage, device,
                                   n_checkpoints, env_valid, storage_valid)
 
+        self.l1_coef = l1_coef
         self.n_steps = n_steps
         self.n_envs = n_envs
         self.epoch = epoch
@@ -97,7 +99,7 @@ class PPO(BaseAgent):
         return act.detach().cpu().numpy(), log_prob_act, value, obs
 
     def optimize(self):
-        pi_loss_list, value_loss_list, entropy_loss_list = [], [], []
+        pi_loss_list, value_loss_list, entropy_loss_list, l1_reg_list, total_loss_list = [], [], [], [], []
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -128,9 +130,11 @@ class PPO(BaseAgent):
                 v_surr2 = (clipped_value_batch - return_batch).pow(2)
                 value_loss = 0.5 * torch.max(v_surr1, v_surr2).mean()
 
+                l1_reg = sum([param.abs() for param in self.policy.parameters()])
+
                 # Policy Entropy
                 entropy_loss = dist_batch.entropy().mean()
-                loss = pi_loss + self.value_coef * value_loss - self.entropy_coef * entropy_loss
+                loss = pi_loss + self.value_coef * value_loss - self.entropy_coef * entropy_loss + l1_reg * self.l1_coef
                 loss.backward()
 
                 # Let model to handle the large batch-size with small gpu-memory
@@ -142,10 +146,16 @@ class PPO(BaseAgent):
                 pi_loss_list.append(-pi_loss.item())
                 value_loss_list.append(-value_loss.item())
                 entropy_loss_list.append(entropy_loss.item())
+                l1_reg_list.append(l1_reg.item())
+                total_loss_list.append(loss.item())
 
-        summary = {'Loss/pi': np.mean(pi_loss_list),
-                   'Loss/v': np.mean(value_loss_list),
-                   'Loss/entropy': np.mean(entropy_loss_list)}
+        summary = {
+            'Loss/total': np.mean(total_loss_list),
+            'Loss/pi': np.mean(pi_loss_list),
+            'Loss/v': np.mean(value_loss_list),
+            'Loss/entropy': np.mean(entropy_loss_list),
+            'Loss/l1_reg': np.mean(l1_reg_list)
+        }
         return summary
 
     def train(self, num_timesteps):
@@ -199,7 +209,7 @@ class PPO(BaseAgent):
             else:
                 rew_batch_v = done_batch_v = None
             self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
-            self.logger.dump()
+            self.logger.dump(summary)
             self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
             # Save the model
             if self.t > ((checkpoint_cnt+1) * save_every):

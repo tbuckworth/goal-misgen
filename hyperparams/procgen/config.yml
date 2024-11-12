@@ -99,6 +99,7 @@ ascent-mlp:
     recurrent: False
     hid_dims: [3]
     final_relu: False
+    l1_coef: 0.01
 
 
 hard-500:

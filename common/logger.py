@@ -39,8 +39,9 @@ class Logger(object):
         episode_metrics = ["max_episode_rewards", "mean_episode_rewards", "min_episode_rewards",
                            "max_episode_len", "mean_episode_len", "min_episode_len",
                            "mean_timeouts"] # collected for both train and val envs
+        loss_metrics = ["loss_total","loss_pi", "loss_value", "loss_entropy", "l1_reg"]
         self.log = pd.DataFrame(columns = time_metrics + episode_metrics + \
-                                    ["val_"+m for m in episode_metrics])
+                                    ["val_"+m for m in episode_metrics] + [loss_metrics])
 
         self.timesteps = 0
         self.num_episodes = 0
@@ -75,11 +76,14 @@ class Logger(object):
 
         self.timesteps += (self.n_envs * steps)
 
-    def dump(self):
+    def dump(self, summary):
         wall_time = time.time() - self.start_time
         episode_statistics = self._get_episode_statistics()
         episode_statistics_list = list(episode_statistics.values())
-        log = [self.timesteps, wall_time, self.num_episodes] + episode_statistics_list
+
+        loss_statistics = list(summary.values())
+
+        log = [self.timesteps, wall_time, self.num_episodes] + episode_statistics_list + loss_statistics
         self.log.loc[len(self.log)] = log
 
         with open(self.logdir + '/log-append.csv', 'a') as f:
