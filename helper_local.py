@@ -104,7 +104,7 @@ def initialize_policy(device, hyperparameters, env, observation_shape):
     elif architecture == 'mlpmodel':
         final_relu = hyperparameters.get('final_relu', False)
         hid_dims = hyperparameters.get('hid_dims', [3])
-        model = MlpModel(in_channels=in_channels, hidden_dims=hid_dims, final_relu=final_relu)
+        model = MlpModel(input_dims=in_channels, hidden_dims=hid_dims, final_relu=final_relu)
 
     # Discrete action space
     recurrent = hyperparameters.get('recurrent', False)
