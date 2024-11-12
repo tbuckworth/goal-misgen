@@ -48,6 +48,33 @@ def watch_agent(logdir, next_val_dir=None):
     last_model = latest_model_path(agent_dir)
     policy.load_state_dict(torch.load(last_model, map_location=device)["model_state_dict"])
 
+
+    shenv = create_venv_render(args, cfg, is_valid=True)
+    # for i in range(20):
+    #     shp = policy(torch.FloatTensor(shenv.obs(i)[:1,]).to(device), None, None)[0].probs.round(decimals=2)
+    #     p = policy(torch.FloatTensor(venv.obs(i)[:1,]).to(device), None, None)[0].probs.round(decimals=2)
+    #     print(i)
+    #     print(p)
+    #     print(shp)
+
+    # print_layers(policy.named_children(), x)
+
+    for env in [venv, shenv]:
+        x = torch.FloatTensor(env.obs(18)[:1,]).to(device)
+        print(x.detach().cpu().numpy().round(decimals=2))
+        print("Embedder Weight:")
+        print(policy.embedder.layers[0].weight.detach().cpu().numpy().round(decimals=2))
+        x = policy.embedder.layers[0](x)
+        print("Latents:")
+        print(x.detach().cpu().numpy().round(decimals=2))
+        print("fc_policy Weight:")
+        print(policy.fc_policy.weight.detach().cpu().numpy().round(decimals=2))
+        print("outputs:")
+        x = policy.fc_policy(x)
+        print(x.detach().cpu().numpy().round(decimals=2))
+        print("Probs:")
+        print(x.softmax(dim=-1).detach().cpu().numpy().round(decimals=2))
+
     # load next value network:
     level = args_dict.get("level")
     custom_embedder, next_value_network = decompose_policy(args_dict.get("new_val_weights"), device, level, model, policy)
@@ -77,6 +104,19 @@ def watch_agent(logdir, next_val_dir=None):
         # vn = next_value_network.value(x)
 
 
+def print_layers(children, x):
+    for name, layer in children:
+        if name != "fc_value":
+            print(x)
+            print(name)
+            if not hasattr(layer, "weight"):
+                return print_layers(children, x)
+            print(layer.weight.detach().cpu().numpy().round(decimals=2).tolist())
+            x = layer(x)
+    print(x)
+    return x
+
+
 if __name__ == "__main__":
     #TODO: get agent_dir from config
     # have shifted explicit
@@ -88,4 +128,6 @@ if __name__ == "__main__":
     shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-22__16-27-10__seed_6033"
     shifted_val_dir = "logs/next_val_finding/coinrun/coinrun/2024-10-24__10-19-48__seed_6033"
     next_val_dir = shifted_val_dir
-    watch_agent(logdir=None, next_val_dir=next_val_dir)
+
+    logdir = "logs/train/ascent/ascent/2024-11-12__13-52-38__seed_1080"
+    watch_agent(logdir=logdir, next_val_dir=None)
