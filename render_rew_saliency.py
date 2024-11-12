@@ -410,8 +410,9 @@ def main(args, barchart=False):
                 done = True
 
             if done:
-                output_file = logdir_saliency_value + f"/sal_vid{n_vid}.avi"
-                save_video_from_array(vid_stack, output_file, fps=15)
+                if not args.fig_only:
+                    output_file = logdir_saliency_value + f"/sal_vid{n_vid}.avi"
+                    save_video_from_array(vid_stack, output_file, fps=15)
                 vid_stack = unsqueezed_image
                 plt.imshow(full_image)
                 plt.savefig(logdir_saliency_value + f"/sal_img{n_vid}.png")
@@ -530,7 +531,8 @@ if __name__=='__main__':
     args.value_saliency = True
     args.use_learned_next_val = True
     args.level = "block3"
-    args.n_vids = 3
+    args.n_vids = 30
+    args.fig_only = True
 
     main(args)
     
