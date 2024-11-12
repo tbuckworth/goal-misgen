@@ -9,13 +9,20 @@ import yaml
 from gym3 import ViewerWrapper, ToBaselinesVecEnv
 from procgen import ProcgenGym3Env, ProcgenEnv
 
+from common.ascent_env import AscentEnv
 from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, TransposeFrame, ScaledFloatFrame, \
     DummyTerminalObsWrapper
-from common.model import NatureModel, ImpalaModel
+from common.model import NatureModel, ImpalaModel, MlpModel
 from common.policy import CategoricalPolicy
 
 
 def create_venv(args, hyperparameters, is_valid=False):
+    if args.env_name == "ascent":
+        return AscentEnv(num_envs=hyperparameters.get('n_envs', 256),
+                         shifted=is_valid,
+                         n_states=hyperparameters.get('n_states', 20),
+                         )
+
     val_env_name = args.val_env_name if args.val_env_name else args.env_name
     # TODO: give this proper seed:
     #  also check if reset uses the same initial levels
@@ -38,6 +45,7 @@ def create_venv(args, hyperparameters, is_valid=False):
     venv = TransposeFrame(venv)
     venv = ScaledFloatFrame(venv)
     return venv
+
 
 def create_venv_render(args, hyperparameters, is_valid=False):
     val_env_name = args.val_env_name if args.val_env_name else args.env_name
@@ -85,6 +93,7 @@ def latest_model_path(logdir):
 
 def initialize_policy(device, hyperparameters, env, observation_shape):
     architecture = hyperparameters.get('architecture', 'impala')
+
     in_channels = observation_shape[0]
     action_space = env.action_space
     # Model architecture
@@ -92,6 +101,11 @@ def initialize_policy(device, hyperparameters, env, observation_shape):
         model = NatureModel(in_channels=in_channels)
     elif architecture == 'impala':
         model = ImpalaModel(in_channels=in_channels)
+    elif architecture == 'mlpmodel':
+        final_relu = hyperparameters.get('final_relu', False)
+        hid_dims = hyperparameters.get('hid_dims', [3])
+        model = MlpModel(in_channels=in_channels, hidden_dims=hid_dims, final_relu=final_relu)
+
     # Discrete action space
     recurrent = hyperparameters.get('recurrent', False)
     if isinstance(action_space, gym.spaces.Discrete) or isinstance(action_space, gymnasium.spaces.discrete.Discrete):

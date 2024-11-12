@@ -65,3 +65,6 @@ My env is in /vol/bitbucket/mjm121/goal-misgenv
 Had to use the flag --use-pep517 when doing the pip install
 
 Easiest way to work on the project is to shell into a labmachine (e.g. beech12) within VScode or cursor
+```
+python3.8 train.py --exp_name ascent --env_name ascent --param_name ascent-mlp --num_timesteps 2000000 --num_checkpoints 1 --seed 1080 --use_wandb --use_valid_env
+```

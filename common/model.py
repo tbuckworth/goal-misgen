@@ -20,6 +20,7 @@ class MlpModel(nn.Module):
     def __init__(self,
                  input_dims=4,
                  hidden_dims=[64, 64],
+                 final_relu=True,
                  **kwargs):
         """
         input_dim:     (int)  number of the input dimensions
@@ -27,7 +28,7 @@ class MlpModel(nn.Module):
         use_batchnorm: (bool) whether to use batchnorm
         """
         super(MlpModel, self).__init__()
-
+        self.final_relu = final_relu
         # Hidden layers
         hidden_dims = [input_dims] + hidden_dims
         layers = []
@@ -35,7 +36,8 @@ class MlpModel(nn.Module):
             in_features = hidden_dims[i]
             out_features = hidden_dims[i + 1]
             layers.append(nn.Linear(in_features, out_features))
-            layers.append(nn.ReLU())
+            if self.final_relu or i < len(hidden_dims) - 2:
+                layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
         self.output_dim = hidden_dims[-1]
         self.apply(orthogonal_init)
