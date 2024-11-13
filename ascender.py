@@ -802,8 +802,8 @@ def reward_shaping_for_trained_policies():
 
 
 if __name__ == "__main__":
-    # reward_shaping_for_customized_policies()
-    reward_shaping_for_trained_policies()
+    reward_shaping_for_customized_policies()
+    # reward_shaping_for_trained_policies()
 
 
     print("end")
