@@ -285,17 +285,19 @@ def main(args, barchart=False):
 
     obs = shifted_agent.env.reset()
     hidden_state = np.zeros((shifted_agent.n_envs, shifted_agent.storage.hidden_state_size))
-    done = np.zeros(shifted_agent.n_envs)
+    # done = np.zeros(shifted_agent.n_envs)
 
-    vid_stack = None
-    for n_vid in range(args.n_vids):
-        shifted_agent.policy.eval()
-        done = False
-        while not done: # = 256
-            act, log_prob_act, value, _, value_saliency_obs = shifted_agent.predict_w_value_saliency(obs, hidden_state, done)
+    shifted_agent.policy.eval()
+    unshifted_agent.policy.eval()
+    n_pics = 0
+    while n_pics < args.n_pics: # = 256
+        act, log_prob_act, value, _, value_saliency_obs = shifted_agent.predict_w_value_saliency(obs, hidden_state, done)
+        next_obs, rew, done, info = shifted_agent.env.step(act)
+
+        if done:
             logit_saliency_obs = shifted_agent.predict_for_logit_saliency(obs, act)
-
-            next_obs, rew, done, info = shifted_agent.env.step(act)
+            _,_,_, _, value_saliency_obs_unshifted = unshifted_agent.predict_w_value_saliency(obs, hidden_state, done)
+            logit_saliency_obs_unshifted = unshifted_agent.predict_for_logit_saliency(obs, act)
 
             log_prob_act = log_prob_act.detach().cpu().numpy()
             value = value.detach().cpu().numpy()
@@ -303,44 +305,23 @@ def main(args, barchart=False):
             obs_copy, v_grad_vid = apply_saliency(obs, value_saliency_obs)
             _, l_grad_vid = apply_saliency(obs, logit_saliency_obs)
 
+            _, unv_grad_vid = apply_saliency(obs, value_saliency_obs_unshifted)
+            _, unl_grad_vid = apply_saliency(obs, logit_saliency_obs_unshifted)
+
+
             obs_copy = obs_copy.transpose((1,0,2))
             obs = next_obs
-            if barchart:
-                categories = ["Reward", "Predicted Reward", "Act Advantage", "Value", "Next Value (discounted)"]
-                values = [rew.item(), 
-                        pred_reward.detach().cpu().numpy().item(), 
-                        log_prob_act.item(), 
-                        value.item(), 
-                        shifted_agent.gamma * next_value.detach().cpu().numpy().item()
-                        ]
-                bar_array = create_barchart_as_numpy(categories, values, 64, 64)
             
-            top_image = np.concatenate((obs_copy, r_grad_vid), axis=1)
-            if barchart:
-                bot_image = np.concatenate((v_grad_vid, bar_array), axis=1)
-            else:
-                bot_image = np.concatenate((v_grad_vid, l_grad_vid), axis=1)
             
-            full_image = np.concatenate((top_image, bot_image), axis=0)
-            unsqueezed_image = np.expand_dims(full_image, 0)
+            top_image = np.concatenate((obs_copy, obs_copy), axis=1)
+            mid_image = np.concatenate((v_grad_vid, unv_grad_vid), axis=1)
+            bot_image = np.concatenate((l_grad_vid, unl_grad_vid), axis=1)
+            
+            full_image = np.concatenate((top_image, mid_image, bot_image), axis=0)
 
-            if vid_stack is None:
-                vid_stack = unsqueezed_image
-            else:
-                vid_stack = np.append(vid_stack, unsqueezed_image, 0)
-
-            print(vid_stack.shape[0])
-
-            if vid_stack.shape[0] > 100:
-                done = True
-
-            if done:
-                if not args.fig_only:
-                    output_file = logdir_saliency_value + f"/sal_vid{n_vid}.avi"
-                    save_video_from_array(vid_stack, output_file, fps=15)
-                vid_stack = unsqueezed_image
-                plt.imshow(full_image)
-                plt.savefig(logdir_saliency_value + f"/sal_img{n_vid}.png")
+            plt.imshow(full_image)
+            plt.savefig(logdir_saliency_value + f"/sal_img{n_pics}.png")
+            n_pics += 1
 
 
 
@@ -476,7 +457,7 @@ if __name__=='__main__':
     args.noview = True
     args.value_saliency = True
     args.level = "block3"
-    args.n_vids = 30
+    args.n_pics = 30
     args.fig_only = True
     main(args)
     
