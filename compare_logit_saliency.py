@@ -447,6 +447,7 @@ if __name__=='__main__':
     shifted_agent = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033"
     # Check actually unshifted:
     unshifted_agent = "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033"
+    # unshifted_agent = "logs/train/coinrun/coinrun/2024-10-08__12-16-22__seed_6033"
     args.shifted_agent_file = latest_model_path(shifted_agent)
     args.unshifted_agent_file = latest_model_path(unshifted_agent)
     
