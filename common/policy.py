@@ -42,6 +42,15 @@ class CategoricalPolicy(nn.Module):
         hidden = self.embedder(x)
         v = self.fc_value(hidden).reshape(-1)
         return v
+    
+    def forward_with_embedding(self, x):
+        hidden = self.embedder(x)
+        logits = self.fc_policy(hidden)
+        log_probs = F.log_softmax(logits, dim=1)
+        p = Categorical(logits=log_probs)
+        v = self.fc_value(hidden).reshape(-1)
+        return p, v, hidden
+
 
 class PolicyWrapperIRL(nn.Module):
     def __init__(self,policy, device):
