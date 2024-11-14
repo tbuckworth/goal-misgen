@@ -191,7 +191,7 @@ class PPO_Lirl(BaseAgent):
         obs = self.env.reset()
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
-        self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env_valid,
+        self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
                               self.trusted_policy)
         # Need to re-do this, so it's fresh for the env data collection:
         obs = self.env.reset()
