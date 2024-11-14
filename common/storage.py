@@ -139,7 +139,7 @@ class LirlStorage(Storage):
 
     def collect_and_yield(self, indices):
         obs_batch = torch.FloatTensor(self.obs_batch[:-1]).reshape(-1, *self.obs_shape)[indices].to(self.device)
-        nobs_batch = torch.FloatTensor(self.obs_batch[1:]).reshape(-1, *self.obs_shape).to(self.device)
+        nobs_batch = torch.FloatTensor(self.obs_batch[1:]).reshape(-1, *self.obs_shape)[indices].to(self.device)
         act_batch = torch.FloatTensor(self.act_batch).reshape(-1)[indices].to(self.device)
         done_batch = torch.FloatTensor(self.done_batch).reshape(-1)[indices].to(self.device)
         log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch).reshape(-1)[indices].to(self.device)

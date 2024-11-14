@@ -2,6 +2,12 @@ import unittest
 
 import torch
 
+try:
+    import wandb
+    from private_login import wandb_login
+except ImportError:
+    pass
+
 from common.logger import Logger
 from common.model import RewValModel, NextRewModel
 from common.storage import LirlStorage
@@ -20,7 +26,7 @@ class PPO_LirlTest(unittest.TestCase):
         model_file = ""
         param_name = "ascent-mlp"
         hidden_dims = [64, 64]
-        args = DictToArgs({"env_name":env_name})
+        args = DictToArgs({"env_name": env_name})
 
         hyperparameters = get_hyperparameters(param_name)
         n_steps = hyperparameters["n_steps"]
@@ -31,6 +37,9 @@ class PPO_LirlTest(unittest.TestCase):
         env = create_venv(args, hyperparameters)
         env_valid = create_venv(args, hyperparameters, is_valid=True)
 
+        wandb_login()
+        wandb.init(project="goal-misgen", config=hyperparameters, tags=["test"], resume="allow")
+
         observation_space = env.observation_space
         observation_shape = observation_space.shape
         action_size = env.action_space.n
@@ -40,7 +49,8 @@ class PPO_LirlTest(unittest.TestCase):
         rew_val_model = RewValModel(model.output_dim, hidden_dims, device)
         next_rew_model = NextRewModel(model.output_dim + action_size, hidden_dims, action_size, device)
 
-        storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
+        storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape,
+                                                                     algo)
 
         ppo_lirl_params = dict(
             num_rew_updates=10,
@@ -53,7 +63,7 @@ class PPO_LirlTest(unittest.TestCase):
         hyperparameters.update(ppo_lirl_params)
 
         logdir = create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, seed)
-        logger = Logger(n_envs, logdir, use_wandb=False)
+        logger = Logger(n_envs, logdir, use_wandb=True)
 
         cls.agent = initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkpoints, policy, storage,
                                      storage_valid)
