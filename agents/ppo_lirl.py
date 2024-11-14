@@ -36,7 +36,7 @@ class PPO_Lirl(BaseAgent):
                  l1_coef=0.,
                  anneal_lr=True,
                  num_rew_updates=10,
-                 rew_model=None,
+                 rew_val_model=None,
                  next_rew_model=None,
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
@@ -48,7 +48,7 @@ class PPO_Lirl(BaseAgent):
         self.trusted_policy = UniformPolicy(policy.action_size, device)
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
-        self.rew_model = rew_model
+        self.rew_val_model = rew_val_model
         self.next_rew_model = next_rew_model
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
@@ -166,7 +166,7 @@ class PPO_Lirl(BaseAgent):
                 pi_loss_list.append(-pi_loss.item())
                 value_loss_list.append(-value_loss.item())
                 entropy_loss_list.append(entropy_loss.item())
-                l1_reg_list.append(l1_reg.item())
+                l1_reg_list.append(l1_reg)
                 total_loss_list.append(loss.item())
 
         summary = {
@@ -264,7 +264,7 @@ class PPO_Lirl(BaseAgent):
         grad_accumulation_steps = batch_size / self.mini_batch_size
         grad_accumulation_cnt = 1
 
-        self.rew_model.train()
+        self.rew_val_model.train()
         self.policy.eval()
         for e in range(self.epoch):
             recurrent = self.policy.is_recurrent()
@@ -282,8 +282,8 @@ class PPO_Lirl(BaseAgent):
                 log_prob_act_batch = dist_batch.log_prob(act_batch)
                 log_prob_act_batch *= self.inv_temp
 
-                rew, value = self.rew_model(h_batch)
-                next_rew, next_val = self.rew_model(next_h_batch)
+                rew, value = self.rew_val_model(h_batch)
+                next_rew, next_val = self.rew_val_model(next_h_batch)
                 next_rew_est = self.next_rew_model(h_batch, act_batch)
 
                 # flt is true for penultimate obs - we cannot calculate
@@ -338,7 +338,7 @@ class PPO_Lirl(BaseAgent):
             self.mini_batch_size = batch_size
 
         self.policy.eval()
-        self.rew_model.eval()
+        self.rew_val_model.eval()
         self.next_rew_model.eval()
 
         recurrent = self.policy.is_recurrent()

@@ -1,3 +1,5 @@
+from abc import ABC
+
 from .misc_util import orthogonal_init, xavier_uniform_init
 import torch.nn as nn
 import torch
@@ -7,6 +9,7 @@ class Flatten(nn.Module):
     def forward(self, x):
         return torch.flatten(x, start_dim=1)
 
+
 class SeqModel(nn.Module):
     def __init__(self, list, device):
         super().__init__()
@@ -15,6 +18,7 @@ class SeqModel(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+
 
 class MlpModel(nn.Module):
     def __init__(self,
@@ -86,6 +90,7 @@ class MlpModelNoFinalRelu(nn.Module):
             x = layer(x)
         return x
 
+
 class NatureModel(nn.Module):
     def __init__(self,
                  in_channels,
@@ -101,7 +106,7 @@ class NatureModel(nn.Module):
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2), nn.ReLU(),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1), nn.ReLU(),
             Flatten(),
-            nn.Linear(in_features=64*7*7, out_features=512), nn.ReLU()
+            nn.Linear(in_features=64 * 7 * 7, out_features=512), nn.ReLU()
         )
         self.output_dim = 512
         self.apply(orthogonal_init)
@@ -125,6 +130,7 @@ class ResidualBlock(nn.Module):
         out = self.conv2(out)
         return out + x
 
+
 class ImpalaBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ImpalaBlock, self).__init__()
@@ -139,16 +145,19 @@ class ImpalaBlock(nn.Module):
         x = self.res2(x)
         return x
 
+
 scale = 1
+
+
 class ImpalaModel(nn.Module):
     def __init__(self,
                  in_channels,
                  **kwargs):
         super(ImpalaModel, self).__init__()
-        self.block1 = ImpalaBlock(in_channels=in_channels, out_channels=16*scale)
-        self.block2 = ImpalaBlock(in_channels=16*scale, out_channels=32*scale)
-        self.block3 = ImpalaBlock(in_channels=32*scale, out_channels=32*scale)
-        self.fc = nn.Linear(in_features=32*scale * 8 * 8, out_features=256)
+        self.block1 = ImpalaBlock(in_channels=in_channels, out_channels=16 * scale)
+        self.block2 = ImpalaBlock(in_channels=16 * scale, out_channels=32 * scale)
+        self.block3 = ImpalaBlock(in_channels=32 * scale, out_channels=32 * scale)
+        self.fc = nn.Linear(in_features=32 * scale * 8 * 8, out_features=256)
 
         self.output_dim = 256
         self.apply(xavier_uniform_init)
@@ -195,10 +204,10 @@ class GRU(nn.Module):
             # We will always assume t=0 has a zero in it as that makes the logic cleaner
             # (can be interpreted as a truncated back-propagation through time)
             has_zeros = ((masks[1:] == 0.0) \
-                            .any(dim=-1)
-                            .nonzero()
-                            .squeeze()
-                            .cpu())
+                         .any(dim=-1)
+                         .nonzero()
+                         .squeeze()
+                         .cpu())
 
             # +1 to correct the masks[1:]
             if has_zeros.dim() == 0:
@@ -241,41 +250,100 @@ class IdentityModel(nn.Module):
     def forward(self, x):
         return x
 
+class MlPLayers(nn.Module, ABC):
+    def __init__(self,*args, **kwargs):
+        super(MlPLayers, self).__init__(*args, **kwargs)
 
-class NextRewModel(nn.Module):
-    def __init__(self,
-                 input_dims=4,
-                 hidden_dims=[64, 64],
-                 **kwargs):
-        """
-        input_dim:     (int)  number of the input dimensions
-        hidden_dims:   (list) list of the dimensions for the hidden layers
-        use_batchnorm: (bool) whether to use batchnorm
-        """
-        super(NextRewModel, self).__init__()
-        self.embedder = lambda x: x
-        # Hidden layers
+    def generate_layers(self, input_dims, hidden_dims, output_dim):
         hidden_dims = [input_dims] + hidden_dims
         layers = []
         for i in range(len(hidden_dims) - 1):
             in_features = hidden_dims[i]
             out_features = hidden_dims[i + 1]
             layers.append(nn.Linear(in_features, out_features))
-            if i < len(hidden_dims) - 2:
-                layers.append(nn.ReLU())
-        self.layers = nn.Sequential(*layers)
-        self.output_dim = hidden_dims[-1]
+            layers.append(nn.ReLU())
+        layers.append(nn.Linear(hidden_dims[-1], output_dim))
+        return layers
+
+
+class NextRewModel(MlPLayers):
+    def __init__(self,
+                 input_dims,
+                 hidden_dims,
+                 action_size,
+                 device
+                 ):
+        """
+        input_dim:      (int)  number of the input dimensions
+        hidden_dims:    (list) list of the dimensions for the hidden layers
+        output_dim:     (int)
+        action_size:    (int)
+        device:         (str)
+        """
+        super(NextRewModel, self).__init__()
+        self.action_size = action_size
+        self.device = device
+        self.output_dim = 1
+        # Hidden layers
+        # hidden_dims = [input_dims] + hidden_dims
+        # layers = []
+        # for i in range(len(hidden_dims) - 1):
+        #     in_features = hidden_dims[i]
+        #     out_features = hidden_dims[i + 1]
+        #     layers.append(nn.Linear(in_features, out_features))
+        #     layers.append(nn.ReLU())
+        # layers.append(nn.Linear(hidden_dims[-1], output_dim))
+        # self.layers = nn.Sequential(*layers)
+        self.layers = nn.Sequential(*self.generate_layers(input_dims, hidden_dims, self.output_dim))
         self.apply(orthogonal_init)
 
-    def forward(self, x):
+    def forward(self, h, a):
+        a = torch.nn.functional.one_hot(a.to(torch.int64)).to(device=self.device).float()
+        x = torch.concat((h, a), dim=-1)
         for layer in self.layers:
             x = layer(x)
         return x
 
-    def embed_and_forward(self, obs, action=None):
-        x = self.embedder(obs)
-        if action is not None:
-            x = torch.concat((x, action.unsqueeze(-1)), dim=-1)
-        for layer in self.layers:
+
+class RewValModel(MlPLayers):
+    def __init__(self,
+                 input_dims,
+                 hidden_dims,
+                 device
+                 ):
+        """
+        input_dim:     (int)  number of the input dimensions
+        hidden_dims:   (list) list of the dimensions for the hidden layers
+        device:
+        """
+        super(RewValModel, self).__init__()
+        self.device = device
+        self.output_dim = 1
+        # Hidden layers
+        self.rew_layers = nn.Sequential(*self.generate_layers(input_dims, hidden_dims, self.output_dim))
+        self.val_layers = nn.Sequential(*self.generate_layers(input_dims, hidden_dims, self.output_dim))
+        self.apply(orthogonal_init)
+
+    # def generate_layers(self, input_dims, hidden_dims, output_dim):
+    #     hidden_dims = [input_dims] + hidden_dims
+    #     layers = []
+    #     for i in range(len(hidden_dims) - 1):
+    #         in_features = hidden_dims[i]
+    #         out_features = hidden_dims[i + 1]
+    #         layers.append(nn.Linear(in_features, out_features))
+    #         layers.append(nn.ReLU())
+    #     layers.append(nn.Linear(hidden_dims[-1], output_dim))
+    #     return layers
+
+    def forward(self, h):
+        return self.reward(h), self.value(h)
+
+    def reward(self, x):
+        for layer in self.rew_layers:
+            x = layer(x)
+        return x
+
+    def value(self, x):
+        for layer in self.val_layers:
             x = layer(x)
         return x
