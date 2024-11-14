@@ -5,7 +5,7 @@ import torch
 from common.logger import Logger
 from common.model import RewValModel, NextRewModel
 from common.storage import LirlStorage
-from helper_local import get_hyperparameters, create_venv, initialize_policy, listdir
+from helper_local import get_hyperparameters, create_venv, initialize_policy, listdir, DictToArgs
 from train import initialize_agent, initialize_storage, create_logdir
 
 
@@ -22,12 +22,13 @@ class PPO_LirlTest(unittest.TestCase):
         model_file = ""
         param_name = "ascent-mlp"
         hidden_dims = [64, 64]
+        args = DictToArgs({"env_name":env_name})
 
         hyperparameters = get_hyperparameters(param_name)
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        env = create_venv(None, hyperparameters)
-        env_valid = create_venv(None, hyperparameters, is_valid=True)
+        env = create_venv(args, hyperparameters)
+        env_valid = create_venv(args, hyperparameters, is_valid=True)
 
         observation_space = env.observation_space
         observation_shape = observation_space.shape
