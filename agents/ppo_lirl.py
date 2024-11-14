@@ -1,3 +1,5 @@
+import wandb
+
 from common.policy import UniformPolicy
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr, get_n_params
@@ -222,7 +224,13 @@ class PPO_Lirl(BaseAgent):
             if self.t > ((rew_checkpoint_cnt + 1) * learn_rew_every):
                 self.optimize_reward()
                 with torch.no_grad():
-                    self.evaluate_correlation()
+                    rew_corr = self.evaluate_correlation(self.storage)
+                    rew_corr_valid = self.evaluate_correlation(self.storage_trusted)
+                wandb.log({
+                    "timesteps": self.t,
+                    "rew_corr": rew_corr,
+                    "rew_corr_valid": rew_corr_valid,
+                })
 
             # Save the model
             if self.t > ((checkpoint_cnt + 1) * save_every):
@@ -325,8 +333,7 @@ class PPO_Lirl(BaseAgent):
         }
         return summary
 
-    def evaluate_correlation(self):
-        rew_loss_list, next_rew_loss_list, total_loss_list = [], [], []
+    def evaluate_correlation(self, storage):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -336,7 +343,7 @@ class PPO_Lirl(BaseAgent):
         self.next_rew_model.eval()
 
         recurrent = self.policy.is_recurrent()
-        generator = self.storage_trusted.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+        generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                                recurrent=recurrent)
         rew_tuples = [self.sample_next_rews(sample) for sample in generator]
         rew_est, rew = zip(*rew_tuples)
@@ -344,11 +351,8 @@ class PPO_Lirl(BaseAgent):
         rew_hat = torch.concat(list(rew_est))
         rew_batch = torch.concat(list(rew))
         rew_corr = torch.corrcoef(torch.stack((rew_hat.squeeze(), rew_batch.squeeze())))[0, 1].item()
+        return rew_corr
 
-        summary = {
-            'Corr/rew_corr_val_env': rew_corr,
-        }
-        return summary
 
     def sample_next_rews(self, sample):
         obs_batch, _, act_batch, done_batch, _, _, _, _, rew_batch = sample
