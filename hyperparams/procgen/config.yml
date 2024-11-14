@@ -103,6 +103,7 @@ ascent-mlp:
     anneal_lr: False
     rew_epoch: 50
     rew_lr: 0.0001
+    dense_rewards: True
 
 
 hard-500:
