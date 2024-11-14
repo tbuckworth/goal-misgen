@@ -4,7 +4,8 @@ from gym import spaces
 
 
 class AscentEnv():
-    def __init__(self, num_envs=2, shifted=False, num_positive_states=5):
+    def __init__(self, num_envs=2, shifted=False, num_positive_states=5, dense_rewards=False):
+        self.dense_rewards = dense_rewards
         self.observation_space = spaces.Box(-1, 4, (6,))
         self.action_space = spaces.Discrete(2)
         self.num_envs = num_envs
@@ -39,6 +40,8 @@ class AscentEnv():
         return obs
 
     def reward(self, state):
+        if self.dense_rewards:
+            return state.copy()
         rews = np.zeros(self.num_envs)
         rews[state == self.n_pos_states] = 10.
         rews[state == -self.n_pos_states] = -10.

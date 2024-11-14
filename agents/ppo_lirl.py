@@ -42,7 +42,7 @@ class PPO_Lirl(BaseAgent):
                  next_rew_loss_coef=1.,
                  storage_trusted=None,
                  rew_epoch=10,
-                 **kwargs):
+                 rew_lr=1e-5, **kwargs):
 
         super(PPO_Lirl, self).__init__(env, policy, logger, storage, device,
                                        n_checkpoints, env_valid, storage_valid)
@@ -63,6 +63,7 @@ class PPO_Lirl(BaseAgent):
         self.lmbda = lmbda
         self.learning_rate = learning_rate
         self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
+        self.rew_optimizer = optim.Adam(list(self.rew_val_model.parameters())+list(self.next_rew_model.parameters()), lr=rew_lr, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -313,13 +314,14 @@ class PPO_Lirl(BaseAgent):
 
                 # Let model to handle the large batch-size with small gpu-memory
                 if grad_accumulation_cnt % grad_accumulation_steps == 0:
-                    torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_clip_norm)
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
+                    # torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_clip_norm)
+                    self.rew_optimizer.step()
+                    self.rew_optimizer.zero_grad()
                 grad_accumulation_cnt += 1
-                rew_loss_list.append(rew_loss.item())
-                next_rew_loss_list.append(next_rew_loss.item())
-                total_loss_list.append(total_loss.item())
+                if e == 0:
+                    rew_loss_list.append(rew_loss.item())
+                    next_rew_loss_list.append(next_rew_loss.item())
+                    total_loss_list.append(total_loss.item())
 
         # rew bit is misguided - use the logic from evaluate_correlation.
         # rew, value = self.rew_model(h_batch)
@@ -331,6 +333,7 @@ class PPO_Lirl(BaseAgent):
             'Loss/total_rew_loss': np.mean(total_loss_list),
             'Loss/rew_loss': np.mean(rew_loss_list),
             'Loss/next_rew_loss': np.mean(next_rew_loss_list),
+            
             # 'Corr/rew_corr': rew_corr,
             # 'Corr/value_corr': val_corr,
         }
