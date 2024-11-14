@@ -33,11 +33,21 @@ class PPO_Lirl(BaseAgent):
                  l1_coef=0.,
                  anneal_lr=True,
                  num_rew_updates=10,
+                 rew_model=None,
+                 next_rew_model=None,
+                 inv_temp_rew_model=1.,
+                 next_rew_loss_coef=1.,
+                 storage_trusted=None,
                  **kwargs):
 
         super(PPO_Lirl, self).__init__(env, policy, logger, storage, device,
                                        n_checkpoints, env_valid, storage_valid)
-
+        # TODO: make trusted policy uniform policy
+        self.trusted_policy = None
+        self.next_rew_loss_coef = next_rew_loss_coef
+        self.inv_temp = inv_temp_rew_model
+        self.rew_model = rew_model
+        self.next_rew_model = next_rew_model
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
         self.n_steps = n_steps
@@ -57,13 +67,16 @@ class PPO_Lirl(BaseAgent):
         self.normalize_rew = normalize_rew
         self.use_gae = use_gae
         self.num_rew_updates = num_rew_updates
+        self.storage_trusted = storage_trusted
 
-    def predict(self, obs, hidden_state, done):
+    def predict(self, obs, hidden_state, done, policy=None):
+        if policy is None:
+            policy = self.policy
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(device=self.device)
             hidden_state = torch.FloatTensor(hidden_state).to(device=self.device)
             mask = torch.FloatTensor(1 - done).to(device=self.device)
-            dist, value, hidden_state = self.policy(obs, hidden_state, mask)
+            dist, value, hidden_state = policy(obs, hidden_state, mask)
             act = dist.sample()
             log_prob_act = dist.log_prob(act)
 
@@ -164,164 +177,146 @@ class PPO_Lirl(BaseAgent):
         return summary
 
 
-def optimize_rew(self):
-    pi_loss_list, value_loss_list, entropy_loss_list, l1_reg_list, total_loss_list = [], [], [], [], []
-    batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
-    if batch_size < self.mini_batch_size:
-        self.mini_batch_size = batch_size
-    grad_accumulation_steps = batch_size / self.mini_batch_size
-    grad_accumulation_cnt = 1
+    def train(self, num_timesteps):
+        learn_rew_every = num_timesteps // self.num_rew_updates
+        rew_checkpoint_cnt = 0
+        save_every = num_timesteps // self.num_checkpoints
+        checkpoint_cnt = 0
+        obs = self.env.reset()
+        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        done = np.zeros(self.n_envs)
 
-    self.rew_model.train()
-    self.policy.eval()
-    for e in range(self.epoch):
-        recurrent = self.policy.is_recurrent()
-        generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
-                                                       recurrent=recurrent)
-        for sample in generator:
-            obs_batch, nobs_batch, act_batch, done_batch, \
-                old_log_prob_act_batch, old_value_batch, return_batch, adv_batch = sample
-            mask_batch = (1 - done_batch)
+        if self.env_valid is not None:
+            obs_v = self.env_valid.reset()
+            hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
+            done_v = np.zeros(self.n_envs)
+            self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted, self.env_valid, self.trusted_policy)
+    
+        while self.t < num_timesteps:
+            # Run Policy
+            self.policy.eval()
+            self.collect_rollouts(done, hidden_state, obs, self.storage, self.env)
 
-            flt = done_batch.bool()
+            # valid
+            if self.env_valid is not None:
+                self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_valid, self.env_valid)
 
-            with torch.no_grad():
-                dist_batch, _, h_batch = self.policy.forward_with_embedding(obs_batch)
-                _, _, next_h_batch = self.policy.forward_with_embedding(nobs_batch)
-            # Clipped Surrogate Objective
-            log_prob_act_batch = dist_batch.log_prob(act_batch)
-            log_prob_act_batch *= self.inv_temp
+            # Optimize policy & valueq
+            summary = self.optimize()
+            # Log the training-procedure
+            self.t += self.n_steps * self.n_envs
+            rew_batch, done_batch = self.storage.fetch_log_data()
+            if self.storage_valid is not None:
+                rew_batch_v, done_batch_v = self.storage_valid.fetch_log_data()
+            else:
+                rew_batch_v = done_batch_v = None
+            self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
+            self.logger.dump(summary)
+            if self.anneal_lr:
+                self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
+    
+            if self.t > ((rew_checkpoint_cnt + 1) * learn_rew_every):
+                self.optimize_reward()
+                self.evaluate_correlation()
+    
+            # Save the model
+            if self.t > ((checkpoint_cnt + 1) * save_every):
+                print("Saving model.")
+                torch.save({'model_state_dict': self.policy.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict()},
+                           self.logger.logdir + '/model_' + str(self.t) + '.pth')
+                checkpoint_cnt += 1
+        self.env.close()
+        if self.env_valid is not None:
+            self.env_valid.close()
 
-
-            rew, value = self.rew_model(h_batch)
-            next_rew, next_val = self.rew_model(next_h_batch)
-            next_rew_est = self.next_rew_model(h_batch, act_batch)
-
-            # flt is true for penultimate obs - we cannot calculate
-            # (next_val for penultimate obs) = final_val (because no corresponding observation)
-            adv = rew[~flt] - value[~flt] + self.gamma * next_val[~flt]
-            # instead we use the next rew est of the penultimate obs,
-            # because V(sT) = R(sT) = NR(sT-1,aT-1), so we can express without reference to T:
-            adv_dones = rew[flt] = value[flt] + self.gamma * next_rew_est[flt]
-
-            loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt])
-            loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), log_prob_act_batch[flt])
-
-            # just scaling the losses according to number of observations:
-            coef = flt.mean()
-            total_loss = (1 - coef) * loss + coef * loss2
-
-
-            # detach grads for next_rew?
-            rew_loss = torch.nn.MSELoss()(next_rew_est, next_rew)
-
-            total_loss += rew_loss * self.rew_loss_coef
-
-            total_loss.backward()
-
-
-            # adv_dones = rew[flt] - value_batch[flt] + np.log(dist_batch.logits.shape[-1])
-            # adv = rew[~flt] - value_batch[~flt] + self.gamma * next_val[~flt]
-
-            # loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt])
-            # loss2 = (adv_dones.squeeze() ** 2).mean()
-
-            # coef = flt.mean()
-            # total_loss = (1 - coef) * loss + coef * loss2
-            # total_loss.backward()
-
-            # Let model to handle the large batch-size with small gpu-memory
-            if grad_accumulation_cnt % grad_accumulation_steps == 0:
-                torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_clip_norm)
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-            grad_accumulation_cnt += 1
-            # pi_loss_list.append(-pi_loss.item())
-            # value_loss_list.append(-value_loss.item())
-            # entropy_loss_list.append(entropy_loss.item())
-            # l1_reg_list.append(l1_reg.item())
-            total_loss_list.append(total_loss.item())
-
-
-
-
-    summary = {
-        'LossRew/total': np.mean(total_loss_list),
-        # 'Loss/pi': np.mean(pi_loss_list),
-        # 'Loss/v': np.mean(value_loss_list),
-        # 'Loss/entropy': np.mean(entropy_loss_list),
-        # 'Loss/l1_reg': np.mean(l1_reg_list)
-    }
-    return summary
-
-
-def train(self, num_timesteps):
-    learn_rew_every = num_timesteps // self.num_rew_updates
-    rew_checkpoint_cnt = 0
-    save_every = num_timesteps // self.num_checkpoints
-    checkpoint_cnt = 0
-    obs = self.env.reset()
-    hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
-    done = np.zeros(self.n_envs)
-
-    if self.env_valid is not None:
-        obs_v = self.env_valid.reset()
-        hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
-        done_v = np.zeros(self.n_envs)
-
-    while self.t < num_timesteps:
-        # Run Policy
-        self.policy.eval()
+    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None):
         for _ in range(self.n_steps):
-            act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done)
-            next_obs, rew, done, info = self.env.step(act)
-            self.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
+            act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done, policy)
+            next_obs, rew, done, info = env.step(act)
+            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
             obs = next_obs
             hidden_state = next_hidden_state
-        value_batch = self.storage.value_batch[:self.n_steps]
-        _, _, last_val, hidden_state = self.predict(obs, hidden_state, done)
-        self.storage.store_last(obs, hidden_state, last_val)
+        value_batch = storage.value_batch[:self.n_steps]
+        _, _, last_val, hidden_state = self.predict(obs, hidden_state, done, policy)
+        storage.store_last(obs, hidden_state, last_val)
         # Compute advantage estimates
-        self.storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
+        storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
-        # valid
-        if self.env_valid is not None:
-            for _ in range(self.n_steps):
-                act_v, log_prob_act_v, value_v, next_hidden_state_v = self.predict(obs_v, hidden_state_v, done_v)
-                next_obs_v, rew_v, done_v, info_v = self.env_valid.step(act_v)
-                self.storage_valid.store(obs_v, hidden_state_v, act_v,
-                                         rew_v, done_v, info_v,
-                                         log_prob_act_v, value_v)
-                obs_v = next_obs_v
-                hidden_state_v = next_hidden_state_v
-            _, _, last_val_v, hidden_state_v = self.predict(obs_v, hidden_state_v, done_v)
-            self.storage_valid.store_last(obs_v, hidden_state_v, last_val_v)
-            self.storage_valid.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
+    def optimize_reward(self):
+        rew_loss_list, next_rew_loss_list, total_loss_list = [], [], []
+        batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
+        if batch_size < self.mini_batch_size:
+            self.mini_batch_size = batch_size
+        grad_accumulation_steps = batch_size / self.mini_batch_size
+        grad_accumulation_cnt = 1
+    
+        self.rew_model.train()
+        self.policy.eval()
+        for e in range(self.epoch):
+            recurrent = self.policy.is_recurrent()
+            generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+                                                           recurrent=recurrent)
+            for sample in generator:
+                #TODO: get nobs_batch going also return rew_batch
+                obs_batch, nobs_batch, act_batch, done_batch, \
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
+                flt = done_batch.bool()
+    
+                with torch.no_grad():
+                    dist_batch, value_batch, h_batch = self.policy.forward_with_embedding(obs_batch)
+                    _, _, next_h_batch = self.policy.forward_with_embedding(nobs_batch)
+    
+                log_prob_act_batch = dist_batch.log_prob(act_batch)
+                log_prob_act_batch *= self.inv_temp
+    
+                rew, value = self.rew_model(h_batch)
+                next_rew, next_val = self.rew_model(next_h_batch)
+                next_rew_est = self.next_rew_model(h_batch, act_batch)
+    
+                # flt is true for penultimate obs - we cannot calculate
+                # (next_val for penultimate obs) = (val of terminal obs) (because there is no terminal obs)
+                adv = rew[~flt] - value[~flt] + self.gamma * next_val[~flt]
+                # instead we use the next rew est of the penultimate obs,
+                # because V(sT) = R(sT) = NR(sT-1,aT-1), so we can express without reference to T:
+                adv_dones = rew[flt] = value[flt] + self.gamma * next_rew_est[flt]
+    
+                loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt])
+                loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), log_prob_act_batch[flt])
+    
+                # just scaling the losses according to number of observations:
+                coef = flt.mean()
+                rew_loss = (1 - coef) * loss + coef * loss2
+    
+                # detach grads for next_rew?
+                next_rew_loss = torch.nn.MSELoss()(next_rew_est, next_rew)
+    
+                total_loss = rew_loss +  next_rew_loss * self.next_rew_loss_coef
+    
+                total_loss.backward()
+    
+                # Let model to handle the large batch-size with small gpu-memory
+                if grad_accumulation_cnt % grad_accumulation_steps == 0:
+                    torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_clip_norm)
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+                grad_accumulation_cnt += 1
+                rew_loss_list.append(rew_loss.item())
+                next_rew_loss_list.append(next_rew_loss.item())
+                total_loss_list.append(total_loss.item())
+    
+        rew, value = self.rew_model(h_batch)
+        rew_corr = torch.corrcoef(torch.stack((rew.squeeze(), rew_batch.squeeze())))[0,1].item()
+        val_corr = torch.corrcoef(torch.stack((value.squeeze(), value_batch.squeeze())))[0, 1].item()
+        #TODO: just directly upload to wandb?
+        summary = {
+            'Loss/total_rew_loss': np.mean(total_loss_list),
+            'Loss/rew_loss': np.mean(rew_loss_list),
+            'Loss/next_rew_loss': np.mean(next_rew_loss_list),
+            'Corr/rew_corr': rew_corr,
+            'Corr/value_corr': val_corr,
+        }
+        return summary
 
-        # Optimize policy & valueq
-        summary = self.optimize()
-        # Log the training-procedure
-        self.t += self.n_steps * self.n_envs
-        rew_batch, done_batch = self.storage.fetch_log_data()
-        if self.storage_valid is not None:
-            rew_batch_v, done_batch_v = self.storage_valid.fetch_log_data()
-        else:
-            rew_batch_v = done_batch_v = None
-        self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
-        self.logger.dump(summary)
-        if self.anneal_lr:
-            self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
-
-        if self.t > ((rew_checkpoint_cnt + 1) * learn_rew_every):
-            self.optimize_reward()
-
-        # Save the model
-        if self.t > ((checkpoint_cnt + 1) * save_every):
-            print("Saving model.")
-            torch.save({'model_state_dict': self.policy.state_dict(),
-                        'optimizer_state_dict': self.optimizer.state_dict()},
-                       self.logger.logdir + '/model_' + str(self.t) + '.pth')
-            checkpoint_cnt += 1
-    self.env.close()
-    if self.env_valid is not None:
-        self.env_valid.close()
+    def evaluate_correlation(self):
+        pass

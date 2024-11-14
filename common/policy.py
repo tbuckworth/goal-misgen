@@ -51,6 +51,36 @@ class CategoricalPolicy(nn.Module):
         v = self.fc_value(hidden).reshape(-1)
         return p, v, hidden
 
+class UniformPolicy(nn.Module):
+    def __init__(self, action_size, device):
+        """
+        embedder: (torch.Tensor) model to extract the embedding for observation
+        action_size: number of the categorical actions
+        """
+        super(UniformPolicy, self).__init__()
+        self.action_size = action_size
+        self.device = device
+        self.recurrent = False
+
+    def is_recurrent(self):
+        return self.recurrent
+
+    def forward(self, x, hx=None, masks=None):
+        bs = list(x.shape[:-1])
+        act_shape = bs + [self.action_size]
+        logits = torch.ones(act_shape).to(device=self.device)
+        log_probs = F.log_softmax(logits, dim=1)
+        p = Categorical(logits=log_probs)
+        return p, self.value(x), hx
+
+    def value(self, x):
+        bs = list(x.shape[:-1])
+        v_shape = bs + [1]
+        return torch.zeros(v_shape).to(device=self.device)
+
+    def forward_with_embedding(self, x):
+        return self.forward(x)
+
 
 class PolicyWrapperIRL(nn.Module):
     def __init__(self,policy, device):
