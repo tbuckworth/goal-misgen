@@ -17,6 +17,7 @@ class CategoricalPolicy(nn.Module):
         """ 
         super(CategoricalPolicy, self).__init__()
         self.embedder = embedder
+        self.action_size = action_size
         # small scale weight-initialization in policy enhances the stability        
         self.fc_policy = orthogonal_init(nn.Linear(self.embedder.output_dim, action_size), gain=0.01)
         self.fc_value = orthogonal_init(nn.Linear(self.embedder.output_dim, 1), gain=1.0)
