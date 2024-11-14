@@ -1,6 +1,6 @@
 from common.env.procgen_wrappers import *
 from common.logger import Logger
-from common.storage import Storage
+from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
 import os, time, argparse
@@ -64,6 +64,7 @@ def train(args):
 
     n_steps = hyperparameters.get('n_steps', 256)
     n_envs = hyperparameters.get('n_envs', 256)
+    algo = hyperparameters.get('algo', 'ppo')
 
     env = create_venv(args, hyperparameters)
     env_valid = create_venv(args, hyperparameters, is_valid=True)
@@ -112,7 +113,7 @@ def train(args):
     ## STORAGE ##
     #############
     print('INITIALIZING STORAGE...')
-    storage, storage_valid = initialize_storage(device, model, n_envs, n_steps, observation_shape)
+    storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
 
     ###########
     ## AGENT ##
@@ -154,11 +155,18 @@ def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, see
     return logdir
 
 
-def initialize_storage(device, model, n_envs, n_steps, observation_shape):
+def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     hidden_state_dim = model.output_dim
-    storage = Storage(observation_shape, hidden_state_dim, n_steps, n_envs, device)
-    storage_valid = Storage(observation_shape, hidden_state_dim, n_steps, n_envs, device)
-    return storage, storage_valid
+    if algo == 'ppo':
+        storage_cons = Storage
+    elif algo == 'ppo-lirl':
+        storage_cons = LirlStorage
+    else:
+        raise NotImplementedError (f"{algo} not implemented")
+    storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
+    storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
+    storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
+    return storage, storage_valid, storage_trusted
 
 
 def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkpoints, policy, storage, storage_valid):

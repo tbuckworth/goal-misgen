@@ -135,7 +135,7 @@ class Storage():
 
 class LirlStorage(Storage):
     def __init__(self, *args, **kwargs):
-        super(LirlStorage).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def collect_and_yield(self, indices):
         obs_batch = torch.FloatTensor(self.obs_batch[:-1]).reshape(-1, *self.obs_shape)[indices].to(self.device)

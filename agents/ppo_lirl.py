@@ -131,10 +131,10 @@ class PPO_Lirl(BaseAgent):
             generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                            recurrent=recurrent)
             for sample in generator:
-                obs_batch, hidden_state_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch = sample
+                obs_batch, nobs_batch, act_batch, done_batch, \
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _ = sample
                 mask_batch = (1 - done_batch)
-                dist_batch, value_batch, _ = self.policy(obs_batch, hidden_state_batch, mask_batch)
+                dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
                 # Clipped Surrogate Objective
                 log_prob_act_batch = dist_batch.log_prob(act_batch)
@@ -166,7 +166,7 @@ class PPO_Lirl(BaseAgent):
                 pi_loss_list.append(-pi_loss.item())
                 value_loss_list.append(-value_loss.item())
                 entropy_loss_list.append(entropy_loss.item())
-                l1_reg_list.append(l1_reg)
+                l1_reg_list.append(l1_reg.item())
                 total_loss_list.append(loss.item())
 
         summary = {

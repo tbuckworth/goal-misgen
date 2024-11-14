@@ -76,7 +76,7 @@ class UniformPolicy(nn.Module):
 
     def value(self, x):
         bs = list(x.shape[:-1])
-        v_shape = bs + [1]
+        v_shape = bs
         return torch.zeros(v_shape).to(device=self.device)
 
     def forward_with_embedding(self, x):

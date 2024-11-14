@@ -14,8 +14,6 @@ class PPO_LirlTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls, get_latest_model=None):
         num_checkpoints = 1
-        n_envs = 16
-        n_steps = 256
         seed = 42
         env_name = "ascent"
         exp_name = "ascent"
@@ -25,6 +23,9 @@ class PPO_LirlTest(unittest.TestCase):
         args = DictToArgs({"env_name":env_name})
 
         hyperparameters = get_hyperparameters(param_name)
+        n_steps = hyperparameters["n_steps"]
+        n_envs = hyperparameters["n_envs"]
+        algo = hyperparameters["algo"]
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         env = create_venv(args, hyperparameters)
@@ -39,8 +40,7 @@ class PPO_LirlTest(unittest.TestCase):
         rew_val_model = RewValModel(model.output_dim, hidden_dims, device)
         next_rew_model = NextRewModel(model.output_dim, hidden_dims, action_size, device)
 
-        storage, storage_valid = initialize_storage(device, model, n_envs, n_steps, observation_shape)
-        storage_trusted =  LirlStorage(observation_shape, model.output_dim, n_steps, n_envs, device)
+        storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
 
         ppo_lirl_params = dict(
             num_rew_updates=10,
