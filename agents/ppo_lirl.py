@@ -271,7 +271,6 @@ class PPO_Lirl(BaseAgent):
             generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                            recurrent=recurrent)
             for sample in generator:
-                # TODO: get nobs_batch going also return rew_batch
                 obs_batch, nobs_batch, act_batch, done_batch, \
                     old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
                 flt = done_batch.bool()

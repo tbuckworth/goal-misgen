@@ -240,3 +240,42 @@ class IdentityModel(nn.Module):
 
     def forward(self, x):
         return x
+
+
+class NextRewModel(nn.Module):
+    def __init__(self,
+                 input_dims=4,
+                 hidden_dims=[64, 64],
+                 **kwargs):
+        """
+        input_dim:     (int)  number of the input dimensions
+        hidden_dims:   (list) list of the dimensions for the hidden layers
+        use_batchnorm: (bool) whether to use batchnorm
+        """
+        super(NextRewModel, self).__init__()
+        self.embedder = lambda x: x
+        # Hidden layers
+        hidden_dims = [input_dims] + hidden_dims
+        layers = []
+        for i in range(len(hidden_dims) - 1):
+            in_features = hidden_dims[i]
+            out_features = hidden_dims[i + 1]
+            layers.append(nn.Linear(in_features, out_features))
+            if i < len(hidden_dims) - 2:
+                layers.append(nn.ReLU())
+        self.layers = nn.Sequential(*layers)
+        self.output_dim = hidden_dims[-1]
+        self.apply(orthogonal_init)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+    def embed_and_forward(self, obs, action=None):
+        x = self.embedder(obs)
+        if action is not None:
+            x = torch.concat((x, action.unsqueeze(-1)), dim=-1)
+        for layer in self.layers:
+            x = layer(x)
+        return x
