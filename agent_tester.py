@@ -38,7 +38,7 @@ class PPO_LirlTest(unittest.TestCase):
         model, policy = initialize_policy(device, hyperparameters, env, observation_shape)
 
         rew_val_model = RewValModel(model.output_dim, hidden_dims, device)
-        next_rew_model = NextRewModel(model.output_dim, hidden_dims, action_size, device)
+        next_rew_model = NextRewModel(model.output_dim + action_size, hidden_dims, action_size, device)
 
         storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
 

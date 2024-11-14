@@ -296,10 +296,11 @@ class NextRewModel(MlPLayers):
         # self.layers = nn.Sequential(*layers)
         self.layers = nn.Sequential(*self.generate_layers(input_dims, hidden_dims, self.output_dim))
         self.apply(orthogonal_init)
+        self.to(self.device)
 
     def forward(self, h, a):
-        a = torch.nn.functional.one_hot(a.to(torch.int64)).to(device=self.device).float()
-        x = torch.concat((h, a), dim=-1)
+        a_hot = torch.nn.functional.one_hot(a.to(torch.int64)).to(device=self.device).float()
+        x = torch.concat((h, a_hot), dim=-1)
         for layer in self.layers:
             x = layer(x)
         return x
@@ -323,6 +324,7 @@ class RewValModel(MlPLayers):
         self.rew_layers = nn.Sequential(*self.generate_layers(input_dims, hidden_dims, self.output_dim))
         self.val_layers = nn.Sequential(*self.generate_layers(input_dims, hidden_dims, self.output_dim))
         self.apply(orthogonal_init)
+        self.to(self.device)
 
     # def generate_layers(self, input_dims, hidden_dims, output_dim):
     #     hidden_dims = [input_dims] + hidden_dims
