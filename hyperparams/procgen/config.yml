@@ -101,7 +101,7 @@ ascent-mlp:
     final_relu: False
     l1_coef: 0.01
     anneal_lr: False
-    rew_epoch: 10
+    rew_epoch: 50
     rew_lr: 0.0001
 
 
