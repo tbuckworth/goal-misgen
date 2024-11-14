@@ -46,7 +46,7 @@ class PPO_LirlTest(unittest.TestCase):
 
         model, policy = initialize_policy(device, hyperparameters, env, observation_shape)
 
-        storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape,
+        storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps, observation_shape,
                                                                      algo)
 
         ppo_lirl_params = dict(

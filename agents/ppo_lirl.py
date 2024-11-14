@@ -41,6 +41,7 @@ class PPO_Lirl(BaseAgent):
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
                  storage_trusted=None,
+                 storage_trusted_val=None,
                  rew_epoch=10,
                  rew_lr=1e-5, **kwargs):
 
@@ -73,6 +74,7 @@ class PPO_Lirl(BaseAgent):
         self.use_gae = use_gae
         self.num_rew_updates = num_rew_updates
         self.storage_trusted = storage_trusted
+        self.storage_trusted_val = storage_trusted_val
 
     def predict(self, obs, hidden_state, done, policy=None):
         if policy is None:
@@ -189,12 +191,18 @@ class PPO_Lirl(BaseAgent):
         obs = self.env.reset()
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
+        self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env_valid,
+                              self.trusted_policy)
+        # Need to re-do this, so it's fresh for the env data collection:
+        obs = self.env.reset()
+        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        done = np.zeros(self.n_envs)
 
         if self.env_valid is not None:
             obs_v = self.env_valid.reset()
             hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
             done_v = np.zeros(self.n_envs)
-            self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted, self.env_valid,
+            self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
                                   self.trusted_policy)
             # Need to re-do this, so it's fresh for the valid env data collection:
             obs_v = self.env_valid.reset()
@@ -227,8 +235,8 @@ class PPO_Lirl(BaseAgent):
             if self.t > ((rew_checkpoint_cnt + 1) * learn_rew_every):
                 summary = self.optimize_reward()
                 with torch.no_grad():
-                    rew_corr = self.evaluate_correlation(self.storage)
-                    rew_corr_valid = self.evaluate_correlation(self.storage_trusted)
+                    rew_corr = self.evaluate_correlation(self.storage_trusted)
+                    rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
                 log_data = {
                     "timesteps": self.t,
                     "rew_corr": rew_corr,

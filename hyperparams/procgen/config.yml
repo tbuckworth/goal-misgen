@@ -102,7 +102,7 @@ ascent-mlp:
     l1_coef: 0.01
     anneal_lr: False
     rew_epoch: 10
-    rew_lr: 1e-5
+    rew_lr: 0.0001
 
 
 hard-500:

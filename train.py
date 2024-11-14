@@ -114,7 +114,7 @@ def train(args):
     ## STORAGE ##
     #############
     print('INITIALIZING STORAGE...')
-    storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
+    storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
 
     if algo == 'ppo-lirl':
         hidden_dims = hyperparameters.get("hidden_dims", [64, 64])
@@ -129,6 +129,7 @@ def train(args):
             inv_temp_rew_model=1.,
             next_rew_loss_coef=1.,
             storage_trusted=storage_trusted,
+            storage_trusted_val=storage_trusted_val,
             rew_epoch=rew_epoch,
             rew_lr=rew_lr,
         )
@@ -186,7 +187,9 @@ def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
-    return storage, storage_valid, storage_trusted
+    storage_trusted_val = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
+
+    return storage, storage_valid, storage_trusted, storage_trusted_val
 
 
 def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkpoints, policy, storage, storage_valid):
