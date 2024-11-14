@@ -41,10 +41,12 @@ class PPO_Lirl(BaseAgent):
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
                  storage_trusted=None,
+                 rew_epoch=10,
                  **kwargs):
 
         super(PPO_Lirl, self).__init__(env, policy, logger, storage, device,
                                        n_checkpoints, env_valid, storage_valid)
+        self.rew_epoch = rew_epoch
         self.trusted_policy = UniformPolicy(policy.action_size, device)
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
@@ -222,15 +224,17 @@ class PPO_Lirl(BaseAgent):
                 self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
 
             if self.t > ((rew_checkpoint_cnt + 1) * learn_rew_every):
-                self.optimize_reward()
+                summary = self.optimize_reward()
                 with torch.no_grad():
                     rew_corr = self.evaluate_correlation(self.storage)
                     rew_corr_valid = self.evaluate_correlation(self.storage_trusted)
-                wandb.log({
+                log_data = {
                     "timesteps": self.t,
                     "rew_corr": rew_corr,
                     "rew_corr_valid": rew_corr_valid,
-                })
+                }
+                log_data.update(summary)
+                wandb.log(log_data)
 
             # Save the model
             if self.t > ((checkpoint_cnt + 1) * save_every):
@@ -266,7 +270,7 @@ class PPO_Lirl(BaseAgent):
 
         self.rew_val_model.train()
         self.policy.eval()
-        for e in range(self.epoch):
+        for e in range(self.rew_epoch):
             recurrent = self.policy.is_recurrent()
             generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                            recurrent=recurrent)
@@ -331,6 +335,7 @@ class PPO_Lirl(BaseAgent):
             # 'Corr/value_corr': val_corr,
         }
         return summary
+
 
     def evaluate_correlation(self, storage):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch

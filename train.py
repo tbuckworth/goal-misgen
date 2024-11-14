@@ -118,6 +118,7 @@ def train(args):
 
     if algo == 'ppo-lirl':
         hidden_dims = hyperparameters.get("hidden_dims", [64, 64])
+        rew_epoch = hyperparameters.get("rew_epoch", 10)
         action_size = env.action_space.n
 
         ppo_lirl_params = dict(
@@ -127,6 +128,7 @@ def train(args):
             inv_temp_rew_model=1.,
             next_rew_loss_coef=1.,
             storage_trusted=storage_trusted,
+            rew_epoch=rew_epoch,
         )
         hyperparameters.update(ppo_lirl_params)
 
