@@ -1,5 +1,6 @@
 from common.env.procgen_wrappers import *
 from common.logger import Logger
+from common.model import RewValModel, NextRewModel
 from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
@@ -114,6 +115,21 @@ def train(args):
     #############
     print('INITIALIZING STORAGE...')
     storage, storage_valid, storage_trusted = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
+
+    if algo == 'ppo-lirl':
+        hidden_dims = hyperparameters.get("hidden_dims", [64, 64])
+        action_size = env.action_space.n
+
+        ppo_lirl_params = dict(
+            num_rew_updates=10,
+            rew_val_model=RewValModel(model.output_dim, hidden_dims, device),
+            next_rew_model=NextRewModel(model.output_dim + action_size, hidden_dims, action_size, device),
+            inv_temp_rew_model=1.,
+            next_rew_loss_coef=1.,
+            storage_trusted=storage_trusted,
+        )
+        hyperparameters.update(ppo_lirl_params)
+
 
     ###########
     ## AGENT ##
