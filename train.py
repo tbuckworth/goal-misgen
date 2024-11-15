@@ -96,7 +96,7 @@ def train(args):
         wandb_login()
         cfg = vars(args)
         cfg.update(hyperparameters)
-        wb_resume = "allow" if args.model_file is None else "must"
+        wb_resume = "allow"# if args.model_file is None else "must"
         wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
 
