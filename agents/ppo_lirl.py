@@ -1,6 +1,7 @@
 import pandas as pd
 import wandb
 
+from common import orthogonal_init
 from common.policy import UniformPolicy
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr, get_n_params
@@ -44,10 +45,13 @@ class PPO_Lirl(BaseAgent):
                  storage_trusted=None,
                  storage_trusted_val=None,
                  rew_epoch=10,
-                 rew_lr=1e-5, **kwargs):
+                 rew_lr=1e-5,
+                 reset_rew_model_weights=False,
+                 **kwargs):
 
         super(PPO_Lirl, self).__init__(env, policy, logger, storage, device,
                                        n_checkpoints, env_valid, storage_valid)
+        self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = True
         self.rew_epoch = rew_epoch
         self.trusted_policy = UniformPolicy(policy.action_size, device)
@@ -240,10 +244,10 @@ class PPO_Lirl(BaseAgent):
                 with torch.no_grad():
                     if self.print_ascent_rewards:
                         print("Train Env Rew:")
-                    rew_corr = self.evaluate_correlation(self.storage_trusted)
+                    rew_corr, logit_rew_corr = self.evaluate_correlation(self.storage_trusted)
                     if self.print_ascent_rewards:
                         print("Valid Env Rew:")
-                    rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
+                    rew_corr_valid, logit_rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
                     # if self.tempbool:
                     #     unique_states = np.arange(-self.env.n_pos_states, self.env.n_pos_states+1)
                     #     np_obs = self.env.obs(unique_states)
@@ -255,6 +259,8 @@ class PPO_Lirl(BaseAgent):
                     "timesteps": self.t,
                     "rew_corr": rew_corr,
                     "rew_corr_valid": rew_corr_valid,
+                    "logit_rew_corr": logit_rew_corr,
+                    "logit_rew_corr_valid": logit_rew_corr_valid,
                 }
                 log_data.update(summary)
                 wandb.log(log_data)
@@ -292,6 +298,10 @@ class PPO_Lirl(BaseAgent):
             self.mini_batch_size = batch_size
         grad_accumulation_steps = batch_size / self.mini_batch_size
         grad_accumulation_cnt = 1
+
+        if self.reset_rew_model_weights:
+            self.rew_val_model.apply(orthogonal_init)
+            self.next_rew_model.apply(orthogonal_init)
 
         self.rew_val_model.train()
         self.policy.eval()
@@ -373,12 +383,13 @@ class PPO_Lirl(BaseAgent):
         generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                   recurrent=recurrent)
         rew_tuples = [self.sample_next_rews(sample) for sample in generator]
-        rew_est, rew, obs, act = zip(*rew_tuples)
+        rew_est, rew, obs, act, log_probs = zip(*rew_tuples)
 
         rew_hat = torch.concat(list(rew_est))
         rew_batch = torch.concat(list(rew))
         obs_batch = torch.concat(list(obs))
         act_batch = torch.concat(list(act))
+        logp_batch = torch.concat(list(log_probs))
         if self.print_ascent_rewards:
             unq_obs_rew = torch.concat(
                 (
@@ -395,12 +406,12 @@ class PPO_Lirl(BaseAgent):
             df[int_cols] = df[int_cols].astype(np.int64)
             df[float_cols] = df[float_cols].round(decimals=2)
             print(df)
-
+        logit_rew_corr = torch.corrcoef(torch.stack((rew_hat.squeeze(), logp_batch)))[0, 1].item()
         rew_corr = torch.corrcoef(torch.stack((rew_hat.squeeze(), rew_batch.squeeze())))[0, 1].item()
-        return rew_corr
+        return rew_corr, logit_rew_corr
 
     def sample_next_rews(self, sample):
         obs_batch, _, act_batch, done_batch, _, _, _, _, rew_batch = sample
-        _, _, h_batch = self.policy.forward_with_embedding(obs_batch)
+        dist, _, h_batch = self.policy.forward_with_embedding(obs_batch)
         next_rew_est = self.next_rew_model(h_batch, act_batch)
         return next_rew_est, rew_batch, obs_batch, act_batch
