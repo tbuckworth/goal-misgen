@@ -40,8 +40,8 @@ if __name__ == '__main__':
     args.env_name ="ascent"
     args.param_name ="ascent-mlp"
     args.num_timesteps= int(1e7)
-    args.num_timesteps= int(256*256*30)
-    args.num_checkpoints= 10
+    args.num_timesteps= int(256*256*150)
+    args.num_checkpoints= 1
     args.seed = 1080
     args.use_wandb = True
     args.model_file = "logs/train/ascent/ascent/2024-11-15__13-59-43__seed_1080/model_10027008.pth"
