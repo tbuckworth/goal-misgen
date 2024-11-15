@@ -395,7 +395,7 @@ class PPO_Lirl(BaseAgent):
                 (
                     obs_batch[..., (0, 2, 4)],
                     act_batch.unsqueeze(-1),
-                    rew_hat,
+                    rew_hat-rew_hat.min(),
                     rew_batch.unsqueeze(-1)
                 ),
                 dim=-1).unique(dim=0)

@@ -102,7 +102,7 @@ ascent-mlp:
     l1_coef: 0.01
     anneal_lr: False
     rew_epoch: 100
-    rew_lr: 0.001
+    rew_lr: 0.01
     dense_rewards: False
     num_rew_updates: 150
     n_pos_states: 20
