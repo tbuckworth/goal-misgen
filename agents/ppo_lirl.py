@@ -414,4 +414,4 @@ class PPO_Lirl(BaseAgent):
         obs_batch, _, act_batch, done_batch, _, _, _, _, rew_batch = sample
         dist, _, h_batch = self.policy.forward_with_embedding(obs_batch)
         next_rew_est = self.next_rew_model(h_batch, act_batch)
-        return next_rew_est, rew_batch, obs_batch, act_batch
+        return next_rew_est, rew_batch, obs_batch, act_batch, dist.log_prob(act_batch)
