@@ -104,7 +104,8 @@ ascent-mlp:
     rew_epoch: 50
     rew_lr: 0.0001
     dense_rewards: False
-
+    num_rew_updates: 100
+    n_pos_states: 1
 
 hard-500:
     algo: ppo

@@ -47,6 +47,7 @@ class PPO_Lirl(BaseAgent):
 
         super(PPO_Lirl, self).__init__(env, policy, logger, storage, device,
                                        n_checkpoints, env_valid, storage_valid)
+        self.print_ascent_rewards = True
         self.rew_epoch = rew_epoch
         self.trusted_policy = UniformPolicy(policy.action_size, device)
         self.next_rew_loss_coef = next_rew_loss_coef
@@ -64,7 +65,8 @@ class PPO_Lirl(BaseAgent):
         self.lmbda = lmbda
         self.learning_rate = learning_rate
         self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
-        self.rew_optimizer = optim.Adam(list(self.rew_val_model.parameters())+list(self.next_rew_model.parameters()), lr=rew_lr, eps=1e-5)
+        self.rew_optimizer = optim.Adam(list(self.rew_val_model.parameters()) + list(self.next_rew_model.parameters()),
+                                        lr=rew_lr, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -237,6 +239,13 @@ class PPO_Lirl(BaseAgent):
                 with torch.no_grad():
                     rew_corr = self.evaluate_correlation(self.storage_trusted)
                     rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
+                    # if self.tempbool:
+                    #     unique_states = np.arange(-self.env.n_pos_states, self.env.n_pos_states+1)
+                    #     np_obs = self.env.obs(unique_states)
+                    #     obs = torch.FloatTensor(obs).to(device=self.device)
+                    #     _, _, h = self.policy.forward_with_embedding(obs)
+                    #     rew, _ = self.rew_val_model(h)
+
                 log_data = {
                     "timesteps": self.t,
                     "rew_corr": rew_corr,
@@ -346,7 +355,6 @@ class PPO_Lirl(BaseAgent):
         }
         return summary
 
-
     def evaluate_correlation(self, storage):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
@@ -358,18 +366,30 @@ class PPO_Lirl(BaseAgent):
 
         recurrent = self.policy.is_recurrent()
         generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
-                                                               recurrent=recurrent)
+                                                  recurrent=recurrent)
         rew_tuples = [self.sample_next_rews(sample) for sample in generator]
-        rew_est, rew = zip(*rew_tuples)
+        rew_est, rew, obs, act = zip(*rew_tuples)
 
         rew_hat = torch.concat(list(rew_est))
         rew_batch = torch.concat(list(rew))
+        obs_batch = torch.concat(list(obs))
+        act_batch = torch.concat(list(act))
+        if self.print_ascent_rewards:
+            unq_obs_rew = torch.concat(
+                (
+                    obs_batch[..., 2].unsqueeze(-1),
+                    act_batch.unsqueeze(-1),
+                    rew_hat,
+                    rew_batch.unsqueeze(-1)
+                ),
+                dim=-1).unique(dim=0)
+            print(unq_obs_rew.detach().cpu().numpy().round(decimals=2))
+
         rew_corr = torch.corrcoef(torch.stack((rew_hat.squeeze(), rew_batch.squeeze())))[0, 1].item()
         return rew_corr
-
 
     def sample_next_rews(self, sample):
         obs_batch, _, act_batch, done_batch, _, _, _, _, rew_batch = sample
         _, _, h_batch = self.policy.forward_with_embedding(obs_batch)
         next_rew_est = self.next_rew_model(h_batch, act_batch)
-        return next_rew_est, rew_batch
+        return next_rew_est, rew_batch, obs_batch, act_batch

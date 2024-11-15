@@ -121,9 +121,10 @@ def train(args):
         rew_epoch = hyperparameters.get("rew_epoch", 10)
         rew_lr = hyperparameters.get("rew_lr", 1e-5)
         action_size = env.action_space.n
+        num_rew_updates = hyperparameters.get("num_rew_updates", 10)
 
         ppo_lirl_params = dict(
-            num_rew_updates=10,
+            num_rew_updates=num_rew_updates,
             rew_val_model=RewValModel(model.output_dim, hidden_dims, device),
             next_rew_model=NextRewModel(model.output_dim + action_size, hidden_dims, action_size, device),
             inv_temp_rew_model=1.,

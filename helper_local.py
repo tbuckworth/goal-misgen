@@ -20,7 +20,7 @@ def create_venv(args, hyperparameters, is_valid=False):
     if args.env_name == "ascent":
         return AscentEnv(num_envs=hyperparameters.get('n_envs', 256),
                          shifted=is_valid,
-                         num_positive_states=hyperparameters.get('n_states', 20),
+                         num_positive_states=hyperparameters.get('n_pos_states', 20),
                          dense_rewards=hyperparameters.get('dense_rewards', False),
                          )
 
