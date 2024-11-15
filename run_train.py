@@ -40,7 +40,7 @@ if __name__ == '__main__':
     args.env_name ="ascent"
     args.param_name ="ascent-mlp"
     args.num_timesteps= int(1e7)
-    args.num_timesteps= int(256*256*1)
+    args.num_timesteps= int(256*256*1) + 1
     args.num_checkpoints= 1
     args.seed = 1080
     args.use_wandb = True
