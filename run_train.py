@@ -44,7 +44,7 @@ if __name__ == '__main__':
     args.num_checkpoints= 10
     args.seed = 1080
     args.use_wandb = True
-    args.model_file = "logs/train/ascent/ascent/2024-11-15__13-59-43__seed_1080"
+    args.model_file = "logs/train/ascent/ascent/2024-11-15__13-59-43__seed_1080/model_10027008.pth"
 
 
     train(args)
