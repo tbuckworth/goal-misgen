@@ -28,9 +28,9 @@ class AscentEnv():
         obs[..., 4:6] = obs[..., 2:4] + 1
         obs[..., 0:2] = obs[..., 2:4] - 1
         if self.shifted:
-            obs[..., 1] = self.n_states - state - 1
-            obs[..., 3] = self.n_states - state - 2
-            obs[..., 5] = self.n_states - state - 3
+            obs[..., 1] = -(state-1)#self.n_pos_states - state - 1
+            obs[..., 3] = -state #self.n_pos_states - state - 2
+            obs[..., 5] = -(state+1)#self.n_pos_states - state - 3
 
         obs[state == self.n_pos_states] = 0
         obs[state == -self.n_pos_states] = 0

@@ -85,7 +85,7 @@ def train(args):
     print('INITIALIZING LOGGER...')
 
     logdir = create_logdir(args.model_file, env_name, exp_name, get_latest_model, listdir, seed)
-
+    hyperparameters["logdir"] = logdir
     print(f'Logging to {logdir}')
 
     cfg = vars(args)
