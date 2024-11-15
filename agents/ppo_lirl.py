@@ -270,7 +270,9 @@ class PPO_Lirl(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
     def optimize_reward(self):
-        rew_loss_list, next_rew_loss_list, total_loss_list = [], [], []
+        rew_loss_list_start, next_rew_loss_list_start, total_loss_list_start = [], [], []
+        rew_loss_list_end, next_rew_loss_list_end, total_loss_list_end = [], [], []
+
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -327,23 +329,20 @@ class PPO_Lirl(BaseAgent):
                     self.rew_optimizer.zero_grad()
                 grad_accumulation_cnt += 1
                 if e == 0:
-                    rew_loss_list.append(rew_loss.item())
-                    next_rew_loss_list.append(next_rew_loss.item())
-                    total_loss_list.append(total_loss.item())
-
-        # rew bit is misguided - use the logic from evaluate_correlation.
-        # rew, value = self.rew_model(h_batch)
-        #
-        # rew_corr = torch.corrcoef(torch.stack((rew.squeeze(), rew_batch.squeeze())))[0, 1].item()
-        # val_corr = torch.corrcoef(torch.stack((value.squeeze(), value_batch.squeeze())))[0, 1].item()
-        # TODO: just directly upload to wandb?
+                    rew_loss_list_start.append(rew_loss.item())
+                    next_rew_loss_list_start.append(next_rew_loss.item())
+                    total_loss_list_start.append(total_loss.item())
+                if e == self.rew_epoch - 1:
+                    rew_loss_list_end.append(rew_loss.item())
+                    next_rew_loss_list_end.append(next_rew_loss.item())
+                    total_loss_list_end.append(total_loss.item())
         summary = {
-            'Loss/total_rew_loss': np.mean(total_loss_list),
-            'Loss/rew_loss': np.mean(rew_loss_list),
-            'Loss/next_rew_loss': np.mean(next_rew_loss_list),
-            
-            # 'Corr/rew_corr': rew_corr,
-            # 'Corr/value_corr': val_corr,
+            'Loss/total_rew_loss_start': np.mean(total_loss_list_start),
+            'Loss/rew_loss_start': np.mean(rew_loss_list_start),
+            'Loss/next_rew_loss_start': np.mean(next_rew_loss_list_start),
+            'Loss/total_rew_loss_end': np.mean(total_loss_list_end),
+            'Loss/rew_loss_end': np.mean(rew_loss_list_end),
+            'Loss/next_rew_loss_end': np.mean(next_rew_loss_list_end),
         }
         return summary
 
