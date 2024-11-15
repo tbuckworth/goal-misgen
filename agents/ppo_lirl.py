@@ -47,10 +47,12 @@ class PPO_Lirl(BaseAgent):
                  rew_epoch=10,
                  rew_lr=1e-5,
                  reset_rew_model_weights=False,
+                 rew_learns_from_trusted_rollouts=False,
                  **kwargs):
 
         super(PPO_Lirl, self).__init__(env, policy, logger, storage, device,
                                        n_checkpoints, env_valid, storage_valid)
+        self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = True
         self.rew_epoch = rew_epoch
@@ -307,8 +309,13 @@ class PPO_Lirl(BaseAgent):
         self.policy.eval()
         for e in range(self.rew_epoch):
             recurrent = self.policy.is_recurrent()
-            generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+            storage = self.storage
+            if self.rew_learns_from_trusted_rollouts:
+                storage = self.storage_trusted
+            generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                            recurrent=recurrent)
+            rew_losses = []
+            next_rew_losses = []
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
                     old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
@@ -352,6 +359,8 @@ class PPO_Lirl(BaseAgent):
                     self.rew_optimizer.step()
                     self.rew_optimizer.zero_grad()
                 grad_accumulation_cnt += 1
+                rew_losses.append(rew_loss.item())
+                next_rew_losses.append(next_rew_loss.item())
                 if e == 0:
                     rew_loss_list_start.append(rew_loss.item())
                     next_rew_loss_list_start.append(next_rew_loss.item())
@@ -360,6 +369,12 @@ class PPO_Lirl(BaseAgent):
                     rew_loss_list_end.append(rew_loss.item())
                     next_rew_loss_list_end.append(next_rew_loss.item())
                     total_loss_list_end.append(total_loss.item())
+            if self.rew_learns_from_trusted_rollouts:
+                wandb.log({
+                    'Loss/epoch': e,
+                    'Loss/rew_loss': np.mean(rew_losses),
+                    'Loss/next_rew_loss': np.mean(next_rew_losses)
+                })
         summary = {
             'Loss/total_rew_loss_start': np.mean(total_loss_list_start),
             'Loss/rew_loss_start': np.mean(rew_loss_list_start),
