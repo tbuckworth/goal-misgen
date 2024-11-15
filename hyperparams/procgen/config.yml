@@ -105,7 +105,7 @@ ascent-mlp:
     rew_lr: 0.0001
     dense_rewards: False
     num_rew_updates: 1
-    n_pos_states: 20
+    n_pos_states: 1
     reset_rew_model_weights: True
 
 hard-500:
