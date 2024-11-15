@@ -107,6 +107,7 @@ ascent-mlp:
     num_rew_updates: 150
     n_pos_states: 20
     reset_rew_model_weights: False
+    hidden_dims: [128, 128, 128]
 
 hard-500:
     algo: ppo
