@@ -1,3 +1,4 @@
+import pandas as pd
 import wandb
 
 from common.policy import UniformPolicy
@@ -237,7 +238,11 @@ class PPO_Lirl(BaseAgent):
             if self.t > ((rew_checkpoint_cnt + 1) * learn_rew_every):
                 summary = self.optimize_reward()
                 with torch.no_grad():
+                    if self.print_ascent_rewards:
+                        print("Train Env Rew:")
                     rew_corr = self.evaluate_correlation(self.storage_trusted)
+                    if self.print_ascent_rewards:
+                        print("Valid Env Rew:")
                     rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
                     # if self.tempbool:
                     #     unique_states = np.arange(-self.env.n_pos_states, self.env.n_pos_states+1)
@@ -317,7 +322,7 @@ class PPO_Lirl(BaseAgent):
                 # because V(sT) = R(sT) = NR(sT-1,aT-1), so we can express without reference to T:
                 adv_dones = rew[flt] = value[flt] + self.gamma * next_rew_est[flt]
 
-                loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt])
+                loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt]) if not flt.all() else 0
                 loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), log_prob_act_batch[flt])
 
                 # just scaling the losses according to number of observations:
@@ -377,13 +382,19 @@ class PPO_Lirl(BaseAgent):
         if self.print_ascent_rewards:
             unq_obs_rew = torch.concat(
                 (
-                    obs_batch[..., 2].unsqueeze(-1),
+                    obs_batch[..., (0, 2, 4)],
                     act_batch.unsqueeze(-1),
                     rew_hat,
                     rew_batch.unsqueeze(-1)
                 ),
                 dim=-1).unique(dim=0)
-            print(unq_obs_rew.detach().cpu().numpy().round(decimals=2))
+            df = pd.DataFrame(data=unq_obs_rew.detach().cpu().numpy(),
+                              columns=["Left", "Middle", "Right", "Act", "Pred Rew", "Rew"])
+            int_cols = ["Left", "Middle", "Right", "Act", "Rew"]
+            float_cols = ["Pred Rew"]
+            df[int_cols] = df[int_cols].astype(np.int64)
+            df[float_cols] = df[float_cols].round(decimals=2)
+            print(df)
 
         rew_corr = torch.corrcoef(torch.stack((rew_hat.squeeze(), rew_batch.squeeze())))[0, 1].item()
         return rew_corr

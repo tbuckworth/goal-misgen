@@ -9,6 +9,12 @@ class AscenderTest(unittest.TestCase):
         from common.ascent_env import AscentEnv
         cls.env = AscentEnv(num_envs=5, shifted=False)
 
+    def test_observe(self):
+        obs, rew, done, _ = self.env.observe()
+        print(obs)
+
+        print(obs)
+
     def test_something(self):
         self.env.state = np.arange(5)
         obs, rew, done, _ = self.env.observe()
