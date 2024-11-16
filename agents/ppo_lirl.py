@@ -337,7 +337,7 @@ class PPO_Lirl(BaseAgent):
                 adv = rew[~flt] - value[~flt] + self.gamma * next_val[~flt]
                 # instead we use the next rew est of the penultimate obs,
                 # because V(sT) = R(sT) = NR(sT-1,aT-1), so we can express without reference to T:
-                adv_dones = rew[flt] = value[flt] + self.gamma * next_rew_est[flt]
+                adv_dones = rew[flt] - value[flt] + self.gamma * next_rew_est[flt]
 
                 loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt]) if not flt.all() else 0
                 loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), log_prob_act_batch[flt])
