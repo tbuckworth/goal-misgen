@@ -341,7 +341,7 @@ class PPO_Lirl(BaseAgent):
                 rew_loss = (1 - coef) * loss + coef * loss2
 
                 # detach grads for next_rew?
-                next_rew_loss = torch.nn.MSELoss()(next_rew_est, next_rew)
+                next_rew_loss = torch.nn.MSELoss()(next_rew_est, next_rew.detach())
 
                 total_loss = rew_loss + next_rew_loss * self.next_rew_loss_coef
 
