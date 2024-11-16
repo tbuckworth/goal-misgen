@@ -116,73 +116,21 @@ def select_next_hyperparameters(X, y, bounds, greater_is_better=True):
     return hparams
 
 
-def run_pets_hyperparameters(hparams):
-    from pets.pets import run_pets
-    parser = argparse.ArgumentParser()
-    parser = add_pets_args(parser)
-    args = parser.parse_args()
-    args_dict = vars(args)
-    args_dict.update(hparams)
-    run_pets(DictToArgs(args_dict))
-
-
 def run_next_hyperparameters(hparams):
-    from train import train_ppo
+    from train import train
+    parser = argparse.ArgumentParser()
+    parser = add_training_args(parser)
+    args = parser.parse_args()
+
     parser_dict = add_training_args_dict()
     parser_dict.update(hparams)
     args = DictToArgs(parser_dict)
-    train_ppo(args)
+    train(args)
 
 
-def run_hp_for_espl(hparams):
-    from run_espl import run_espl_x_squared
-    parser = argparse.ArgumentParser()
-    parser = add_espl_args(parser)
-    args = parser.parse_args()
-    args_dict = vars(args)
-    args_dict.update(hparams)
-    run_espl_x_squared(DictToArgs(args_dict))
-
-
-def run_graph_hyperparameters(hparams):
-    from graph_sr import run_graph_neurosymbolic_search
-    parser_dict = add_training_args_dict()
-    parser_dict.update(hparams)
-    args = DictToArgs(parser_dict)
-    run_graph_neurosymbolic_search(args)
-
-
-def run_double_graph_hyperparameters(hparams):
-    from double_graph_sr import run_double_graph_neurosymbolic_search
-    parser_dict = add_symbreg_args_dict()
-    parser_dict.update(hparams)
-    args = DictToArgs(parser_dict)
-    run_double_graph_neurosymbolic_search(args)
-
-
-def graph_ppo_multi_sr(hparams):
-    from graph_ppo_sr_multi import run_graph_ppo_multi_sr
-    parser = argparse.ArgumentParser()
-    parser = add_symbreg_args(parser)
-    args = parser.parse_args()
-    args_dict = vars(args)
-    args_dict.update(hparams)
-    run_graph_ppo_multi_sr(DictToArgs(args_dict))
-
-
-def inspect_hparams(X, y, bounds, fixed):
-    cuttoff = 495
-    cuttoff = y.max()
-    cuttoff = 485
-    X["flt"] = y >= cuttoff
-    h_stats = X.pivot_table(columns="flt", aggfunc=["mean", "std", "count"])
-    t, p = ttest_ind_from_stats(h_stats[('mean', True)], h_stats[('std', True)], h_stats['count', True],
-                                h_stats[('mean', False)], h_stats[('std', False)], h_stats['count', False])
-    h_stats[('p_val', None)] = p
-    h_stats = h_stats.drop(columns=[("count", False), ("count", True)])
-    print(h_stats)
-
-    pass
+def get_project(env_name, exp_name):
+    #TODO: make this real
+    return "goal-misgen"
 
 
 def optimize_hyperparams(bounds,
