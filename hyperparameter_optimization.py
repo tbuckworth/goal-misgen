@@ -139,7 +139,7 @@ def optimize_hyperparams(bounds,
                          opt_metric="summary.mean_episode_rewards",
                          greater_is_better=True):
     strings = {k: v for k, v in fixed.items() if isinstance(v, list) and k != "wandb_tags"}
-    string_select = {k: np.random.choice(v) for k, v in strings.items()}
+    string_select = {k: v[np.random.choice(len(v))] for k, v in strings.items()}
     if "env_name" in string_select.keys():
         project = get_project(string_select["env_name"], fixed["exp_name"])
     try:
@@ -212,20 +212,8 @@ def ppo():
     bounds = {
         "rew_lr": [0.0001, 0.05],
     }
-    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.rew_loss")
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
 
 
 if __name__ == "__main__":
-    # import faulthandler
-    # faulthandler.enable()
-    # ppo()
-    # goal_seeker()
     ppo()
-    # ipl_coinrun()
-    # ipl_cartpole()
-    # espl_x_squared()
-    # cartpole_graph_ppo()
-    # graph_ppo_sr_ft_continuous()
-    # humanoid_graph_ppo()
-    # double_graph_symbreg_ft_hparams()
-    # pets_graph_transition_cartpole()
