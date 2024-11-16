@@ -101,14 +101,14 @@ ascent-mlp:
     final_relu: False
     l1_coef: 0.01
     anneal_lr: False
-    rew_epoch: 10000
+    rew_epoch: 100
     rew_lr: 0.01
     dense_rewards: False
-    num_rew_updates: 1
+    num_rew_updates: 10
     n_pos_states: 20
     reset_rew_model_weights: False
-    hidden_dims: [128, 128, 128]
-    rew_learns_from_trusted_rollouts: True
+    hidden_dims: [64, 64]
+    rew_learns_from_trusted_rollouts: False
 
 hard-500:
     algo: ppo
