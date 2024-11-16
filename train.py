@@ -44,6 +44,12 @@ def train(args):
     ####################
     print('[LOADING HYPERPARAMETERS...]')
     hyperparameters = get_hyperparameters(param_name)
+
+    # override hyperparmeters:
+    for var_name in hyperparameters.keys():
+        if var_name in args.__dict__.keys() and args.__dict__[var_name] is not None:
+            hyperparameters[var_name] = args.__dict__[var_name]
+
     for key, value in hyperparameters.items():
         print(key, ':', value)
 

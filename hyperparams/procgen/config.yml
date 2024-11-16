@@ -82,7 +82,7 @@ ascent-mlp:
     algo: ppo-lirl
     n_envs: 256
     n_steps: 256
-    epoch: 0
+    epoch: 3
     mini_batch_per_epoch: 8
     mini_batch_size: 8192
     gamma: 0.999
@@ -114,7 +114,7 @@ hard-500:
     algo: ppo
     n_envs: 256 
     n_steps: 256
-    epoch: 0
+    epoch: 3
     mini_batch_per_epoch: 8
     mini_batch_size: 8192
     gamma: 0.999
