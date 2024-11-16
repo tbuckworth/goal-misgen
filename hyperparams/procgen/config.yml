@@ -82,7 +82,7 @@ ascent-mlp:
     algo: ppo-lirl
     n_envs: 256
     n_steps: 256
-    epoch: 3
+    epoch: 0
     mini_batch_per_epoch: 8
     mini_batch_size: 8192
     gamma: 0.999
@@ -101,14 +101,14 @@ ascent-mlp:
     final_relu: False
     l1_coef: 0.01
     anneal_lr: False
-    rew_epoch: 100
+    rew_epoch: 10000
     rew_lr: 0.01
     dense_rewards: False
-    num_rew_updates: 10
+    num_rew_updates: 1
     n_pos_states: 20
     reset_rew_model_weights: False
     hidden_dims: [64, 64]
-    rew_learns_from_trusted_rollouts: False
+    rew_learns_from_trusted_rollouts: True
 
 hard-500:
     algo: ppo
