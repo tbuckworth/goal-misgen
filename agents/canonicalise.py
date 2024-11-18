@@ -55,7 +55,7 @@ class Canoncicaliser(BaseAgent):
 
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
-        self.print_ascent_rewards = True
+        self.print_ascent_rewards = False
         self.trusted_policy = UniformPolicy(policy.action_size, device)
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
@@ -130,11 +130,6 @@ class Canoncicaliser(BaseAgent):
         return act.detach().cpu().numpy(), log_prob_act, value, obs
 
     def train(self, num_timesteps):
-        learn_rew_every = num_timesteps // self.num_rew_updates
-        rew_checkpoint_cnt = 0
-        save_every = num_timesteps // self.num_checkpoints
-        checkpoint_cnt = 0
-
         # Collect supervised data for unshifted env
         obs = self.env.reset()
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
@@ -175,26 +170,15 @@ class Canoncicaliser(BaseAgent):
                 print("Valid Env Rew:")
             df_valid = self.canonicalise_and_evaluate(self.storage_trusted_val)
 
-            joined_df = pd.merge(df_train, df_valid, on=["ID"])
+            df_train["Env"] = "Train"
+            df_valid["Env"] = "Valid"
+            comb = pd.concat([df_train, df_valid])
+            pivoted_df = comb.pivot(index=["Norm","Metric"],columns="Env", values="Distance").reset_index()
+            wandb.log({
+                "distances": wandb.Table(dataframe=comb),
+                "distances_pivoted": wandb.Table(dataframe=pivoted_df),
+            })
 
-            # Convert the joined DataFrame back to a W&B Table
-            joined_table = wandb.Table(dataframe=joined_df)
-        # log_data = {
-        #     "timesteps": self.t,
-        #     "dist_train": 0,
-        #     "dist_valid": dist_valid,
-        # }
-        # log_data.update(summary)
-        # wandb.log(log_data)
-        # rew_checkpoint_cnt += 1
-
-        # Save the model
-        if self.t > ((checkpoint_cnt + 1) * save_every):
-            print("Saving model.")
-            torch.save({'model_state_dict': self.policy.state_dict(),
-                        'optimizer_state_dict': self.value_optimizer.state_dict()},
-                       self.logger.logdir + '/model_' + str(self.t) + '.pth')
-            checkpoint_cnt += 1
         self.env.close()
         if self.env_valid is not None:
             self.env_valid.close()
@@ -235,12 +219,12 @@ class Canoncicaliser(BaseAgent):
                 obs_batch, nobs_batch, act_batch, done_batch, \
                     old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
 
-                value_batch = self.val_model(obs_batch)
-                next_value_batch = self.val_model(nobs_batch)
+                value_batch = self.val_model(obs_batch).squeeze()
+                next_value_batch = self.val_model(nobs_batch).squeeze()
 
                 target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
 
-                value_loss = nn.MSELoss()(target - value_batch)
+                value_loss = nn.MSELoss()(target, value_batch)
 
                 value_loss.backward()
 
@@ -268,8 +252,8 @@ class Canoncicaliser(BaseAgent):
         rew_tuples = [self.sample_next_data(sample) for sample in generator]
         rew, obs, act, value, next_value, log_probs, dones = zip(*rew_tuples)
 
-        val_batch = torch.concat(list(value))
-        next_val_batch = torch.concat(list(next_value))
+        val_batch = torch.concat(list(value)).squeeze()
+        next_val_batch = torch.concat(list(next_value)).squeeze()
         rew_batch = torch.concat(list(rew))
         obs_batch = torch.concat(list(obs))
         act_batch = torch.concat(list(act))
@@ -287,17 +271,19 @@ class Canoncicaliser(BaseAgent):
         }
 
         dist_funcs = {
-            "l1_dist": lambda x, y: norm_funcs["l1_norm"](x - y),
-            "l2_dist": lambda x, y: norm_funcs["l1_norm"](x - y),
+            "l1_dist": lambda x, y: (x - y).abs().mean(),
+            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
         }
         # dist_table = wandb.Table(columns=["Norm", "Metric", "Env", "Distance"])
-        dists = {}
+        # dists = {}
+        data = []
         for norm_name, normalize in norm_funcs.items():
             for dist_name, distance in dist_funcs.items():
-                if norm_name not in dists.keys():
-                    dists[norm_name] = {}
+                # if norm_name not in dists.keys():
+                #     dists[norm_name] = {}
                 dist = distance(normalize(canon_logp), normalize(canon_true_r))
-                dists[norm_name][dist_name] = dist
+                # dists[norm_name][dist_name] = dist
+                data.append({'Norm': norm_name, 'Metric': dist_name, 'Distance': dist.item()})
                 # dist_table.add_data(norm_name, dist_name, env_type, dist)
 
         # if self.norm_func == "l1":
@@ -349,7 +335,7 @@ class Canoncicaliser(BaseAgent):
             df[float_cols] = df[float_cols].round(decimals=2)
             print(df)
 
-        return pd.DataFrame(dists, columns=["Norm", "Metric", "Distance"])
+        return pd.DataFrame(data)#dists, columns=["Norm", "Metric", "Distance"])
 
     def sample_next_data(self, sample):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample

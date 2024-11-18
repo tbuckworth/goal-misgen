@@ -138,8 +138,12 @@ def train(args):
         hyperparameters.update(ppo_lirl_params)
     if algo == 'canon':
         hidden_dims = hyperparameters.get("hidden_dims", [32])
+        value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+        value_model.to(device)
         canon_params = dict(
-            val_model=MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+            val_model=value_model,
+            storage_trusted=storage_trusted,
+            storage_trusted_val=storage_trusted_val,
         )
         hyperparameters.update(canon_params)
 
