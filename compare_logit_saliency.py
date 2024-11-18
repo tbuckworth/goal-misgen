@@ -141,6 +141,11 @@ def create_barchart_as_numpy(categories, values, width_pixels, height_pixels, dp
 # barchart_array = create_barchart_as_numpy(width_pixels, height_pixels, dpi=100)
 # print(barchart_array.shape)  # Should print (480, 640, 4)
 
+def plot_obs(obs):
+    res = obs.squeeze().transpose(1, 2, 0)
+    plt.imshow(res)
+    plt.show()
+
 
 def main(args, barchart=False):
 
@@ -285,22 +290,22 @@ def main(args, barchart=False):
 
     obs = shifted_agent.env.reset()
     hidden_state = np.zeros((shifted_agent.n_envs, shifted_agent.storage.hidden_state_size))
-    # done = np.zeros(shifted_agent.n_envs)
+    dones = np.zeros(shifted_agent.n_envs)
 
     shifted_agent.policy.eval()
     unshifted_agent.policy.eval()
     n_pics = 0
     while n_pics < args.n_pics: # = 256
-        act, log_prob_act, value, _, value_saliency_obs = shifted_agent.predict_w_value_saliency(obs, hidden_state, done)
+        act, log_prob_act, value, _, value_saliency_obs = shifted_agent.predict_w_value_saliency(obs, hidden_state, dones)
         next_obs, rew, done, info = shifted_agent.env.step(act)
 
         if done:
             logit_saliency_obs = shifted_agent.predict_for_logit_saliency(obs, act)
-            _,_,_, _, value_saliency_obs_unshifted = unshifted_agent.predict_w_value_saliency(obs, hidden_state, done)
-            logit_saliency_obs_unshifted = unshifted_agent.predict_for_logit_saliency(obs, act)
+            _,_,_, _, value_saliency_obs_unshifted = unshifted_agent.predict_w_value_saliency(obs, hidden_state, dones)
+            logit_saliency_obs_unshifted = unshifted_agent.predict_for_logit_saliency(obs, act, all_acts=args.all_acts)
 
-            log_prob_act = log_prob_act.detach().cpu().numpy()
-            value = value.detach().cpu().numpy()
+            # log_prob_act = log_prob_act.detach().cpu().numpy()
+            # value = value.detach().cpu().numpy()
 
             obs_copy, v_grad_vid = apply_saliency(obs, value_saliency_obs)
             _, l_grad_vid = apply_saliency(obs, logit_saliency_obs)
@@ -310,8 +315,6 @@ def main(args, barchart=False):
 
 
             obs_copy = obs_copy.transpose((1,0,2))
-            obs = next_obs
-            
             
             top_image = np.concatenate((obs_copy, obs_copy), axis=1)
             mid_image = np.concatenate((v_grad_vid, unv_grad_vid), axis=1)
@@ -323,7 +326,7 @@ def main(args, barchart=False):
             plt.savefig(logdir_saliency_value + f"/sal_img{n_pics}.png")
             n_pics += 1
 
-
+        obs = next_obs
 
         #     shifted_agent.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
         #     obs = next_obs
@@ -460,5 +463,6 @@ if __name__=='__main__':
     args.level = "block3"
     args.n_pics = 30
     args.fig_only = True
+    args.all_acts = True
     main(args)
     

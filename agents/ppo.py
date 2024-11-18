@@ -80,13 +80,16 @@ class PPO(BaseAgent):
 
         return act.detach().cpu().numpy(), log_prob_act.detach().cpu().numpy(), value.detach().cpu().numpy(), hidden_state.detach().cpu().numpy(), obs.grad.data.detach().cpu().numpy()
 
-    def predict_for_logit_saliency(self, obs, act):
+    def predict_for_logit_saliency(self, obs, act, all_acts=False):
         obs = torch.FloatTensor(obs).to(device=self.device)
         obs.requires_grad_()
         obs.retain_grad()
         dist, value, hidden_state = self.policy(obs, None, None)
-        log_prob_act = dist.log_prob(torch.tensor(act).to(device=self.device))
-        log_prob_act.backward(retain_graph=True)
+        if all_acts:
+            dist.logits.mean().backward(retain_graph=True)
+        else:
+            log_prob_act = dist.log_prob(torch.tensor(act).to(device=self.device))
+            log_prob_act.backward(retain_graph=True)
 
         return obs.grad.data.detach().cpu().numpy()
 
