@@ -160,6 +160,8 @@ def train(args):
     ##############
     print('START TRAINING...')
     agent.train(num_timesteps)
+    if args.use_wandb:
+        wandb.finish()
 
 
 def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, seed):

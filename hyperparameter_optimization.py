@@ -192,7 +192,7 @@ def ppo():
         "device": "gpu",
         "num_timesteps": int(1e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["rew hps0"],
+        "wandb_tags": ["rew hps1"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": True,
@@ -206,7 +206,7 @@ def ppo():
         "num_rew_updates": 1,
         "n_pos_states": [1, 3, 10, 20],
         "reset_rew_model_weights": False,
-        "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256]],
+        "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
         "rew_learns_from_trusted_rollouts": [False, True],
     }
     bounds = {

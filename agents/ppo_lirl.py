@@ -250,7 +250,6 @@ class PPO_Lirl(BaseAgent):
                     if self.print_ascent_rewards:
                         print("Valid Env Rew:")
                     rew_corr_valid, logit_rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
-
                 log_data = {
                     "timesteps": self.t,
                     "rew_corr": rew_corr,
@@ -260,6 +259,7 @@ class PPO_Lirl(BaseAgent):
                 }
                 log_data.update(summary)
                 wandb.log(log_data)
+                rew_checkpoint_cnt +=1
 
             # Save the model
             if self.t > ((checkpoint_cnt + 1) * save_every):
