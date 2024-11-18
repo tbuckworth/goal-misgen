@@ -4,7 +4,7 @@ import wandb
 from common import orthogonal_init
 from common.policy import UniformPolicy
 from .base_agent import BaseAgent
-from common.misc_util import adjust_lr, get_n_params
+from common.misc_util import adjust_lr
 import torch
 import torch.optim as optim
 import numpy as np
@@ -250,12 +250,6 @@ class PPO_Lirl(BaseAgent):
                     if self.print_ascent_rewards:
                         print("Valid Env Rew:")
                     rew_corr_valid, logit_rew_corr_valid = self.evaluate_correlation(self.storage_trusted_val)
-                    # if self.tempbool:
-                    #     unique_states = np.arange(-self.env.n_pos_states, self.env.n_pos_states+1)
-                    #     np_obs = self.env.obs(unique_states)
-                    #     obs = torch.FloatTensor(obs).to(device=self.device)
-                    #     _, _, h = self.policy.forward_with_embedding(obs)
-                    #     rew, _ = self.rew_val_model(h)
 
                 log_data = {
                     "timesteps": self.t,
@@ -337,7 +331,7 @@ class PPO_Lirl(BaseAgent):
                 adv = rew[~flt] - value[~flt] + self.gamma * next_val[~flt]
                 # instead we use the next rew est of the penultimate obs,
                 # because V(sT) = R(sT) = NR(sT-1,aT-1), so we can express without reference to T:
-                adv_dones = rew[flt] = value[flt] + self.gamma * next_rew_est[flt]
+                adv_dones = rew[flt] - value[flt] + self.gamma * next_rew_est[flt]
 
                 loss = torch.nn.MSELoss()(adv.squeeze(), log_prob_act_batch[~flt]) if not flt.all() else 0
                 loss2 = torch.nn.MSELoss()(adv_dones.squeeze(), log_prob_act_batch[flt])
@@ -347,7 +341,7 @@ class PPO_Lirl(BaseAgent):
                 rew_loss = (1 - coef) * loss + coef * loss2
 
                 # detach grads for next_rew?
-                next_rew_loss = torch.nn.MSELoss()(next_rew_est, next_rew)
+                next_rew_loss = torch.nn.MSELoss()(next_rew_est, next_rew.detach())
 
                 total_loss = rew_loss + next_rew_loss * self.next_rew_loss_coef
 
@@ -369,7 +363,7 @@ class PPO_Lirl(BaseAgent):
                     rew_loss_list_end.append(rew_loss.item())
                     next_rew_loss_list_end.append(next_rew_loss.item())
                     total_loss_list_end.append(total_loss.item())
-            if self.rew_learns_from_trusted_rollouts:
+            if self.rew_learns_from_trusted_rollouts or self.num_rew_updates == 1:
                 wandb.log({
                     'Loss/epoch': e,
                     'Loss/rew_loss': np.mean(rew_losses),
