@@ -38,13 +38,11 @@ if __name__ == '__main__':
 
     args.exp_name ="ascent"
     args.env_name ="ascent"
-    args.param_name ="ascent-mlp"
-    args.num_timesteps= int(1e7)
+    args.param_name ="ascent-canon"
     args.num_checkpoints= 1
     args.seed = 1080
     args.use_wandb = True
-    # args.model_file = "logs/train/ascent/ascent/2024-11-15__13-59-43__seed_1080/model_10027008.pth"
-    args.model_file = "logs/train/ascent/ascent/2024-11-16__11-00-43__seed_1080/model_10027008.pth"
-
+    args.model_file = "logs/train/ascent/Ascent/2024-11-18__11-17-05__seed_81/model_10027008.pth"
+    args.n_pos_states = 1
     train(args)
 

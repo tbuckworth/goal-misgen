@@ -215,5 +215,35 @@ def ppo():
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
 
 
+def canonicaliser():
+    fixed = {
+        "detect_nan": False,
+        "env_name": 'ascent',
+        "exp_name": 'Ascent',
+        "param_name": 'ascent-canon',
+        "model_file": "logs/train/ascent/Ascent/2024-11-18__11-17-05__seed_81",
+        "device": "gpu",
+        "seed": [6033, 0, 42, 50, 81],
+        "wandb_tags": ["canon"],
+        "use_wandb": True,
+        "use_valid_env": True,
+        "anneal_temp": False,
+        "anneal_lr": False,
+        "epoch": 3,#[100, 1000, 10000],
+        "rew_lr": 0.01,
+        "dense_rewards": False,
+        "num_rew_updates": 1,
+        "n_pos_states": [1, 3, 10, 20],
+        "reset_rew_model_weights": False,
+        "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
+        "rew_learns_from_trusted_rollouts": [False, True],
+    }
+    bounds = {
+        "rew_lr": [0.0001, 0.05],
+    }
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
+
+
+
 if __name__ == "__main__":
     ppo()

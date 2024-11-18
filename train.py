@@ -1,6 +1,6 @@
 from common.env.procgen_wrappers import *
 from common.logger import Logger
-from common.model import RewValModel, NextRewModel
+from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu
 from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
@@ -15,7 +15,6 @@ try:
     from private_login import wandb_login
 except ImportError:
     pass
-
 
 
 def train(args):
@@ -62,8 +61,6 @@ def train(args):
     elif args.device == 'cpu':
         device = torch.device('cpu')
 
-
-
     #################
     ## ENVIRONMENT ##
     #################
@@ -76,7 +73,6 @@ def train(args):
     env = create_venv(args, hyperparameters)
     env_valid = create_venv(args, hyperparameters, is_valid=True)
 
-
     ############
     ## LOGGER ##
     ############
@@ -86,7 +82,6 @@ def train(args):
         return the filename with largest n"""
         steps = [int(filename[6:-4]) for filename in os.listdir(model_dir) if filename.startswith("model_")]
         return list(os.listdir(model_dir))[np.argmax(steps)]
-
 
     print('INITIALIZING LOGGER...')
 
@@ -102,7 +97,7 @@ def train(args):
         wandb_login()
         cfg = vars(args)
         cfg.update(hyperparameters)
-        wb_resume = "allow"# if args.model_file is None else "must"
+        wb_resume = "allow"  # if args.model_file is None else "must"
         wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
 
@@ -113,14 +108,14 @@ def train(args):
     observation_space = env.observation_space
     observation_shape = observation_space.shape
 
-
     model, policy = initialize_policy(device, hyperparameters, env, observation_shape)
 
     #############
     ## STORAGE ##
     #############
     print('INITIALIZING STORAGE...')
-    storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps, observation_shape, algo)
+    storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps,
+                                                                                      observation_shape, algo)
 
     if algo == 'ppo-lirl':
         hidden_dims = hyperparameters.get("hidden_dims", [64, 64])
@@ -141,7 +136,12 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
-
+    if algo == 'canon':
+        hidden_dims = hyperparameters.get("hidden_dims", [32])
+        canon_params = dict(
+            val_model=MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+        )
+        hyperparameters.update(canon_params)
 
     ###########
     ## AGENT ##
@@ -189,10 +189,10 @@ def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     hidden_state_dim = model.output_dim
     if algo == 'ppo':
         storage_cons = Storage
-    elif algo == 'ppo-lirl':
+    elif algo in ['ppo-lirl', 'canon']:
         storage_cons = LirlStorage
     else:
-        raise NotImplementedError (f"{algo} not implemented")
+        raise NotImplementedError(f"{algo} not implemented")
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
@@ -205,8 +205,10 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
     algo = hyperparameters.get('algo', 'ppo')
     if algo == 'ppo':
         from agents.ppo import PPO as AGENT
-    if algo == 'ppo-lirl':
+    elif algo == 'ppo-lirl':
         from agents.ppo_lirl import PPO_Lirl as AGENT
+    elif algo == 'canon':
+        from agents.canonicalise import Canoncicaliser as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,

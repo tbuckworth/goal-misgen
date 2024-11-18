@@ -47,14 +47,12 @@ class Canoncicaliser(BaseAgent):
                  rew_lr=1e-5,
                  reset_rew_model_weights=False,
                  rew_learns_from_trusted_rollouts=False,
-                 norm_func="l1",
-                 distance_metric="l1",
+
                  **kwargs):
 
         super(Canoncicaliser, self).__init__(env, policy, logger, storage, device,
                                              n_checkpoints, env_valid, storage_valid)
-        self.distance_metric = distance_metric
-        self.norm_func = norm_func
+
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = True
@@ -73,8 +71,7 @@ class Canoncicaliser(BaseAgent):
         self.lmbda = lmbda
         self.learning_rate = learning_rate
         self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
-        self.optimizer = optim.Adam(list(self.val_model.parameters()) + list(self.next_rew_model.parameters()),
-                                    lr=rew_lr, eps=1e-5)
+        self.value_optimizer = optim.Adam(self.val_model.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -180,7 +177,6 @@ class Canoncicaliser(BaseAgent):
 
             joined_df = pd.merge(df_train, df_valid, on=["ID"])
 
-
             # Convert the joined DataFrame back to a W&B Table
             joined_table = wandb.Table(dataframe=joined_df)
         # log_data = {
@@ -196,7 +192,7 @@ class Canoncicaliser(BaseAgent):
         if self.t > ((checkpoint_cnt + 1) * save_every):
             print("Saving model.")
             torch.save({'model_state_dict': self.policy.state_dict(),
-                        'optimizer_state_dict': self.optimizer.state_dict()},
+                        'optimizer_state_dict': self.value_optimizer.state_dict()},
                        self.logger.logdir + '/model_' + str(self.t) + '.pth')
             checkpoint_cnt += 1
         self.env.close()
@@ -250,8 +246,8 @@ class Canoncicaliser(BaseAgent):
 
                 val_losses.append(value_loss.item())
 
-            self.optimizer.step()
-            self.optimizer.zero_grad()
+            self.value_optimizer.step()
+            self.value_optimizer.zero_grad()
             grad_accumulation_cnt += 1
             wandb.log({
                 'Loss/epoch': e,
@@ -285,14 +281,14 @@ class Canoncicaliser(BaseAgent):
         canon_true_r = rew_batch + adjustment
 
         norm_funcs = {
-            "l1_norm": lambda x: x / x.abs().sum(),
-            "l2_norm": lambda x: x / x.pow(2).sum().sqrt(),
+            "l1_norm": lambda x: x / x.abs().mean(),
+            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
             "linf_norm": lambda x: x / x.abs().max(),
         }
 
         dist_funcs = {
-            "l1_dist": lambda x,y: (x-y).abs().mean(),
-            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+            "l1_dist": lambda x, y: norm_funcs["l1_norm"](x - y),
+            "l2_dist": lambda x, y: norm_funcs["l1_norm"](x - y),
         }
         # dist_table = wandb.Table(columns=["Norm", "Metric", "Env", "Distance"])
         dists = {}
@@ -303,7 +299,6 @@ class Canoncicaliser(BaseAgent):
                 dist = distance(normalize(canon_logp), normalize(canon_true_r))
                 dists[norm_name][dist_name] = dist
                 # dist_table.add_data(norm_name, dist_name, env_type, dist)
-
 
         # if self.norm_func == "l1":
         #     def normalize(arr):
