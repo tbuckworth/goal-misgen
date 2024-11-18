@@ -168,23 +168,29 @@ class Canoncicaliser(BaseAgent):
         rew_batch_v, done_batch_v = self.storage_valid.fetch_log_data()
         self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
 
-        summary = self.optimize_value()
+        self.optimize_value()
 
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            dist_train = self.canonicalise_and_evaluate(self.storage_trusted)
+            df_train = self.canonicalise_and_evaluate(self.storage_trusted)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
-            dist_valid = self.canonicalise_and_evaluate(self.storage_trusted_val)
-        log_data = {
-            "timesteps": self.t,
-            "dist_train": dist_train,
-            "dist_valid": dist_valid,
-        }
-        log_data.update(summary)
-        wandb.log(log_data)
-        rew_checkpoint_cnt += 1
+            df_valid = self.canonicalise_and_evaluate(self.storage_trusted_val)
+
+            joined_df = pd.merge(df_train, df_valid, on=["ID"])
+
+
+            # Convert the joined DataFrame back to a W&B Table
+            joined_table = wandb.Table(dataframe=joined_df)
+        # log_data = {
+        #     "timesteps": self.t,
+        #     "dist_train": 0,
+        #     "dist_valid": dist_valid,
+        # }
+        # log_data.update(summary)
+        # wandb.log(log_data)
+        # rew_checkpoint_cnt += 1
 
         # Save the model
         if self.t > ((checkpoint_cnt + 1) * save_every):
@@ -278,37 +284,58 @@ class Canoncicaliser(BaseAgent):
         canon_logp = logp_batch + adjustment
         canon_true_r = rew_batch + adjustment
 
-        if self.norm_func == "l1":
-            def normalize(arr):
-                l1 = arr.abs().sum()
-                return arr / l1
-        elif self.norm_func == "l2":
-            def normalize(arr):
-                l2 = arr.pow(2).sum().sqrt()
-                return arr / l2
-        elif self.norm_func == "linf":
-            def normalize(arr):
-                linf = arr.abs().max()[0]
-                return arr / linf
-        else:
-            raise NotImplementedError(f"{self.norm_func} not implemented")
+        norm_funcs = {
+            "l1_norm": lambda x: x / x.abs().sum(),
+            "l2_norm": lambda x: x / x.pow(2).sum().sqrt(),
+            "linf_norm": lambda x: x / x.abs().max(),
+        }
 
-        norm_c_logp = normalize(canon_logp)
-        norm_c_true_r = normalize(canon_true_r)
+        dist_funcs = {
+            "l1_dist": lambda x,y: (x-y).abs().mean(),
+            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+        }
+        # dist_table = wandb.Table(columns=["Norm", "Metric", "Env", "Distance"])
+        dists = {}
+        for norm_name, normalize in norm_funcs.items():
+            for dist_name, distance in dist_funcs.items():
+                if norm_name not in dists.keys():
+                    dists[norm_name] = {}
+                dist = distance(normalize(canon_logp), normalize(canon_true_r))
+                dists[norm_name][dist_name] = dist
+                # dist_table.add_data(norm_name, dist_name, env_type, dist)
 
-        if self.distance_metric == "corr":
-            def distance(arr1, arr2):
-                return torch.corrcoef(torch.stack((arr1, arr2)))[0, 1]
-        elif self.distance_metric == "l1":
-            def distance(arr1, arr2):
-                return (arr1 - arr2).abs().mean()
-        elif self.distance_metric == "l2":
-            def distance(arr1, arr2):
-                return (arr1, arr2).pow(2).mean().sqrt()
-        else:
-            raise NotImplementedError()
 
-        dist = distance(norm_c_logp, norm_c_true_r)
+        # if self.norm_func == "l1":
+        #     def normalize(arr):
+        #         l1 = arr.abs().sum()
+        #         return arr / l1
+        # elif self.norm_func == "l2":
+        #     def normalize(arr):
+        #         l2 = arr.pow(2).sum().sqrt()
+        #         return arr / l2
+        # elif self.norm_func == "linf":
+        #     def normalize(arr):
+        #         linf = arr.abs().max()[0]
+        #         return arr / linf
+        # else:
+        #     raise NotImplementedError(f"{self.norm_func} not implemented")
+        #
+        # norm_c_logp = normalize(canon_logp)
+        # norm_c_true_r = normalize(canon_true_r)
+        #
+        # if self.distance_metric == "corr":
+        #     def distance(arr1, arr2):
+        #         return torch.corrcoef(torch.stack((arr1, arr2)))[0, 1]
+        # elif self.distance_metric == "l1":
+        #     def distance(arr1, arr2):
+        #         return (arr1 - arr2).abs().mean()
+        # elif self.distance_metric == "l2":
+        #     def distance(arr1, arr2):
+        #         return (arr1, arr2).pow(2).mean().sqrt()
+        # else:
+        #     raise NotImplementedError()
+        #
+        # dist = distance(norm_c_logp, norm_c_true_r)
 
         if self.print_ascent_rewards:
             unq_obs_rew = torch.concat(
@@ -327,7 +354,7 @@ class Canoncicaliser(BaseAgent):
             df[float_cols] = df[float_cols].round(decimals=2)
             print(df)
 
-        return dist
+        return pd.DataFrame(dists, columns=["Norm", "Metric", "Distance"])
 
     def sample_next_data(self, sample):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
