@@ -230,7 +230,7 @@ def canonicaliser():
         "use_valid_env": True,
         "anneal_temp": False,
         "entropy_coef": [0, 0.02],
-        "l1_coef": [0, 0.1, 0.3, 0.5, 1.0, 10.0],
+        "l1_coef": [0, 0.01, 0.1, 0.3, 0.5, 1.0, 10.0, 100.],
         "anneal_lr": False,
         "hid_dims": [[3],[32,3],[32,32], [32]],
         "dense_rewards": False,

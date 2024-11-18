@@ -298,7 +298,7 @@ class Canoncicaliser(BaseAgent):
                 v_surr2 = (clipped_value_batch - return_batch).pow(2)
                 value_loss = 0.5 * torch.max(v_surr1, v_surr2).mean()
 
-                l1_reg = sum([param.abs().sum() for param in self.policy.parameters()])
+                l1_reg = torch.concat([param.abs().reshape(-1) for param in self.policy.parameters()]).mean()
 
                 # Policy Entropy
                 entropy_loss = dist_batch.entropy().mean()
