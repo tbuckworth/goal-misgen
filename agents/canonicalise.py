@@ -159,7 +159,7 @@ class Canoncicaliser(BaseAgent):
         rew_batch, done_batch = self.storage.fetch_log_data()
         rew_batch_v, done_batch_v = self.storage_valid.fetch_log_data()
         self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
-
+        self.logger.dump({k:k for k in range(5)})
         self.optimize_value()
 
         with torch.no_grad():

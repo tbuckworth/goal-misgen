@@ -44,5 +44,6 @@ if __name__ == '__main__':
     args.use_wandb = True
     args.model_file = "logs/train/ascent/Ascent/2024-11-18__11-17-05__seed_81/model_10027008.pth"
     args.n_pos_states = 1
+    args.epoch = 1000
     train(args)
 
