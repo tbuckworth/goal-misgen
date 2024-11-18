@@ -40,6 +40,7 @@ class Canoncicaliser(BaseAgent):
                  anneal_lr=True,
                  num_rew_updates=10,
                  val_model=None,
+                 val_epoch=100,
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
                  storage_trusted=None,
@@ -53,6 +54,7 @@ class Canoncicaliser(BaseAgent):
         super(Canoncicaliser, self).__init__(env, policy, logger, storage, device,
                                              n_checkpoints, env_valid, storage_valid)
 
+        self.val_epoch = val_epoch
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = False
@@ -234,7 +236,7 @@ class Canoncicaliser(BaseAgent):
 
         self.val_model.train()
         self.policy.eval()
-        for e in range(self.epoch):
+        for e in range(self.val_epoch):
             recurrent = self.policy.is_recurrent()
             storage = self.storage_trusted_val
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
@@ -259,7 +261,7 @@ class Canoncicaliser(BaseAgent):
             self.value_optimizer.zero_grad()
             grad_accumulation_cnt += 1
             wandb.log({
-                'Loss/epoch': e,
+                'Loss/val_epoch': e,
                 'Loss/val_loss': np.mean(val_losses),
             })
 

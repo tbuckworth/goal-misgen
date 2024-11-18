@@ -222,29 +222,25 @@ def canonicaliser():
         "env_name": 'ascent',
         "exp_name": 'Ascent',
         "param_name": 'ascent-canon',
-        "model_file": "logs/train/ascent/Ascent/2024-11-18__11-17-05__seed_81",
         "device": "gpu",
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["canon"],
+        "wandb_tags": ["canon misgen"],
         "use_wandb": True,
+        "mirror_env": False,
         "use_valid_env": True,
         "anneal_temp": False,
+        "entropy_coef": [0, 0.02],
+        "l1_coef": [0, 0.1, 0.3, 0.5, 1.0, 10.0],
         "anneal_lr": False,
-        "epoch": 3,#[100, 1000, 10000],
-        "rew_lr": 0.01,
+        "hid_dims": [[3],[32,3],[32,32], [32]],
         "dense_rewards": False,
-        "num_rew_updates": 1,
-        "n_pos_states": [1, 3, 10, 20],
-        "reset_rew_model_weights": False,
-        "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
-        "rew_learns_from_trusted_rollouts": [False, True],
+        "n_pos_states": 10,
+        "val_epoch": 200,
     }
-    bounds = {
-        "rew_lr": [0.0001, 0.05],
-    }
+    bounds = {}
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
 
 
 
 if __name__ == "__main__":
-    ppo()
+    canonicaliser()
