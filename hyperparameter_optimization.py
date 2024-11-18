@@ -192,26 +192,27 @@ def ppo():
         "device": "gpu",
         "num_timesteps": int(1e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["rew hps1"],
+        "wandb_tags": ["misgen hp0"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": True,
         "anneal_temp": False,
         "entropy_coef": [0, 0.02],
-        "l1_coef": [0, 0.01, 0.1],
+        "l1_coef": [0, 0.1, 0.3, 0.5, 1.0, 10.0],
         "anneal_lr": False,
-        "rew_epoch": [100, 1000, 10000],
+        "hid_dims": [[3],[32,3],[32,32], [32]],
+        "rew_epoch": [1],#[100, 1000, 10000],
         "rew_lr": 0.01,
         "dense_rewards": False,
         "num_rew_updates": 1,
-        "n_pos_states": [1, 3, 10, 20],
+        "n_pos_states": [10],
         "reset_rew_model_weights": False,
-        "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
-        "rew_learns_from_trusted_rollouts": [False, True],
+        # "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
+        # "rew_learns_from_trusted_rollouts": [False, True],
     }
-    bounds = {
-        "rew_lr": [0.0001, 0.05],
-    }
+    bounds = {}
+    #     "rew_lr": [0.0001, 0.05],
+    # }
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
 
 
