@@ -13,6 +13,7 @@ if __name__ == '__main__':
         "use_wandb": True,
         "num_timesteps": int(65000),
         "val_epoch": 200,
+        "mini_batch_size": 2048,
         # "learning_rate": 1e-3,
     }
     run_next_hyperparameters(hparams)
