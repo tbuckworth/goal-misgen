@@ -137,13 +137,17 @@ def optimize_hyperparams(bounds,
                          id_tag="sa_rew",
                          run_next=run_next_hyperparameters,
                          opt_metric="summary.mean_episode_rewards",
-                         greater_is_better=True):
+                         greater_is_better=True,
+                         abs=False,
+                         ):
     strings = {k: v for k, v in fixed.items() if isinstance(v, list) and k != "wandb_tags"}
     string_select = {k: v[np.random.choice(len(v))] for k, v in strings.items()}
     if "env_name" in string_select.keys():
         project = get_project(string_select["env_name"], fixed["exp_name"])
     try:
         X, y = get_wandb_performance(bounds.keys(), project, id_tag, opt_metric)
+        if abs:
+            y = y.abs()
     except ValueError as e:
         print(f"Error from wandb:\n{e}\nPicking hparams randomly.")
         X, y = None, None
@@ -175,12 +179,12 @@ def init_wandb(cfg, prefix="symbolic_graph"):
                tags=cfg["wandb_tags"], resume=wb_resume, name=f"{prefix}-{name}")
 
 
-def run_forever(bounds, fixed, run_func, opt_metric):
+def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
     project = get_project(fixed["env_name"], fixed["exp_name"])
     id_tag = fixed["wandb_tags"][0]
     fixed["original_start"] = time.asctime()
     while True:
-        optimize_hyperparams(bounds, fixed, project, id_tag, run_func, opt_metric, greater_is_better=True)
+        optimize_hyperparams(bounds, fixed, project, id_tag, run_func, opt_metric, greater_is_better=True, abs=abs)
 
 
 def ppo():
@@ -222,7 +226,7 @@ def canonicaliser():
         "env_name": 'ascent',
         "exp_name": 'Ascent',
         "param_name": 'ascent-canon',
-        "num_timesteps": int(1e7),
+        # "num_timesteps": int(1e7),
         "device": "gpu",
         "seed": [6033, 0, 42, 50, 81],
         "wandb_tags": ["canon misgen"],
@@ -230,16 +234,19 @@ def canonicaliser():
         "mirror_env": False,
         "use_valid_env": True,
         "anneal_temp": False,
-        "entropy_coef": [0, 0.02],
-        "l1_coef": [0, 0.01, 0.1, 0.3, 0.5, 1.0, 10.0, 100., 200., 1000.],
+        "entropy_coef": [0, 0.01, 0.02],
+        # "l1_coef": [0, 0.01, 0.1, 0.3, 0.5, 1.0, 10.0, 100., 200., 1000.],
         "anneal_lr": False,
-        "hid_dims": [[3],[32,3],[32,32], [32]],
+        "hid_dims": [[3]],
         "dense_rewards": False,
         "n_pos_states": 10,
         "val_epoch": 200,
     }
-    bounds = {}
-    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
+    bounds = {
+        "l1_coef": [0, 1.],
+        "num_timesteps": [int(1e7), int(2e7)],
+    }
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards", abs=True)
 
 
 
