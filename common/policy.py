@@ -1,4 +1,6 @@
+import numpy as np
 import torch
+from scipy.special import log_softmax
 
 from .misc_util import orthogonal_init
 from .model import GRU
@@ -95,3 +97,84 @@ class PolicyWrapperIRL(nn.Module):
         act = p.sample().detach().cpu().numpy()
         return act, None
 
+
+class CraftedPolicy:
+    def __init__(self, misgen=False):
+        self.embedder = np.zeros((6, 3))
+        self.actor = np.zeros((3, 2))
+        self.actor[0, 0] = 1.
+        self.actor[2, 1] = 1.
+        if not misgen:
+            self.embedder[0, 0] = 1.
+            self.embedder[2, 1] = 1.
+            self.embedder[4, 2] = 1.
+        else:
+            self.embedder[1, 0] = 1.
+            self.embedder[3, 1] = 1.
+            self.embedder[5, 2] = 1.
+
+    def embed(self, obs):
+        return obs @ self.embedder
+
+    def forward(self, obs, embed=True):
+        if embed:
+            h = self.embed(obs)
+        else:
+            h = obs
+        logits = h @ self.actor
+        return log_softmax(logits, axis=-1)
+
+    def act(self, obs, embed=True):
+        logits = self.forward(obs, embed=embed)
+        p = np.exp(logits)
+        return np.random.choice([-1, 1], p=p)
+
+class CraftedTorchPolicy(nn.Module):
+    def __init__(self, misgen, action_size, device):
+        super(CraftedTorchPolicy, self).__init__()
+        self.action_size = action_size
+        self.device = device
+        self.misgen = misgen
+        self.embedder = torch.zeros((6, 3)).to(device)
+        self.actor = torch.zeros((3, 2)).to(device)
+        self.actor[0, 0] = 1.
+        self.actor[2, 1] = 1.
+        if not self.misgen:
+            self.embedder[0, 0] = 1.
+            self.embedder[2, 1] = 1.
+            self.embedder[4, 2] = 1.
+        else:
+            self.embedder[1, 0] = 1.
+            self.embedder[3, 1] = 1.
+            self.embedder[5, 2] = 1.
+
+    def embed(self, obs):
+        return obs @ self.embedder
+
+    def fc_policy(self, hidden):
+        return hidden @ self.actor
+
+    def fc_value(self, hidden):
+        return torch.ones((*hidden.shape[:-1],1)).to(self.device)
+
+    def forward(self, x, hx, masks):
+        hidden = self.embed(x)
+
+        logits = self.fc_policy(hidden)
+        log_probs = F.log_softmax(logits, dim=1)
+        p = Categorical(logits=log_probs)
+        v = self.fc_value(hidden).reshape(-1)
+        return p, v, hx
+
+    def value(self, x):
+        hidden = self.embed(x)
+        v = self.fc_value(hidden).reshape(-1)
+        return v
+
+    def forward_with_embedding(self, x):
+        hidden = self.embed(x)
+        logits = self.fc_policy(hidden)
+        log_probs = F.log_softmax(logits, dim=1)
+        p = Categorical(logits=log_probs)
+        v = self.fc_value(hidden).reshape(-1)
+        return p, v, hidden

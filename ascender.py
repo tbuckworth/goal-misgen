@@ -1,10 +1,8 @@
-from matplotlib import pyplot as plt
 import numpy as np
-from scipy.special import softmax, log_softmax
 import torch
 
 from common.model import MlpModel, MlpModelNoFinalRelu
-from common.policy import orthogonal_init
+from common.policy import orthogonal_init, CraftedPolicy
 from watch_agent import load_policy
 from torch.distributions import Categorical
 
@@ -64,37 +62,6 @@ class AscentEnv():
     def observe(self):
         return self.obs(self.state), self.reward(self.state), self.done(self.state), {}
 
-
-class Policy():
-    def __init__(self, misgen=False):
-        self.embedder = np.zeros((6, 3))
-        self.actor = np.zeros((3, 2))
-        self.actor[0, 0] = 1.
-        self.actor[2, 1] = 1.
-        if not misgen:
-            self.embedder[0, 0] = 1.
-            self.embedder[2, 1] = 1.
-            self.embedder[4, 2] = 1.
-        else:
-            self.embedder[1, 0] = 1.
-            self.embedder[3, 1] = 1.
-            self.embedder[5, 2] = 1.
-
-    def embed(self, obs):
-        return obs @ self.embedder
-
-    def forward(self, obs, embed=True):
-        if embed:
-            h = self.embed(obs)
-        else:
-            h = obs
-        logits = h @ self.actor
-        return log_softmax(logits, axis=-1)
-
-    def act(self, obs, embed=True):
-        logits = self.forward(obs, embed=embed)
-        p = np.exp(logits)
-        return np.random.choice([-1, 1], p=p)
 
 class WrappedPolicy():
     def __init__(self, policy, device):
@@ -506,7 +473,7 @@ def inverse_reward_shaping(logdir, shifted=False, verbose=False, gamma=gamma, ep
 
 def inverse_reward_shaping_cust_agent(shifted=False, misgen=False, verbose=False, gamma=gamma, epochs=5000, learning_rate=1e-3, inv_temp=1):
     env = AscentEnv(shifted=shifted)
-    policy = Policy(misgen=misgen)
+    policy = CraftedPolicy(misgen=misgen)
 
 
     Actions, Done, Nactions, Nobs, Obs, Rew = collect_rollouts(env, policy, verbose)

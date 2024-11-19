@@ -38,13 +38,14 @@ if __name__ == '__main__':
 
     args.exp_name ="ascent"
     args.env_name ="ascent"
-    args.param_name ="ascent-canon"
+    args.param_name ="ascent-misgen"
     args.num_checkpoints= 1
     args.seed = 1080
     args.use_wandb = True
     # args.model_file = "logs/train/ascent/Ascent/2024-11-18__11-17-05__seed_81/model_10027008.pth"
     args.n_pos_states = 10
-    args.epoch = 3
+    args.epoch = 0
+    args.num_timesteps = int(65000)
     args.val_epoch = 200
     train(args)
 
