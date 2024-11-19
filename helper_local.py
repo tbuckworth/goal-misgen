@@ -13,7 +13,7 @@ from common.ascent_env import AscentEnv
 from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, TransposeFrame, ScaledFloatFrame, \
     DummyTerminalObsWrapper
 from common.model import NatureModel, ImpalaModel, MlpModel
-from common.policy import CategoricalPolicy
+from common.policy import CategoricalPolicy, CraftedTorchPolicy
 
 
 def create_venv(args, hyperparameters, is_valid=False):
@@ -111,6 +111,12 @@ def initialize_policy(device, hyperparameters, env, observation_shape):
         final_relu = hyperparameters.get('final_relu', False)
         hid_dims = hyperparameters.get('hid_dims', [3])
         model = MlpModel(input_dims=in_channels, hidden_dims=hid_dims, final_relu=final_relu)
+    elif architecture == 'crafted-policy':
+        misgen = hyperparameters.get('misgen', False)
+        action_size = action_space.n
+        policy = CraftedTorchPolicy(misgen, action_size, device)
+        model = DictToArgs({"output_dim": 3})
+        return model, policy
 
     # Discrete action space
     recurrent = hyperparameters.get('recurrent', False)

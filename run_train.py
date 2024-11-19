@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
     args.exp_name ="ascent"
     args.env_name ="ascent"
-    args.param_name ="ascent-misgen"
+    args.param_name ="ascent-crafted"
     args.num_checkpoints= 1
     args.seed = 1080
     args.use_wandb = True
@@ -47,5 +47,7 @@ if __name__ == '__main__':
     args.epoch = 0
     args.num_timesteps = int(65000)
     args.val_epoch = 200
-    train(args)
+    for misgen in [True, False]:
+        args.misgen = misgen
+        train(args)
 
