@@ -212,7 +212,7 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
     elif algo == 'ppo-lirl':
         from agents.ppo_lirl import PPO_Lirl as AGENT
     elif algo == 'canon':
-        from agents.canonicalise import Canoncicaliser as AGENT
+        from agents.canonicalise import Canonicaliser as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,

@@ -7,7 +7,7 @@ class AscenderTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from common.ascent_env import AscentEnv
-        cls.env = AscentEnv(num_envs=5, shifted=False)
+        cls.env = AscentEnv(num_envs=5, shifted=True)
 
     def test_observe(self):
         obs, rew, done, _ = self.env.observe()

@@ -11,7 +11,7 @@ import torch.optim as optim
 import numpy as np
 
 
-class Canoncicaliser(BaseAgent):
+class Canonicaliser(BaseAgent):
     def __init__(self,
                  env,
                  policy,
@@ -51,8 +51,8 @@ class Canoncicaliser(BaseAgent):
 
                  **kwargs):
 
-        super(Canoncicaliser, self).__init__(env, policy, logger, storage, device,
-                                             n_checkpoints, env_valid, storage_valid)
+        super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
+                                            n_checkpoints, env_valid, storage_valid)
 
         self.val_epoch = val_epoch
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
@@ -72,7 +72,8 @@ class Canoncicaliser(BaseAgent):
         self.gamma = gamma
         self.lmbda = lmbda
         self.learning_rate = learning_rate
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
+        if self.epoch > 0:
+            self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer = optim.Adam(self.val_model.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
@@ -181,7 +182,7 @@ class Canoncicaliser(BaseAgent):
                 self.optimizer = adjust_lr(self.optimizer, self.learning_rate, self.t, num_timesteps)
 
             # Save the model
-            if self.t > ((checkpoint_cnt + 1) * save_every):
+            if self.t > ((checkpoint_cnt + 1) * save_every) and self.epoch > 0:
                 print("Saving model.")
                 torch.save({'model_state_dict': self.policy.state_dict(),
                             'optimizer_state_dict': self.optimizer.state_dict()},

@@ -35,7 +35,10 @@ class AscentEnv():
         obs[state == self.n_pos_states] = 0
         obs[state == -self.n_pos_states] = 0
 
-        obs[self.mirror] = obs[self.mirror][..., ::-1]
+        # obs[self.mirror] = obs[self.mirror][..., ::-1]
+        # obs[self.mirror][...,(0,2,4)] = obs[self.mirror][..., (4,2,0)]
+        # obs[self.mirror][...,(1,3,5)] = obs[self.mirror][..., (5,3,1)]
+        obs[self.mirror] = obs[self.mirror][..., (4,5,2,3,0,1)]
 
         return obs
 

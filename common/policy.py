@@ -132,6 +132,7 @@ class CraftedPolicy:
 class CraftedTorchPolicy(nn.Module):
     def __init__(self, misgen, action_size, device):
         super(CraftedTorchPolicy, self).__init__()
+        self.recurrent = False
         self.action_size = action_size
         self.device = device
         self.misgen = misgen
@@ -147,6 +148,9 @@ class CraftedTorchPolicy(nn.Module):
             self.embedder[1, 0] = 1.
             self.embedder[3, 1] = 1.
             self.embedder[5, 2] = 1.
+
+    def is_recurrent(self):
+        return False
 
     def embed(self, obs):
         return obs @ self.embedder
