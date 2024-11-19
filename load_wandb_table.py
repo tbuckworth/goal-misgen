@@ -12,19 +12,22 @@ def load():
     api = wandb.Api()
     project_name = "goal-misgen"
     runs = api.runs(f"ic-ai-safety/{project_name}",
-                    filters={"$and": [{"tags": "misgen-canon", "state": "finished"}]}
+                    filters={"$and": [{"tags": "canon misgen2", "state": "finished"}]}
                     )
 
     # Collect and filter data
-    filtered_data = []
+    all_data = []
     for run in runs:
-        table = run.use_artifact("distances:latest").get("distances")
-        for row in table.data:
-            x, y, group = row
-            # if x > 2 and y < 5:  # Example filter condition
-            filtered_data.append([x, y, group])
+        # table = run.use_artifact("distances:latest").get("distances")
+        table = [x for x in run.logged_artifacts()][0].get('distances')
+        df = pd.DataFrame(data=table.data, columns=table.columns)
+        df["mean_episode_rewards"] = run.summary.mean_episode_rewards
+        df["val_mean_episode_rewards"] = run.summary.val_mean_episode_rewards
+        df["run"] = run.name
+        all_data.append(df)
 
-
+    final = pd.concat(all_data).reset_index(drop=True)
+    final.to_csv("data/dist_metrics.csv", index=False)
 
 if __name__ == "__main__":
     load()
