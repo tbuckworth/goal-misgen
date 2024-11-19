@@ -193,10 +193,10 @@ class Canonicaliser(BaseAgent):
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            df_train = self.canonicalise_and_evaluate(self.storage_trusted)
+            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
-            df_valid = self.canonicalise_and_evaluate(self.storage_trusted_val)
+            df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val)
 
             df_train["Env"] = "Train"
             df_valid["Env"] = "Valid"
@@ -433,3 +433,55 @@ class Canonicaliser(BaseAgent):
         next_value = self.val_model(nobs_batch)
 
         return rew_batch, obs_batch, act_batch, value, next_value, dist.log_prob(act_batch), done_batch
+
+
+    def canonicalise_and_evaluate_efficient(self, storage):
+        batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
+        if batch_size < self.mini_batch_size:
+            self.mini_batch_size = batch_size
+
+        self.policy.eval()
+        self.val_model.eval()
+
+        recurrent = self.policy.is_recurrent()
+        generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+                                                  recurrent=recurrent)
+
+        tuples = [self.sample_and_canonise(sample) for sample in generator]
+        c_lps, c_r = zip(*tuples)
+        canon_logp = torch.concat(list(c_lps))
+        canon_true_r = torch.concat(list(c_r))
+
+        norm_funcs = {
+            "l1_norm": lambda x: x / x.abs().mean(),
+            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
+            "linf_norm": lambda x: x / x.abs().max(),
+        }
+
+        dist_funcs = {
+            "l1_dist": lambda x, y: (x - y).abs().mean(),
+            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+        }
+
+        data = []
+        for norm_name, normalize in norm_funcs.items():
+            for dist_name, distance in dist_funcs.items():
+                dist = distance(normalize(canon_logp), normalize(canon_true_r))
+                data.append({'Norm': norm_name, 'Metric': dist_name, 'Distance': dist.item()})
+
+        return pd.DataFrame(data)
+
+    def sample_and_canonise(self, sample):
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
+        dist, _, _ = self.policy.forward_with_embedding(obs_batch)
+        val_batch = self.val_model(obs_batch)
+        next_val_batch = self.val_model(nobs_batch)
+        logp_batch = dist.log_probs(act_batch)
+
+        adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
+        canon_logp = logp_batch + adjustment
+        canon_true_r = rew_batch + adjustment
+
+        return canon_logp, canon_true_r
+
+
