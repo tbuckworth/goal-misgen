@@ -478,7 +478,7 @@ class Canonicaliser(BaseAgent):
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         val_batch = self.val_model(obs_batch)
         next_val_batch = self.val_model(nobs_batch)
-        logp_batch = dist.log_probs(act_batch)
+        logp_batch = dist.log_prob(act_batch)
 
         adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
         canon_logp = logp_batch + adjustment
