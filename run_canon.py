@@ -12,7 +12,7 @@ if __name__ == '__main__':
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 8,
+        "val_epoch": 1,
         "mini_batch_size": 2048,
         # "learning_rate": 1e-3,
     }
