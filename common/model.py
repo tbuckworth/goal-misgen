@@ -359,11 +359,9 @@ class ImpalaValueModel(MLPLayers):
                  **kwargs):
         super(ImpalaValueModel, self).__init__()
         self.model = ImpalaModel(in_channels=in_channels, **kwargs)
-
-        self.layers = nn.Sequential(*self.generate_layers(self.model.output_dims, hidden_dims, self.output_dim))
-        self.to(self.device)
-
         self.output_dim = 1
+        self.layers = nn.Sequential(*self.generate_layers(self.model.output_dim, hidden_dims, self.output_dim))
+
         self.apply(xavier_uniform_init)
 
     def forward(self, x):

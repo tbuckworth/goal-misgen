@@ -1,3 +1,5 @@
+import re
+
 from common.env.procgen_wrappers import *
 from common.logger import Logger
 from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu, ImpalaValueModel
@@ -41,9 +43,11 @@ def train(args):
     if args.model_file is None:
         hyperparameters = get_hyperparameters(param_name)
     else:
-        hyperparameters = get_config(args.model_file)
+        hyperparameters = get_config(re.sub(r"\/model_\d*.pth","",args.model_file))
         if env_name == "get":
-            env_name = hyperparameters.get("env_name")
+            args.env_name = env_name = hyperparameters.get("env_name")
+        del hyperparameters["device"]
+        del hyperparameters["num_checkpoints"]
 
     # override hyperparmeters:
     for var_name in hyperparameters.keys():

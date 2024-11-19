@@ -58,7 +58,7 @@ class Canonicaliser(BaseAgent):
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = False
-        self.trusted_policy = UniformPolicy(policy.action_size, device)
+        self.trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(self.env.observation_space.shape))
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
         self.val_model = val_model
@@ -72,7 +72,7 @@ class Canonicaliser(BaseAgent):
         self.gamma = gamma
         self.lmbda = lmbda
         self.learning_rate = learning_rate
-        if self.epoch > 0:
+        if len([x for x in self.policy.parameters()]) > 0:
             self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer = optim.Adam(self.val_model.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
@@ -201,7 +201,7 @@ class Canonicaliser(BaseAgent):
             df_train["Env"] = "Train"
             df_valid["Env"] = "Valid"
             comb = pd.concat([df_train, df_valid])
-            pivoted_df = comb.pivot(index=["Norm","Metric"],columns="Env", values="Distance").reset_index()
+            pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
             wandb.log({
                 "distances": wandb.Table(dataframe=comb),
                 "distances_pivoted": wandb.Table(dataframe=pivoted_df),
@@ -424,7 +424,7 @@ class Canonicaliser(BaseAgent):
             df[float_cols] = df[float_cols].round(decimals=2)
             print(df)
 
-        return pd.DataFrame(data)#dists, columns=["Norm", "Metric", "Distance"])
+        return pd.DataFrame(data)  # dists, columns=["Norm", "Metric", "Distance"])
 
     def sample_next_data(self, sample):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
