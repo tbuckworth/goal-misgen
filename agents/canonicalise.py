@@ -3,7 +3,7 @@ import wandb
 from torch import nn
 
 from common import orthogonal_init
-from common.policy import UniformPolicy
+from common.policy import UniformPolicy, CraftedTorchPolicy
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
@@ -48,7 +48,7 @@ class Canonicaliser(BaseAgent):
                  rew_lr=1e-5,
                  reset_rew_model_weights=False,
                  rew_learns_from_trusted_rollouts=False,
-
+                 trusted_policy=None,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
@@ -58,7 +58,10 @@ class Canonicaliser(BaseAgent):
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = False
-        self.trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(self.env.observation_space.shape))
+        self.trusted_policy = trusted_policy
+        # UniformPolicy(policy.action_size, device,
+        #                                     input_dims=len(self.env.observation_space.shape))
+        # CraftedTorchPolicy
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
         self.val_model = val_model
@@ -434,7 +437,6 @@ class Canonicaliser(BaseAgent):
 
         return rew_batch, obs_batch, act_batch, value, next_value, dist.log_prob(act_batch), done_batch
 
-
     def canonicalise_and_evaluate_efficient(self, storage):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
@@ -483,5 +485,3 @@ class Canonicaliser(BaseAgent):
         canon_true_r = rew_batch + adjustment
 
         return canon_logp, canon_true_r
-
-

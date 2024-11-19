@@ -131,7 +131,7 @@ class CraftedPolicy:
         return np.random.choice([-1, 1], p=p)
 
 class CraftedTorchPolicy(nn.Module):
-    def __init__(self, misgen, action_size, device):
+    def __init__(self, misgen, action_size, device, input_dims=1):
         super(CraftedTorchPolicy, self).__init__()
         self.recurrent = False
         self.action_size = action_size

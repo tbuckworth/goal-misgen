@@ -3,6 +3,7 @@ import re
 from common.env.procgen_wrappers import *
 from common.logger import Logger
 from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu, ImpalaValueModel
+from common.policy import UniformPolicy, CraftedTorchPolicy
 from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
@@ -149,10 +150,19 @@ def train(args):
         else:
             value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
         value_model.to(device)
+        trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
+        if trusted_policy_name == "uniform":
+            trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(env.observation_space.shape))
+        elif trusted_policy_name == "gen":
+            trusted_policy = CraftedTorchPolicy(False, policy.action_size, device, input_dims=len(env.observation_space.shape))
+        elif trusted_policy_name == "misgen":
+            trusted_policy = CraftedTorchPolicy(True, policy.action_size, device, input_dims=len(env.observation_space.shape))
+
         canon_params = dict(
             val_model=value_model,
             storage_trusted=storage_trusted,
             storage_trusted_val=storage_trusted_val,
+            trusted_policy=trusted_policy,
         )
         hyperparameters.update(canon_params)
 
