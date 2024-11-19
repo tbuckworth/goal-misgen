@@ -226,10 +226,10 @@ def canonicaliser():
         "env_name": 'ascent',
         "exp_name": 'Ascent',
         "param_name": 'ascent-canon',
-        # "num_timesteps": int(1e7),
+        "num_timesteps": int(1e7),
         "device": "gpu",
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["canon misgen"],
+        "wandb_tags": ["canon misgen2"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": True,
@@ -244,7 +244,7 @@ def canonicaliser():
     }
     bounds = {
         "l1_coef": [0, 1.],
-        "num_timesteps": [int(1e7), int(2e7)],
+        # "num_timesteps": [int(1e7), int(2e7)],
     }
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards", abs=True)
 

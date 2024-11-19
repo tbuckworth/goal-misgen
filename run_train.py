@@ -39,7 +39,7 @@ if __name__ == '__main__':
     args.exp_name ="ascent"
     args.env_name ="ascent"
     args.param_name ="ascent-crafted"
-    args.wandb_tags = ["canon misgen"]
+    args.wandb_tags = ["canon misgen2"]
     args.num_checkpoints= 1
     args.seed = 1080
     args.use_wandb = True
