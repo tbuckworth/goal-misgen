@@ -1,6 +1,6 @@
 from common.env.procgen_wrappers import *
 from common.logger import Logger
-from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu
+from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu, ImpalaValueModel
 from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
@@ -8,7 +8,7 @@ import os, time, argparse
 import random
 import torch
 
-from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args
+from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config
 
 try:
     import wandb
@@ -20,11 +20,7 @@ except ImportError:
 def train(args):
     exp_name = args.exp_name
     env_name = args.env_name
-    val_env_name = args.val_env_name if args.val_env_name else args.env_name
-    start_level = args.start_level
     start_level_val = random.randint(0, 9999)
-    num_levels = args.num_levels
-    distribution_mode = args.distribution_mode
     param_name = args.param_name
     gpu_device = args.gpu_device
     num_timesteps = int(args.num_timesteps)
@@ -42,7 +38,12 @@ def train(args):
     ## HYPERPARAMETERS #
     ####################
     print('[LOADING HYPERPARAMETERS...]')
-    hyperparameters = get_hyperparameters(param_name)
+    if args.model_file is None:
+        hyperparameters = get_hyperparameters(param_name)
+    else:
+        hyperparameters = get_config(args.model_file)
+        if env_name == "get":
+            env_name = hyperparameters.get("env_name")
 
     # override hyperparmeters:
     for var_name in hyperparameters.keys():
@@ -138,7 +139,11 @@ def train(args):
         hyperparameters.update(ppo_lirl_params)
     if algo == 'canon':
         hidden_dims = hyperparameters.get("hidden_dims", [32])
-        value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+        architecture = hyperparameters.get("architecture")
+        if architecture == "impala":
+            value_model = ImpalaValueModel(observation_shape[0], hidden_dims)
+        else:
+            value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
         value_model.to(device)
         canon_params = dict(
             val_model=value_model,

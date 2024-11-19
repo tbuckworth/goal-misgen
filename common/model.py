@@ -148,7 +148,6 @@ class ImpalaBlock(nn.Module):
 
 scale = 1
 
-
 class ImpalaModel(nn.Module):
     def __init__(self,
                  in_channels,
@@ -171,6 +170,8 @@ class ImpalaModel(nn.Module):
         x = self.fc(x)
         x = nn.ReLU()(x)
         return x
+
+
 
 
 class GRU(nn.Module):
@@ -250,9 +251,9 @@ class IdentityModel(nn.Module):
     def forward(self, x):
         return x
 
-class MlPLayers(nn.Module, ABC):
+class MLPLayers(nn.Module, ABC):
     def __init__(self,*args, **kwargs):
-        super(MlPLayers, self).__init__(*args, **kwargs)
+        super(MLPLayers, self).__init__(*args, **kwargs)
 
     def generate_layers(self, input_dims, hidden_dims, output_dim):
         hidden_dims = [input_dims] + hidden_dims
@@ -266,7 +267,7 @@ class MlPLayers(nn.Module, ABC):
         return layers
 
 
-class NextRewModel(MlPLayers):
+class NextRewModel(MLPLayers):
     def __init__(self,
                  input_dims,
                  hidden_dims,
@@ -306,7 +307,7 @@ class NextRewModel(MlPLayers):
         return x
 
 
-class RewValModel(MlPLayers):
+class RewValModel(MLPLayers):
     def __init__(self,
                  input_dims,
                  hidden_dims,
@@ -349,3 +350,24 @@ class RewValModel(MlPLayers):
         for layer in self.val_layers:
             x = layer(x)
         return x
+
+
+class ImpalaValueModel(MLPLayers):
+    def __init__(self,
+                 in_channels,
+                 hidden_dims,
+                 **kwargs):
+        super(ImpalaValueModel, self).__init__()
+        self.model = ImpalaModel(in_channels=in_channels, **kwargs)
+
+        self.layers = nn.Sequential(*self.generate_layers(self.model.output_dims, hidden_dims, self.output_dim))
+        self.to(self.device)
+
+        self.output_dim = 1
+        self.apply(xavier_uniform_init)
+
+    def forward(self, x):
+        h = self.model(x)
+        for layer in self.layers:
+            h = layer(h)
+        return h
