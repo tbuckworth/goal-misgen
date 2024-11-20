@@ -8,6 +8,7 @@ if __name__ == '__main__':
         "algo": "canon",
         "env_name": "get",
         "exp_name": "maze1",
+        "param_name": "ascent-canon",
         "wandb_tags": ["maze1 canon"],
         "num_checkpoints": 1,
         "use_wandb": True,

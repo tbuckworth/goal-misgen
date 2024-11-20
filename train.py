@@ -41,9 +41,10 @@ def train(args):
     ## HYPERPARAMETERS #
     ####################
     print('[LOADING HYPERPARAMETERS...]')
-    if args.model_file is None:
-        hyperparameters = get_hyperparameters(param_name)
-    else:
+    hyperparameters = get_hyperparameters(param_name)
+    other_params = {}
+    if args.model_file is not None:
+        other_params = hyperparameters
         hyperparameters = get_config(re.sub(r"\/model_\d*.pth","",args.model_file))
         if env_name == "get":
             args.env_name = env_name = hyperparameters.get("env_name")
@@ -51,7 +52,7 @@ def train(args):
         del hyperparameters["num_checkpoints"]
 
     # override hyperparmeters:
-    for var_name in hyperparameters.keys():
+    for var_name in list(hyperparameters.keys()) + list(other_params.keys()):
         if var_name in args.__dict__.keys() and args.__dict__[var_name] is not None:
             hyperparameters[var_name] = args.__dict__[var_name]
 
