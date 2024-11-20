@@ -476,8 +476,8 @@ class Canonicaliser(BaseAgent):
     def sample_and_canonise(self, sample):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
-        val_batch = self.val_model(obs_batch)
-        next_val_batch = self.val_model(nobs_batch)
+        val_batch = self.val_model(obs_batch).squeeze()
+        next_val_batch = self.val_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
 
         adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
