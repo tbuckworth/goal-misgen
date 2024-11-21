@@ -7,6 +7,32 @@ try:
 except ImportError:
     pass
 
+local_run_names = [
+    "breezy-sun-1179",
+    "bright-sound-1216",
+    "celestial-butterfly-1211",
+    "comfy-sky-1176",
+    "confused-dragon-1210",
+    "copper-oath-1175",
+    "Crafted Generaliser",
+    "Crafted Misgeneraliser",
+    "northern-blaze-1250",
+    "dainty-galaxy-1191",
+    "celestial-butterfly-1211",
+    "copper-oath-1175",
+    "celestial-butterfly-1211",
+    "deft-puddle-1177",
+    "electric-wood-1278",
+    "dulcet-snow-1215",
+    "fine-aardvark-1230",
+    "giddy-star-1232",
+    "comfy-sky-1176",
+    "deft-puddle-1177",
+    "northern-blaze-1250",
+    "dulcet-snow-1215",
+    "electric-wood-1278",
+]
+
 run_names = [
     "absurd-field-1219",
     "breezy-sun-1179",
@@ -127,7 +153,7 @@ def load():
     final.to_csv("data/dist_metrics.csv", index=False)
 
 
-def load():
+def loadtemp():
     # Fetch runs from a project
     api = wandb.Api()
     project_name = "goal-misgen"
@@ -136,11 +162,39 @@ def load():
                     )
 
     # Collect and filter data
-    all_data = [run.config["logdir"] for run in runs if run.name in run_names]
+    all_data = [run.config["logdir"] for run in runs if run.name in local_run_names]
     for run in runs:
         if run.name in run_names:
             print(run.config["logdir"])
 
 
+def load_all():
+    # Fetch runs from a project
+    api = wandb.Api()
+    project_name = "goal-misgen"
+    runs = api.runs(f"ic-ai-safety/{project_name}",
+                    filters={"$and": [{"tags": "canon misgen2", "state": "finished"}]}
+                    )
+
+    # Collect and filter data
+    all_data = []
+    for run in runs:
+        # table = run.use_artifact("distances:latest").get("distances")
+        table = [x for x in run.logged_artifacts()][0].get('distances')
+        if table is not None:
+            df = pd.DataFrame(data=table.data, columns=table.columns)
+            df["mean_episode_rewards"] = run.summary.mean_episode_rewards
+            df["val_mean_episode_rewards"] = run.summary.val_mean_episode_rewards
+            df["run"] = run.name
+            df["logdir"] = run.config["logdir"]
+            df["user"] = run.user
+
+            all_data.append(df)
+
+    final = pd.concat(all_data).reset_index(drop=True)
+    final.to_csv("data/dist_metrics_full.csv", index=False)
+    print(final)
+
+
 if __name__ == "__main__":
-    load()
+    load_all()
