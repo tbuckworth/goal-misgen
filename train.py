@@ -148,9 +148,13 @@ def train(args):
         architecture = hyperparameters.get("architecture")
         if architecture == "impala":
             value_model = ImpalaValueModel(observation_shape[0], hidden_dims)
+            value_model_val = ImpalaValueModel(observation_shape[0], hidden_dims)
+
         else:
             value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+            value_model_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
         value_model.to(device)
+        value_model_val.to(device)
         trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if trusted_policy_name == "uniform":
             trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(env.observation_space.shape))
@@ -158,9 +162,12 @@ def train(args):
             trusted_policy = CraftedTorchPolicy(False, policy.action_size, device, input_dims=len(env.observation_space.shape))
         elif trusted_policy_name == "misgen":
             trusted_policy = CraftedTorchPolicy(True, policy.action_size, device, input_dims=len(env.observation_space.shape))
+        else:
+            raise NotImplementedError
 
         canon_params = dict(
-            val_model=value_model,
+            value_model=value_model,
+            value_model_val=value_model_val,
             storage_trusted=storage_trusted,
             storage_trusted_val=storage_trusted_val,
             trusted_policy=trusted_policy,

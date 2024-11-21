@@ -72,7 +72,11 @@ class Storage():
     def fetch_train_generator(self, mini_batch_size=None, recurrent=False, valid_envs=0, valid=False):
         if valid_envs >= self.num_envs:
             raise IndexError(f"valid_envs: {valid_envs} must be less than num_envs: {self.num_envs}")
-        batch_size = self.num_steps * self.num_envs
+        b_envs = valid_envs
+        if not valid:
+            b_envs = self.num_envs - valid_envs
+
+        batch_size = self.num_steps * b_envs
         if mini_batch_size is None:
             mini_batch_size = batch_size
         # If agent's policy is not recurrent, data could be sampled without considering the time-horizon
@@ -145,21 +149,21 @@ class LirlStorage(Storage):
         if not valid:
             obs_batch = torch.FloatTensor(self.obs_batch[:-1,valid_envs:]).reshape(-1, *self.obs_shape)[indices].to(self.device)
             nobs_batch = torch.FloatTensor(self.obs_batch[1:,valid_envs:]).reshape(-1, *self.obs_shape)[indices].to(self.device)
-            act_batch = torch.FloatTensor(self.act_batch[valid_envs:]).reshape(-1)[indices].to(self.device)
-            done_batch = torch.FloatTensor(self.done_batch[valid_envs:]).reshape(-1)[indices].to(self.device)
-            log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch[valid_envs:]).reshape(-1)[indices].to(self.device)
+            act_batch = torch.FloatTensor(self.act_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
+            done_batch = torch.FloatTensor(self.done_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
+            log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
             value_batch = torch.FloatTensor(self.value_batch[:-1,valid_envs:]).reshape(-1)[indices].to(self.device)
-            return_batch = torch.FloatTensor(self.return_batch[valid_envs:]).reshape(-1)[indices].to(self.device)
-            adv_batch = torch.FloatTensor(self.adv_batch[valid_envs:]).reshape(-1)[indices].to(self.device)
-            rew_batch = torch.FloatTensor(self.rew_batch[valid_envs:]).reshape(-1)[indices].to(self.device)
+            return_batch = torch.FloatTensor(self.return_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
+            adv_batch = torch.FloatTensor(self.adv_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
+            rew_batch = torch.FloatTensor(self.rew_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
         else:
             obs_batch = torch.FloatTensor(self.obs_batch[:-1,:valid_envs]).reshape(-1, *self.obs_shape)[indices].to(self.device)
             nobs_batch = torch.FloatTensor(self.obs_batch[1:,:valid_envs]).reshape(-1, *self.obs_shape)[indices].to(self.device)
-            act_batch = torch.FloatTensor(self.act_batch[:valid_envs]).reshape(-1)[indices].to(self.device)
-            done_batch = torch.FloatTensor(self.done_batch[:valid_envs]).reshape(-1)[indices].to(self.device)
-            log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch[:valid_envs]).reshape(-1)[indices].to(self.device)
+            act_batch = torch.FloatTensor(self.act_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
+            done_batch = torch.FloatTensor(self.done_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
+            log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
             value_batch = torch.FloatTensor(self.value_batch[:-1,:valid_envs]).reshape(-1)[indices].to(self.device)
-            return_batch = torch.FloatTensor(self.return_batch[:valid_envs]).reshape(-1)[indices].to(self.device)
-            adv_batch = torch.FloatTensor(self.adv_batch[:valid_envs]).reshape(-1)[indices].to(self.device)
-            rew_batch = torch.FloatTensor(self.rew_batch[:valid_envs]).reshape(-1)[indices].to(self.device)
+            return_batch = torch.FloatTensor(self.return_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
+            adv_batch = torch.FloatTensor(self.adv_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
+            rew_batch = torch.FloatTensor(self.rew_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
         yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch

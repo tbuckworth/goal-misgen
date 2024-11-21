@@ -39,7 +39,8 @@ class Canonicaliser(BaseAgent):
                  l1_coef=0.,
                  anneal_lr=True,
                  num_rew_updates=10,
-                 val_model=None,
+                 value_model=None,
+                 value_model_val=None,
                  val_epoch=100,
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
@@ -63,14 +64,10 @@ class Canonicaliser(BaseAgent):
         self.reset_rew_model_weights = reset_rew_model_weights
         self.print_ascent_rewards = False
         self.trusted_policy = trusted_policy
-        # UniformPolicy(policy.action_size, device,
-        #                                     input_dims=len(self.env.observation_space.shape))
-        # CraftedTorchPolicy
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
-        self.value_model = val_model
-        #TODO: figure this out:
-        self.value_model_val = None
+        self.value_model = value_model
+        self.value_model_val = value_model_val
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
         self.n_steps = n_steps
@@ -84,6 +81,7 @@ class Canonicaliser(BaseAgent):
         if len([x for x in self.policy.parameters()]) > 0:
             self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer = optim.Adam(self.value_model.parameters(), lr=learning_rate, eps=1e-5)
+        self.value_optimizer_val = optim.Adam(self.value_model_val.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -94,6 +92,15 @@ class Canonicaliser(BaseAgent):
         self.num_rew_updates = num_rew_updates
         self.storage_trusted = storage_trusted
         self.storage_trusted_val = storage_trusted_val
+        self.norm_funcs = {
+            "l1_norm": lambda x: x / x.abs().mean(),
+            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
+            "linf_norm": lambda x: x / x.abs().max(),
+        }
+        self.dist_funcs = {
+            "l1_dist": lambda x, y: (x - y).abs().mean(),
+            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+        }
 
     def predict(self, obs, hidden_state, done, policy=None):
         if policy is None:
@@ -198,17 +205,16 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
-        self.optimize_value(storage=self.storage_trusted_val, value_model=self.value_model, value_optimizer=self.value_optimizer)
-        # self.optimize_value(storage=self.storage_trusted_val, value_model=self.value_model_val)
+        self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
+        self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
 
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            # TODO: just use storage instead of storage_trusted?
-            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted, train=True)
+            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
-            df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, train=False)
+            df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val)
 
             df_train["Env"] = "Train"
             df_valid["Env"] = "Valid"
@@ -236,8 +242,9 @@ class Canonicaliser(BaseAgent):
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
-    def optimize_value(self, storage, value_model, value_optimizer):
-
+    def optimize_value(self, storage, value_model, value_optimizer, env_type):
+        distance = self.dist_funcs["l2_dist"]
+        normalize = self.norm_funcs["l2_norm"]
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -263,21 +270,28 @@ class Canonicaliser(BaseAgent):
                                                       )
             val_losses = []
             val_losses_valid = []
+            clp = []
+            ctr = []
 
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
                     old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
-
                 value_batch = value_model(obs_batch).squeeze()
                 next_value_batch = value_model(nobs_batch).squeeze()
-
                 target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
-
                 value_loss = nn.MSELoss()(target, value_batch)
-
                 value_loss.backward()
-
                 val_losses.append(value_loss.item())
+                with torch.no_grad():
+                    # Technically could do this forward pass once elsewhere and store it...
+                    dist, _, _ = self.policy.forward_with_embedding(obs_batch)
+                    logp_batch = dist.log_prob(act_batch)
+
+                    adjustment = self.gamma * next_value_batch * (1 - done_batch) - value_batch
+                    canon_logp = logp_batch + adjustment
+                    canon_true_r = rew_batch + adjustment
+                    clp.append(canon_logp)
+                    ctr.append(canon_true_r)
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
@@ -291,14 +305,19 @@ class Canonicaliser(BaseAgent):
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
                 val_losses_valid.append(value_loss_val.item())
-
             value_optimizer.step()
             value_optimizer.zero_grad()
             grad_accumulation_cnt += 1
+
+            canon_logp = torch.concat(clp)
+            canon_true_r = torch.concat(ctr)
+            dist = distance(normalize(canon_logp), normalize(canon_true_r))
+
             wandb.log({
-                'Loss/val_epoch': e,
-                'Loss/val_loss': np.mean(val_losses),
-                'Loss/val_loss_valid': np.mean(val_losses_valid)
+                f'Loss/value_epoch_{env_type}': e,
+                f'Loss/value_loss_{env_type}': np.mean(val_losses),
+                f'Loss/value_loss_valid_{env_type}': np.mean(val_losses_valid),
+                f'Loss/l2_normalized_l2_distance': dist.item(),
             })
 
     def optimize(self):
@@ -469,50 +488,38 @@ class Canonicaliser(BaseAgent):
 
         return rew_batch, obs_batch, act_batch, value, next_value, dist.log_prob(act_batch), done_batch
 
-    def canonicalise_and_evaluate_efficient(self, storage, train):
+    def canonicalise_and_evaluate_efficient(self, storage, value_model):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
 
         self.policy.eval()
-        self.value_model.eval()
+        value_model.eval()
 
         recurrent = self.policy.is_recurrent()
         generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                   recurrent=recurrent)
 
-        tuples = [self.sample_and_canonise(sample, train) for sample in generator]
+        tuples = [self.sample_and_canonise(sample, value_model) for sample in generator]
         c_lps, c_r = zip(*tuples)
         canon_logp = torch.concat(list(c_lps))
         canon_true_r = torch.concat(list(c_r))
 
-        norm_funcs = {
-            "l1_norm": lambda x: x / x.abs().mean(),
-            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
-            "linf_norm": lambda x: x / x.abs().max(),
-        }
 
-        dist_funcs = {
-            "l1_dist": lambda x, y: (x - y).abs().mean(),
-            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
-        }
 
         data = []
-        for norm_name, normalize in norm_funcs.items():
-            for dist_name, distance in dist_funcs.items():
+        for norm_name, normalize in self.norm_funcs.items():
+            for dist_name, distance in self.dist_funcs.items():
                 dist = distance(normalize(canon_logp), normalize(canon_true_r))
                 data.append({'Norm': norm_name, 'Metric': dist_name, 'Distance': dist.item()})
 
         return pd.DataFrame(data)
 
-    def sample_and_canonise(self, sample, train):
+    def sample_and_canonise(self, sample, value_model):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
-        dist, val_batch, _ = self.policy.forward_with_embedding(obs_batch)
-        if train:
-            _, next_val_batch, _ = self.policy.forward_with_embedding(nobs_batch)
-        else:
-            val_batch = self.value_model(obs_batch).squeeze()
-            next_val_batch = self.value_model(nobs_batch).squeeze()
+        dist, _, _ = self.policy.forward_with_embedding(obs_batch)
+        val_batch = value_model(obs_batch).squeeze()
+        next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
 
         adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
