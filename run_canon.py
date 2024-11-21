@@ -1,4 +1,4 @@
-from helper_local import get_latest_model
+from helper_local import get_model_with_largest_checkpoint
 from hyperparameter_optimization import run_next_hyperparameters
 
 local_unique_ascent_dirs = [
@@ -64,7 +64,7 @@ coinrun_dirs = [
 if __name__ == '__main__':
     for model_file in local_unique_ascent_dirs:
         hparams = {
-            "model_file": get_latest_model(model_file),
+            "model_file": get_model_with_largest_checkpoint(model_file),
             # coinrun unshifted
             # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
 

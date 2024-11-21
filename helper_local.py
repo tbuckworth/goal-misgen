@@ -173,8 +173,8 @@ def add_training_args(parser):
     return parser
 
 
-def get_latest_model(model_dir):
-    """given model_dir with files named model_n.pth where n is an integer,
-    return the filename with largest n"""
-    steps = [int(filename[6:-4]) for filename in os.listdir(model_dir) if filename.startswith("model_")]
-    return list(os.listdir(model_dir))[np.argmax(steps)]
+def get_model_with_largest_checkpoint(folder):
+    files = [os.path.join(folder, x) for x in os.listdir(folder)]
+    search = lambda x: re.search(r"model_(\d*).pth", x)
+    last_checkpoint = max([int(search(x).group(1)) for x in files if search(x)])
+    return [x for x in files if re.search(f"model_{last_checkpoint}.pth", x)][0]
