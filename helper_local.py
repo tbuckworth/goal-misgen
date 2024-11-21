@@ -171,3 +171,10 @@ def add_training_args(parser):
     # multi threading
     parser.add_argument('--num_threads', type=int, default=8)
     return parser
+
+
+def get_latest_model(model_dir):
+    """given model_dir with files named model_n.pth where n is an integer,
+    return the filename with largest n"""
+    steps = [int(filename[6:-4]) for filename in os.listdir(model_dir) if filename.startswith("model_")]
+    return list(os.listdir(model_dir))[np.argmax(steps)]
