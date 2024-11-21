@@ -138,6 +138,7 @@ ascent-canon:
     hidden_dims: [128, 128, 128]
     rew_learns_from_trusted_rollouts: False
     val_epoch: 10
+    n_val_envs: 64
 
 ascent-crafted:
     algo: canon
