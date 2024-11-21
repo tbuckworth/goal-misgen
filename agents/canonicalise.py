@@ -102,13 +102,15 @@ class Canonicaliser(BaseAgent):
             "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
         }
 
-    def predict_temp(self, obs, hidden_state, done):
+    def predict_temp(self, obs, act, hidden_state, done):
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(device=self.device)
+            act = torch.FloatTensor(act).to(device=self.device)
             hidden_state = torch.FloatTensor(hidden_state).to(device=self.device)
             mask = torch.FloatTensor(1 - done).to(device=self.device)
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
-        return dist
+            logp_eval_policy = dist.log_prob(act).cpu().numpy()
+        return logp_eval_policy
 
     def predict(self, obs, hidden_state, done, policy=None):
         if policy is None:
@@ -242,8 +244,7 @@ class Canonicaliser(BaseAgent):
         for _ in range(self.n_steps):
             act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done, policy)
             if save_extra:
-                dist = self.predict_temp(obs, hidden_state, done)
-                logp_eval_policy = dist.log_prob(act).cpu().numpy()
+                logp_eval_policy = self.predict_temp(obs, act, hidden_state, done)
             next_obs, rew, done, info = env.step(act)
             storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy)
             obs = next_obs
