@@ -7,6 +7,41 @@ try:
 except ImportError:
     pass
 
+run_names = [
+    "absurd-field-1219",
+    "breezy-sun-1179",
+    "bright-sound-1216",
+    "celestial-butterfly-1211",
+    "chocolate-galaxy-1214",
+    "classic-wood-1246",
+    "comfy-sky-1176",
+    "confused-dragon-1210",
+    "copper-oath-1175",
+    "Crafted Generaliser",
+    "Crafted Misgeneraliser",
+    "crimson-frost-1208",
+    "crisp-violet-1221",
+    "dainty-galaxy-1191",
+    "celestial-butterfly-1211",
+    "copper-oath-1175",
+    "celestial-butterfly-1211",
+    "deep-valley-1212",
+    "deft-puddle-1177",
+    "devoted-frog-1269",
+    "driven-surf-1185",
+    "dulcet-snow-1215",
+    "fine-aardvark-1230",
+    "frosty-valley-1220",
+    "giddy-star-1232",
+    "glad-flower-1249",
+    "comfy-sky-1176",
+    "deft-puddle-1177",
+    "crimson-frost-1208",
+    "pleasant-bee-1190",
+    "dulcet-snow-1215",
+    "devoted-frog-1269",
+]
+
 
 def graph_wandb_res():
     data = pd.read_csv("data/dist_metrics.csv")
@@ -15,12 +50,11 @@ def graph_wandb_res():
     df2 = data.pivot(columns='Env', values='Distance', index=id_vars).reset_index()
     df2["Diff"] = df2["Valid"] - df2["Train"]
     df = df2.melt(
-        id_vars =id_vars,
-        value_vars = ["Train","Valid","Diff"],
-        var_name = "Env",
-        value_name = "Distance",
+        id_vars=id_vars,
+        value_vars=["Train", "Valid", "Diff"],
+        var_name="Env",
+        value_name="Distance",
     )
-
 
     # Correcting the legend addition logic to handle it per axis instead of plt level
     # Adjusting the code to ensure proper legend handling and no overlap issues
@@ -64,8 +98,7 @@ def graph_wandb_res():
     plt.tight_layout()
     plt.show()
 
-
-    correls = df2.groupby(['Norm', 'Metric'])[['val_mean_episode_rewards','Diff']].corr().iloc[0::2,-1].reset_index()
+    correls = df2.groupby(['Norm', 'Metric'])[['val_mean_episode_rewards', 'Diff']].corr().iloc[0::2, -1].reset_index()
     correls = correls.drop(columns=["Env"])
     correls.rename(columns={'Diff': 'Correlation'}, inplace=True)
 
@@ -92,6 +125,21 @@ def load():
 
     final = pd.concat(all_data).reset_index(drop=True)
     final.to_csv("data/dist_metrics.csv", index=False)
+
+
+def load():
+    # Fetch runs from a project
+    api = wandb.Api()
+    project_name = "goal-misgen"
+    runs = api.runs(f"ic-ai-safety/{project_name}",
+                    filters={"$and": [{"tags": "canon misgen2", "state": "finished"}]}
+                    )
+
+    # Collect and filter data
+    all_data = [run.config["logdir"] for run in runs if run.name in run_names]
+    for run in runs:
+        if run.name in run_names:
+            print(run.config["logdir"])
 
 
 if __name__ == "__main__":
