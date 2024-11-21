@@ -102,6 +102,14 @@ class Canonicaliser(BaseAgent):
             "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
         }
 
+    def predict_temp(self, obs, hidden_state, done):
+        with torch.no_grad():
+            obs = torch.FloatTensor(obs).to(device=self.device)
+            hidden_state = torch.FloatTensor(hidden_state).to(device=self.device)
+            mask = torch.FloatTensor(1 - done).to(device=self.device)
+            dist, value, hidden_state = self.policy(obs, hidden_state, mask)
+        return dist
+
     def predict(self, obs, hidden_state, done, policy=None):
         if policy is None:
             policy = self.policy
@@ -156,7 +164,7 @@ class Canonicaliser(BaseAgent):
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
         self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
-                              self.trusted_policy)
+                              self.trusted_policy, self.policy)
         # Need to re-do this, so it's fresh for the env data collection:
         obs = self.env.reset()
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
@@ -167,7 +175,7 @@ class Canonicaliser(BaseAgent):
         hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done_v = np.zeros(self.n_envs)
         self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
-                              self.trusted_policy)
+                              self.trusted_policy, self.policy)
         # Need to re-do this, so it's fresh for the valid env data collection:
         obs_v = self.env_valid.reset()
         hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
@@ -229,11 +237,15 @@ class Canonicaliser(BaseAgent):
         if self.env_valid is not None:
             self.env_valid.close()
 
-    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None):
+    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None, save_extra=False):
+        logp_eval_policy = None
         for _ in range(self.n_steps):
             act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done, policy)
+            if save_extra:
+                dist = self.predict_temp(obs, hidden_state, done)
+                logp_eval_policy = dist.log_prob(act).cpu().numpy()
             next_obs, rew, done, info = env.step(act)
-            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
+            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
@@ -264,18 +276,19 @@ class Canonicaliser(BaseAgent):
                                                       valid=False,
                                                       )
             generator_valid = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
-                                                      recurrent=recurrent,
-                                                      valid_envs=self.n_val_envs,
-                                                      valid=True,
-                                                      )
+                                                            recurrent=recurrent,
+                                                            valid_envs=self.n_val_envs,
+                                                            valid=True,
+                                                            )
             val_losses = []
             val_losses_valid = []
             clp = []
             ctr = []
 
             for sample in generator:
-                obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
+                (obs_batch, nobs_batch, act_batch, done_batch,
+                 old_log_prob_act_batch, old_value_batch, return_batch,
+                 adv_batch, rew_batch, logp_eval_policy_batch) = sample
                 value_batch = value_model(obs_batch).squeeze()
                 next_value_batch = value_model(nobs_batch).squeeze()
                 target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
@@ -283,19 +296,15 @@ class Canonicaliser(BaseAgent):
                 value_loss.backward()
                 val_losses.append(value_loss.item())
                 with torch.no_grad():
-                    # Technically could do this forward pass once elsewhere and store it...
-                    dist, _, _ = self.policy.forward_with_embedding(obs_batch)
-                    logp_batch = dist.log_prob(act_batch)
-
                     adjustment = self.gamma * next_value_batch * (1 - done_batch) - value_batch
-                    canon_logp = logp_batch + adjustment
+                    canon_logp = logp_eval_policy_batch + adjustment
                     canon_true_r = rew_batch + adjustment
                     clp.append(canon_logp)
                     ctr.append(canon_true_r)
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val = sample
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, _ = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
                     next_value_batch_val = value_model(nobs_batch_val).squeeze()
@@ -317,7 +326,7 @@ class Canonicaliser(BaseAgent):
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/value_loss_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{env_type}': np.mean(val_losses_valid),
-                f'Loss/l2_normalized_l2_distance': dist.item(),
+                f'Loss/l2_normalized_l2_distance_{env_type}': dist.item(),
             })
 
     def optimize(self):
@@ -335,7 +344,7 @@ class Canonicaliser(BaseAgent):
                                                            recurrent=recurrent)
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _ = sample
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _ = sample
                 mask_batch = (1 - done_batch)
                 dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
@@ -481,7 +490,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data)  # dists, columns=["Norm", "Metric", "Distance"])
 
     def sample_next_data(self, sample):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         value = self.value_model(obs_batch)
         next_value = self.value_model(nobs_batch)
@@ -505,8 +514,6 @@ class Canonicaliser(BaseAgent):
         canon_logp = torch.concat(list(c_lps))
         canon_true_r = torch.concat(list(c_r))
 
-
-
         data = []
         for norm_name, normalize in self.norm_funcs.items():
             for dist_name, distance in self.dist_funcs.items():
@@ -516,7 +523,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data)
 
     def sample_and_canonise(self, sample, value_model):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()

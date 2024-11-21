@@ -21,13 +21,14 @@ class Storage():
         self.rew_batch = torch.zeros(self.num_steps, self.num_envs)
         self.done_batch = torch.zeros(self.num_steps, self.num_envs)
         self.log_prob_act_batch = torch.zeros(self.num_steps, self.num_envs)
+        self.log_prob_eval_policy = torch.zeros(self.num_steps, self.num_envs)
         self.value_batch = torch.zeros(self.num_steps + 1, self.num_envs)
         self.return_batch = torch.zeros(self.num_steps, self.num_envs)
         self.adv_batch = torch.zeros(self.num_steps, self.num_envs)
         self.info_batch = deque(maxlen=self.num_steps)
         self.step = 0
 
-    def store(self, obs, hidden_state, act, rew, done, info, log_prob_act, value):
+    def store(self, obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy=None):
         self.obs_batch[self.step] = torch.from_numpy(obs.copy())
         self.hidden_states_batch[self.step] = torch.from_numpy(hidden_state.copy())
         self.act_batch[self.step] = torch.from_numpy(act.copy())
@@ -36,6 +37,8 @@ class Storage():
         self.log_prob_act_batch[self.step] = torch.from_numpy(log_prob_act.copy())
         self.value_batch[self.step] = torch.from_numpy(value.copy())
         self.info_batch.append(info)
+        if logp_eval_policy is not None:
+            self.log_prob_eval_policy[self.step]= torch.from_numpy(logp_eval_policy.copy())
 
         self.step = (self.step + 1) % self.num_steps
 
@@ -156,6 +159,8 @@ class LirlStorage(Storage):
             return_batch = torch.FloatTensor(self.return_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
             adv_batch = torch.FloatTensor(self.adv_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
             rew_batch = torch.FloatTensor(self.rew_batch[:,valid_envs:]).reshape(-1)[indices].to(self.device)
+            log_prob_eval_policy = torch.FloatTensor(self.log_prob_eval_policy[:,valid_envs:]).reshape(-1)[indices].to(self.device)
+
         else:
             obs_batch = torch.FloatTensor(self.obs_batch[:-1,:valid_envs]).reshape(-1, *self.obs_shape)[indices].to(self.device)
             nobs_batch = torch.FloatTensor(self.obs_batch[1:,:valid_envs]).reshape(-1, *self.obs_shape)[indices].to(self.device)
@@ -166,4 +171,6 @@ class LirlStorage(Storage):
             return_batch = torch.FloatTensor(self.return_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
             adv_batch = torch.FloatTensor(self.adv_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
             rew_batch = torch.FloatTensor(self.rew_batch[:,:valid_envs]).reshape(-1)[indices].to(self.device)
-        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch
+            log_prob_eval_policy = torch.FloatTensor(self.log_prob_eval_policy[:,:valid_envs]).reshape(-1)[indices].to(self.device)
+
+        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy
