@@ -49,11 +49,15 @@ class Canonicaliser(BaseAgent):
                  reset_rew_model_weights=False,
                  rew_learns_from_trusted_rollouts=False,
                  trusted_policy=None,
+                 n_val_envs=0,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
 
+        if n_val_envs >= n_envs:
+            raise IndexError(f"n_val_envs:{n_val_envs} must be less than n_envs:{n_envs}")
+        self.n_val_envs = n_val_envs
         self.val_epoch = val_epoch
         self.rew_learns_from_trusted_rollouts = rew_learns_from_trusted_rollouts
         self.reset_rew_model_weights = reset_rew_model_weights
@@ -64,7 +68,9 @@ class Canonicaliser(BaseAgent):
         # CraftedTorchPolicy
         self.next_rew_loss_coef = next_rew_loss_coef
         self.inv_temp = inv_temp_rew_model
-        self.val_model = val_model
+        self.value_model = val_model
+        #TODO: figure this out:
+        self.value_model_val = None
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
         self.n_steps = n_steps
@@ -77,7 +83,7 @@ class Canonicaliser(BaseAgent):
         self.learning_rate = learning_rate
         if len([x for x in self.policy.parameters()]) > 0:
             self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
-        self.value_optimizer = optim.Adam(self.val_model.parameters(), lr=learning_rate, eps=1e-5)
+        self.value_optimizer = optim.Adam(self.value_model.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -192,14 +198,17 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
-        self.optimize_value()
+        self.optimize_value(storage=self.storage_trusted_val, value_model=self.value_model, value_optimizer=self.value_optimizer)
+        # self.optimize_value(storage=self.storage_trusted_val, value_model=self.value_model_val)
+
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted)
+            # TODO: just use storage instead of storage_trusted?
+            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted, train=True)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
-            df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val)
+            df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, train=False)
 
             df_train["Env"] = "Train"
             df_valid["Env"] = "Valid"
@@ -227,7 +236,7 @@ class Canonicaliser(BaseAgent):
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
-    def optimize_value(self):
+    def optimize_value(self, storage, value_model, value_optimizer):
 
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
@@ -236,22 +245,31 @@ class Canonicaliser(BaseAgent):
         grad_accumulation_cnt = 1
 
         if self.reset_rew_model_weights:
-            self.val_model.apply(orthogonal_init)
+            value_model.apply(orthogonal_init)
 
-        self.val_model.train()
+        value_model.train()
         self.policy.eval()
         for e in range(self.val_epoch):
             recurrent = self.policy.is_recurrent()
-            storage = self.storage_trusted_val
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
-                                                      recurrent=recurrent)
+                                                      recurrent=recurrent,
+                                                      valid_envs=self.n_val_envs,
+                                                      valid=False,
+                                                      )
+            generator_valid = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+                                                      recurrent=recurrent,
+                                                      valid_envs=self.n_val_envs,
+                                                      valid=True,
+                                                      )
             val_losses = []
+            val_losses_valid = []
+
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
                     old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, rew_batch = sample
 
-                value_batch = self.val_model(obs_batch).squeeze()
-                next_value_batch = self.val_model(nobs_batch).squeeze()
+                value_batch = value_model(obs_batch).squeeze()
+                next_value_batch = value_model(nobs_batch).squeeze()
 
                 target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
 
@@ -261,12 +279,26 @@ class Canonicaliser(BaseAgent):
 
                 val_losses.append(value_loss.item())
 
-            self.value_optimizer.step()
-            self.value_optimizer.zero_grad()
+            for sample in generator_valid:
+                obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val = sample
+                with torch.no_grad():
+                    value_batch_val = value_model(obs_batch_val).squeeze()
+                    next_value_batch_val = value_model(nobs_batch_val).squeeze()
+
+                    target = rew_batch_val + self.gamma * next_value_batch_val * (1 - done_batch_val)
+
+                    value_loss_val = nn.MSELoss()(target, value_batch_val)
+
+                val_losses_valid.append(value_loss_val.item())
+
+            value_optimizer.step()
+            value_optimizer.zero_grad()
             grad_accumulation_cnt += 1
             wandb.log({
                 'Loss/val_epoch': e,
                 'Loss/val_loss': np.mean(val_losses),
+                'Loss/val_loss_valid': np.mean(val_losses_valid)
             })
 
     def optimize(self):
@@ -336,7 +368,7 @@ class Canonicaliser(BaseAgent):
             self.mini_batch_size = batch_size
 
         self.policy.eval()
-        self.val_model.eval()
+        self.value_model.eval()
 
         recurrent = self.policy.is_recurrent()
         generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
@@ -432,24 +464,24 @@ class Canonicaliser(BaseAgent):
     def sample_next_data(self, sample):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
-        value = self.val_model(obs_batch)
-        next_value = self.val_model(nobs_batch)
+        value = self.value_model(obs_batch)
+        next_value = self.value_model(nobs_batch)
 
         return rew_batch, obs_batch, act_batch, value, next_value, dist.log_prob(act_batch), done_batch
 
-    def canonicalise_and_evaluate_efficient(self, storage):
+    def canonicalise_and_evaluate_efficient(self, storage, train):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
 
         self.policy.eval()
-        self.val_model.eval()
+        self.value_model.eval()
 
         recurrent = self.policy.is_recurrent()
         generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                   recurrent=recurrent)
 
-        tuples = [self.sample_and_canonise(sample) for sample in generator]
+        tuples = [self.sample_and_canonise(sample, train) for sample in generator]
         c_lps, c_r = zip(*tuples)
         canon_logp = torch.concat(list(c_lps))
         canon_true_r = torch.concat(list(c_r))
@@ -473,11 +505,14 @@ class Canonicaliser(BaseAgent):
 
         return pd.DataFrame(data)
 
-    def sample_and_canonise(self, sample):
+    def sample_and_canonise(self, sample, train):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch = sample
-        dist, _, _ = self.policy.forward_with_embedding(obs_batch)
-        val_batch = self.val_model(obs_batch).squeeze()
-        next_val_batch = self.val_model(nobs_batch).squeeze()
+        dist, val_batch, _ = self.policy.forward_with_embedding(obs_batch)
+        if train:
+            _, next_val_batch, _ = self.policy.forward_with_embedding(nobs_batch)
+        else:
+            val_batch = self.value_model(obs_batch).squeeze()
+            next_val_batch = self.value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
 
         adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
