@@ -206,9 +206,9 @@ def load_summary():
                     filters={"$and": [{"tags": "canon misgen3", "state": "finished"}]}
                     )
     train_rewards = "Mean Training Episode Rewards"
-    val_rewards = "Mean Validation Episode Rewards"
+    val_rewards = "Mean Evaluation Episode Rewards"
     train_distance = "Training Distance"
-    val_distance = "Validation Distance"
+    val_distance = "Evaluation Distance"
     ratio = "Distance Ratio"
     diff = "Distance Difference"
 
@@ -230,7 +230,7 @@ def load_summary():
 
     df.to_csv("data/l2_dist.csv", index=False)
 
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(9, 4.5), sharey=True)  # Adjust figsize as needed
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(6, 3), sharey=True)  # Adjust figsize as needed
     for ax, y_metric in zip(axes, [train_distance, val_distance]):
         # PLOT:
         df.plot.scatter(x=val_rewards, y=y_metric, ax=ax, alpha=0.7)
@@ -256,7 +256,37 @@ def load_summary():
         ax.set_ylabel("Distance")
         # plt.legend()
     plt.tight_layout()
-    plt.savefig("data/ascent_distances_medium.png")
+    plt.savefig("data/ascent_distances.png")
+    plt.show()
+
+    # Alternative
+
+    ax1 = df.plot.scatter(x=val_rewards, y=train_distance, alpha=0.7, color='b', label=train_distance)
+    df.plot.scatter(x=val_rewards, y=val_distance, alpha=0.7, color='r', ax=ax1, label=val_distance)
+
+    for y_metric, color, linestyle in zip([train_distance, val_distance], ['b', 'r'], [':','--']):
+        # PLOT:
+        # df.plot.scatter(x=val_rewards, y=y_metric, ax=ax1, alpha=0.7, color=color)
+        z = np.polyfit(df[val_rewards], df[y_metric], 1)  # Linear fit (degree=1)
+        p = np.poly1d(z)
+        r_squared = np.corrcoef(df[val_rewards], df[y_metric])[0, 1] ** 2
+        x_smooth = np.linspace(df[val_rewards].min(), df[val_rewards].max(),
+                               50)  # Adjust the number of points for smoothness
+        # Compute the corresponding y values for the trendline
+        y_pred = p(x_smooth)
+        # Plot the trendline
+        ax1.plot(x_smooth, y_pred,
+                 color=color,
+                 alpha=0.5,
+                 linestyle=linestyle,
+                 # linewidth=5,
+                 # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
+                 label=f'$R^2$ = {r_squared:.2f}',
+                 )
+    ax1.set_ylabel("Distance")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("data/ascent_distances_overlapping.png")
     plt.show()
 
     print(df)

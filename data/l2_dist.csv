@@ -1,4 +1,4 @@
-Mean Training Episode Rewards,Mean Validation Episode Rewards,Training Distance,Validation Distance,run,logdir,Distance Ratio,Distance Difference
+Mean Training Episode Rewards,Mean Evaluation Episode Rewards,Training Distance,Evaluation Distance,run,logdir,Distance Ratio,Distance Difference
 10,9.0,1.0346297025680542,1.319021224975586,fluent-snowflake-1880,logs/train/ascent/ascent/2024-11-21__17-56-34__seed_2477,1.2748727604684493,0.28439152240753174
 10,10.0,1.0316132307052612,1.3330941200256348,floral-meadow-1881,logs/train/ascent/ascent/2024-11-21__18-01-44__seed_2960,1.2922421701728917,0.30148088932037354
 10,9.0,1.03395414352417,1.2971559762954712,woven-pond-1882,logs/train/ascent/ascent/2024-11-21__18-06-36__seed_2882,1.254558516371136,0.26320183277130127
