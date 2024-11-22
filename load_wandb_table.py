@@ -1,4 +1,5 @@
 import pandas as pd
+from imitation.scripts.config.train_rl import train_rl_ex
 from matplotlib import pyplot as plt
 
 try:
@@ -203,21 +204,33 @@ def load_summary():
     runs = api.runs(f"ic-ai-safety/{project_name}",
                     filters={"$and": [{"tags": "canon misgen3", "state": "finished"}]}
                     )
+    train_rewards = "Mean Training Episode Rewards"
+    val_rewards = "Mean Validation Episode Rewards"
+    train_distance = "Training Distance"
+    val_distance = "Validation Distance"
+    ratio = "Distance Ratio"
+    diff = "Distance Difference"
 
     # Collect and filter data
     all_data = []
     for run in runs:
         row = {}
-        row["Mean Training Episode Rewards"] = run.summary.mean_episode_rewards
-        row["Mean Validation Episode Rewards"] = run.summary.val_mean_episode_rewards
-        row["Training Distance"] = run.summary.l2_normalized_l2_distance_Training
-        row["Validation Distance"] = run.summary.l2_normalized_l2_distance_Validation
+        row[train_rewards] = run.summary.mean_episode_rewards
+        row[val_rewards] = run.summary.val_mean_episode_rewards
+        row[train_distance] = run.summary["Loss/l2_normalized_l2_distance_Training"]
+        row[val_distance] = run.summary["Loss/l2_normalized_l2_distance_Validation"]
         row["run"] = run.name
         row["logdir"] = run.config["logdir"]
         all_data.append(row)
 
+
     df = pd.DataFrame(all_data)
+    df[ratio] = df[val_distance] / df[train_distance]
+    df[diff] = df[val_distance] - df[train_distance]
+
     df.to_csv("data/l2_dist.csv", index=False)
+    df.plot.scatter(x=val_rewards, y=val_distance)
+    plt.show()
     print(df)
 
 
