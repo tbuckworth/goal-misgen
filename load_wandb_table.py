@@ -196,5 +196,30 @@ def load_all():
     print(final)
 
 
+def load_summary():
+    # Fetch runs from a project
+    api = wandb.Api()
+    project_name = "goal-misgen"
+    runs = api.runs(f"ic-ai-safety/{project_name}",
+                    filters={"$and": [{"tags": "canon misgen3", "state": "finished"}]}
+                    )
+
+    # Collect and filter data
+    all_data = []
+    for run in runs:
+        row = {}
+        row["Mean Training Episode Rewards"] = run.summary.mean_episode_rewards
+        row["Mean Validation Episode Rewards"] = run.summary.val_mean_episode_rewards
+        row["Training Distance"] = run.summary.l2_normalized_l2_distance_Training
+        row["Validation Distance"] = run.summary.l2_normalized_l2_distance_Validation
+        row["run"] = run.name
+        row["logdir"] = run.config["logdir"]
+        all_data.append(row)
+
+    df = pd.DataFrame(all_data)
+    df.to_csv("data/l2_dist.csv", index=False)
+    print(df)
+
+
 if __name__ == "__main__":
-    load_all()
+    load_summary()
