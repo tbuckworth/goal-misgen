@@ -209,14 +209,13 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
-        # TODO: put these back in
-        # self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
+        self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
         self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
 
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            # df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model)
+            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
             df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val)

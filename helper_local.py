@@ -117,6 +117,11 @@ def initialize_policy(device, hyperparameters, env, observation_shape):
         policy = CraftedTorchPolicy(misgen, action_size, device)
         model = DictToArgs({"output_dim": 3})
         return model, policy
+    elif architecture == 'trusted-value':
+        #TODO:
+        policy = DictToArgs({"action_size": action_space.n})
+        model = DictToArgs({"output_dim": 3})
+        return model, policy
 
     # Discrete action space
     recurrent = hyperparameters.get('recurrent', False)
