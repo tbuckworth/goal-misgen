@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from imitation.scripts.config.train_rl import train_rl_ex
 from matplotlib import pyplot as plt
@@ -223,14 +224,41 @@ def load_summary():
         row["logdir"] = run.config["logdir"]
         all_data.append(row)
 
-
     df = pd.DataFrame(all_data)
     df[ratio] = df[val_distance] / df[train_distance]
     df[diff] = df[val_distance] - df[train_distance]
 
     df.to_csv("data/l2_dist.csv", index=False)
-    df.plot.scatter(x=val_rewards, y=val_distance)
+
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(9, 4.5), sharey=True)  # Adjust figsize as needed
+    for ax, y_metric in zip(axes, [train_distance, val_distance]):
+        # PLOT:
+        df.plot.scatter(x=val_rewards, y=y_metric, ax=ax, alpha=0.7)
+        z = np.polyfit(df[val_rewards], df[y_metric], 1)  # Linear fit (degree=1)
+        p = np.poly1d(z)
+        r_squared = np.corrcoef(df[val_rewards], df[y_metric])[0, 1] ** 2
+        x_smooth = np.linspace(df[val_rewards].min(), df[val_rewards].max(),
+                               50)  # Adjust the number of points for smoothness
+        # Compute the corresponding y values for the trendline
+        y_pred = p(x_smooth)
+        # Plot the trendline
+        ax.plot(x_smooth, y_pred,
+                 color='black',
+                 alpha=0.5,
+                 linestyle='-.',
+                 # linewidth=5,
+                 # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
+                 label=f'$R^2$ = {r_squared:.2f}',
+                 )
+        ax.legend()
+        ax.set_title(y_metric)
+        ax.set_xlabel(val_rewards)
+        ax.set_ylabel("Distance")
+        # plt.legend()
+    plt.tight_layout()
+    plt.savefig("data/ascent_distances_medium.png")
     plt.show()
+
     print(df)
 
 
