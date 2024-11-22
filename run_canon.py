@@ -61,8 +61,12 @@ coinrun_dirs = [
     "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
 ]
 
+generalising_ascender = [
+    get_model_with_largest_checkpoint('logs/train/ascent/Ascent/2024-11-19__12-04-10__seed_50')
+]
+
 if __name__ == '__main__':
-    for model_file in coinrun_dirs:
+    for model_file in generalising_ascender:
         try:
             hparams = {
                 "model_file": model_file,
@@ -83,11 +87,11 @@ if __name__ == '__main__':
                 "env_name": "get",
                 "exp_name": "coinrun",
                 "param_name": "ascent-canon",
-                "wandb_tags": ["coinrun misgen3"],
+                "wandb_tags": ["test"],  # "coinrun misgen3"],
                 "num_checkpoints": 1,
                 "use_wandb": True,
                 "num_timesteps": int(65000),
-                "val_epoch": 1500,
+                "val_epoch": 30,
                 "mini_batch_size": 2048,
                 "n_val_envs": 128,
                 "n_envs": 256 + 128,

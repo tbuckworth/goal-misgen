@@ -4,6 +4,7 @@ from torch import nn
 
 from common import orthogonal_init
 from common.policy import UniformPolicy, CraftedTorchPolicy
+from helper_local import norm_funcs, dist_funcs
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
@@ -92,15 +93,8 @@ class Canonicaliser(BaseAgent):
         self.num_rew_updates = num_rew_updates
         self.storage_trusted = storage_trusted
         self.storage_trusted_val = storage_trusted_val
-        self.norm_funcs = {
-            "l1_norm": lambda x: x / x.abs().mean(),
-            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
-            "linf_norm": lambda x: x / x.abs().max(),
-        }
-        self.dist_funcs = {
-            "l1_dist": lambda x, y: (x - y).abs().mean(),
-            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
-        }
+        self.norm_funcs = norm_funcs
+        self.dist_funcs = dist_funcs
 
     def predict_temp(self, obs, act, hidden_state, done):
         with torch.no_grad():

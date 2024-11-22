@@ -178,3 +178,15 @@ def get_model_with_largest_checkpoint(folder):
     search = lambda x: re.search(r"model_(\d*).pth", x)
     last_checkpoint = max([int(search(x).group(1)) for x in files if search(x)])
     return [x for x in files if re.search(f"model_{last_checkpoint}.pth", x)][0]
+
+
+norm_funcs = {
+            "l1_norm": lambda x: x / x.abs().mean(),
+            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
+            "linf_norm": lambda x: x / x.abs().max(),
+        }
+
+dist_funcs = {
+            "l1_dist": lambda x, y: (x - y).abs().mean(),
+            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+        }

@@ -3,12 +3,16 @@ import numpy as np
 import torch
 import einops
 
+from helper_local import norm_funcs, dist_funcs
+import matplotlib.pyplot as plt
+
 # %%
 n_states = 10
-n_actions = 5
+n_actions = 2
 deterministic = True
 sparse_reward = True
 ascender = True
+ascender_long = True
 
 # %%
 if deterministic:
@@ -56,6 +60,20 @@ true_R[4] = 10
 
 gamma = 0.99
 
+# %%
+if ascender_long:
+    n_states = 21
+    n_actions = 2
+    T = torch.zeros(n_states, n_actions, n_states)
+    for i in range(n_states - 2):
+        T[i+1, 1, i+2] = 1
+        T[i+1, 0, i] = 1
+
+true_R = torch.zeros(n_states)
+true_R[-1] = 10
+true_R[0] = -10
+
+gamma = 0.99
 
 # %%
 
@@ -100,6 +118,31 @@ def soft_q_value_iteration(T, R, gamma, n_iterations=1000):
 
 soft_Q, soft_V, soft_pi = soft_q_value_iteration(T, true_R, gamma, 10000)
 
+# %%
+state = T.argwhere().T[0]
+next_state = T.argwhere().T[2]
+R = true_R[next_state]
+logp = soft_pi.log()[1:-1].reshape(-1)
+
+# USE EITHER V or soft_V here:
+adjustment = gamma * soft_V[next_state] - soft_V[state]
+#This is because T.argwhere() has nothing for terminal states and then next_state doesn't exist
+# full_adjustment = torch.concat((soft_V[:1],soft_V[:1], adjustment, soft_V[-1:]))
+clp = logp + adjustment
+cr = R + adjustment
+
+nclp = norm_funcs["l2_norm"](clp)
+ncr = norm_funcs["l2_norm"](cr)
+
+print(f'Distance: {dist_funcs["l2_dist"](nclp, ncr).item():.4f}')
+
+plt.scatter(logp, R)
+plt.show()
+plt.scatter(clp,cr)
+plt.show()
+plt.scatter(nclp,ncr)
+plt.show()
+
 
 # %%
 def soft_q_value_iteration_with_pi(T, R, gamma, n_iterations=1000):
@@ -127,7 +170,6 @@ soft_A = soft_Q - soft_V.unsqueeze(-1)
 pi_A = pi_Q - pi_V.unsqueeze(-1)
 torch.allclose(soft_A, pi_A)
 torch.corrcoef(torch.stack((pi_pi.flatten(), soft_pi.flatten())))
-
 
 # %%
 def soft_q_value_iteration_with_pi_no_v(T, R, gamma, n_iterations=1000):
