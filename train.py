@@ -12,7 +12,7 @@ import random
 import torch
 
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
-    create_shifted_venv
+    create_shifted_venv, get_value_dir_and_config_for_env
 
 try:
     import wandb
@@ -149,7 +149,12 @@ def train(args):
         )
         hyperparameters.update(ppo_lirl_params)
     if algo in ['canon','trusted-value']:
-        hidden_dims = hyperparameters.get("hidden_dims", [32])
+        if hyperparameters.get("load_value_models", False):
+            value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training")
+            value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation")
+            hidden_dims = value_cfg.get("hidden_dims", [32])
+        else:
+            hidden_dims = hyperparameters.get("hidden_dims", [32])
         architecture = hyperparameters.get("architecture")
         if architecture == "impala":
             value_model = ImpalaValueModel(observation_shape[0], hidden_dims)
@@ -159,6 +164,7 @@ def train(args):
             value_model_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
         value_model.to(device)
         value_model_val.to(device)
+
         trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if trusted_policy_name == "uniform":
             trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(env.observation_space.shape))
@@ -189,6 +195,15 @@ def train(args):
         checkpoint = torch.load(args.model_file)
         agent.policy.load_state_dict(checkpoint["model_state_dict"])
         agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+    if hyperparameters.get("load_value_models", False):
+        checkpoint = torch.load(value_dir)
+        agent.value_model.load_state_dict(checkpoint["model_state_dict"])
+        agent.value_optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        checkpoint = torch.load(value_dir_valid)
+        agent.value_model_val.load_state_dict(checkpoint["model_state_dict"])
+        agent.value_optimizer_val.load_state_dict(checkpoint["optimizer_state_dict"])
+
 
     ##############
     ## TRAINING ##

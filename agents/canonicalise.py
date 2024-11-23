@@ -52,11 +52,13 @@ class Canonicaliser(BaseAgent):
                  rew_learns_from_trusted_rollouts=False,
                  trusted_policy=None,
                  n_val_envs=0,
+                 use_unique_obs=False,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
 
+        self.use_unique_obs = use_unique_obs
         if n_val_envs >= n_envs:
             raise IndexError(f"n_val_envs:{n_val_envs} must be less than n_envs:{n_envs}")
         self.n_val_envs = n_val_envs
@@ -215,10 +217,10 @@ class Canonicaliser(BaseAgent):
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            df_train = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model)
+            df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
-            df_valid = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val)
+            df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val)
 
             df_train["Env"] = "Train"
             df_valid["Env"] = "Valid"
@@ -227,6 +229,8 @@ class Canonicaliser(BaseAgent):
             wandb.log({
                 "distances": wandb.Table(dataframe=comb),
                 "distances_pivoted": wandb.Table(dataframe=pivoted_df),
+                "L2_L2_Train": dt,
+                "L2_L2_Valid": dv,
             })
 
         self.env.close()
@@ -402,21 +406,30 @@ class Canonicaliser(BaseAgent):
         value_model.eval()
 
         recurrent = self.policy.is_recurrent()
-        generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
-                                                  recurrent=recurrent)
+        if self.use_unique_obs:
+            generator = storage.fetch_unique_generator()
+        else:
+            generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+                                                      recurrent=recurrent)
 
         tuples = [self.sample_and_canonise(sample, value_model) for sample in generator]
-        c_lps, c_r = zip(*tuples)
-        canon_logp = torch.concat(list(c_lps))
-        canon_true_r = torch.concat(list(c_r))
+        logp_batch, rew_batch, adj_batch = zip(*tuples)
+        logp = torch.concat(list(logp_batch))
+        rew = torch.concat(list(rew_batch))
+        adj = torch.concat(list(adj_batch))
+
+        canon_logp = logp + adj
+        canon_true_r = rew + adj
 
         data = []
+        d = np.nan
         for norm_name, normalize in self.norm_funcs.items():
             for dist_name, distance in self.dist_funcs.items():
                 dist = distance(normalize(canon_logp), normalize(canon_true_r))
                 data.append({'Norm': norm_name, 'Metric': dist_name, 'Distance': dist.item()})
-
-        return pd.DataFrame(data)
+                if norm_name == "l2_norm" and dist_name == "l2_dist":
+                    d = dist.item()
+        return pd.DataFrame(data), d
 
     def sample_and_canonise(self, sample, value_model):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
@@ -426,7 +439,7 @@ class Canonicaliser(BaseAgent):
         logp_batch = dist.log_prob(act_batch)
 
         adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
-        canon_logp = logp_batch + adjustment
-        canon_true_r = rew_batch + adjustment
-
+        # canon_logp = logp_batch + adjustment
+        # canon_true_r = rew_batch + adjustment
+        return logp_batch, rew_batch, adjustment
         return canon_logp, canon_true_r

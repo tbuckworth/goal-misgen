@@ -90,11 +90,11 @@ generalising_ascender = [
 ]
 
 if __name__ == '__main__':
-    for model_file in generalising_ascender:
+    for model_file in unique_ascent_dirs:
         try:
             hparams = {
-                "model_file": model_file,
-                # "model_file": get_model_with_largest_checkpoint(model_file),
+                # "model_file": model_file,
+                "model_file": get_model_with_largest_checkpoint(model_file),
                 # coinrun unshifted
                 # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
 
@@ -109,16 +109,16 @@ if __name__ == '__main__':
                 "epoch": 0,
                 "algo": "canon",
                 "env_name": "get",
-                "exp_name": "coinrun",
+                "exp_name": "ascent",
                 "param_name": "ascent-canon",
-                "wandb_tags": ["test"],  # "coinrun misgen3"],
+                "wandb_tags": ["ascent misgen4","pre-trained-value"],  # "coinrun misgen3"],
                 "num_checkpoints": 1,
                 "use_wandb": True,
                 "num_timesteps": int(65000),
-                "val_epoch": 30,
+                "val_epoch": 0,
                 "mini_batch_size": 2048,
-                "n_val_envs": 128,
-                "n_envs": 256 + 128,
+                "n_val_envs": 0,
+                "n_envs": 256,
                 # "learning_rate": 1e-3,
             }
             run_next_hyperparameters(hparams)

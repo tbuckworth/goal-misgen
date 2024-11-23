@@ -15,8 +15,8 @@ from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, Transpo
 from common.model import NatureModel, ImpalaModel, MlpModel
 from common.policy import CategoricalPolicy, CraftedTorchPolicy
 
-def get_value_dir_and_config_for_env(env_name, type):
-    assert type in ["Training","Validation"], f"{type} is not a valid type. Must be either 'Training' or 'Validation'"
+def get_value_dir_and_config_for_env(env_name, env_type):
+    assert env_type in ["Training","Validation"], f"{env_type} is not a valid type. Must be either 'Training' or 'Validation'"
     if env_name == "ascent":
         logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
     elif env_name == "coinrun":
@@ -26,7 +26,7 @@ def get_value_dir_and_config_for_env(env_name, type):
     else:
         raise NotImplementedError(f"{env_name} is not a recognised environment")
     cfg = get_config(logdir)
-    return cfg, os.path.join(logdir, type, "model_min_val_loss.pth")
+    return cfg, os.path.join(logdir, env_type, "model_min_val_loss.pth")
 
 def create_shifted_venv(args, hyperparameters):
     args.rand_region = 10

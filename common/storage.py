@@ -72,6 +72,15 @@ class Storage():
         if normalize_adv:
             self.adv_batch = (self.adv_batch - torch.mean(self.adv_batch)) / (torch.std(self.adv_batch) + 1e-8)
 
+    def fetch_unique_generator(self):
+        #TODO: 1 check this works
+        # 2: implement minibatching as some envs unique will be the same as standard.
+        # what you could do is check if the unique indices are same size as obs_batch and if that's true,
+        # just return fetch_train_generator.
+        indices = self.obs_batch.unique()
+        unique_values, indices = torch.unique(self.obs_batch, return_inverse=True)
+        yield from self.collect_and_yield(indices)
+
     def fetch_train_generator(self, mini_batch_size=None, recurrent=False, valid_envs=0, valid=False):
         if valid_envs >= self.num_envs:
             raise IndexError(f"valid_envs: {valid_envs} must be less than num_envs: {self.num_envs}")
