@@ -442,4 +442,3 @@ class Canonicaliser(BaseAgent):
         # canon_logp = logp_batch + adjustment
         # canon_true_r = rew_batch + adjustment
         return logp_batch, rew_batch, adjustment
-        return canon_logp, canon_true_r

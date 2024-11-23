@@ -119,6 +119,7 @@ if __name__ == '__main__':
                 "mini_batch_size": 2048,
                 "n_val_envs": 0,
                 "n_envs": 256,
+                "use_unique_obs": False,
                 # "learning_rate": 1e-3,
             }
             run_next_hyperparameters(hparams)

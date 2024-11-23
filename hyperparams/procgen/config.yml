@@ -139,6 +139,7 @@ ascent-canon:
     rew_learns_from_trusted_rollouts: False
     val_epoch: 10
     n_val_envs: 64
+    use_unique_obs: False
 
 trusted-value:
     algo: trusted-value
