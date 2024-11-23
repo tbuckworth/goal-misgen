@@ -432,7 +432,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonise(self, sample, value_model):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, n_nobs_batch, n_done_batch, n_rew_batch, n_rew_batch = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, n_nobs_batch, n_done_batch, n_rew_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         next_val_batch = value_model(nobs_batch).squeeze()
         next_next_val_batch = value_model(n_nobs_batch).squeeze()
