@@ -51,6 +51,30 @@ unique_ascent_dirs = ['logs/train/ascent/ascent/2024-11-19__11-58-01__seed_1080'
                       'logs/train/ascent/Ascent/2024-11-19__13-10-25__seed_42',
                       'logs/train/ascent/Ascent/2024-11-19__13-27-49__seed_81']
 
+maze_dict = {
+    "shifted":{
+        "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
+        "exp_name": "maze1",
+        "env_name": "maze_aisc",
+        "num_levels": 100000,
+        "distribution_mode": "hard",
+        "param_name": "hard-500",
+        "seed": 1080,
+        "rand_region": 10,
+    },
+    "unshifted":{
+        "model_file": "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
+        "exp_name": "maze1",
+        "env_name": "maze_aisc",
+        "num_levels": 100000,
+        "distribution_mode": "hard",
+        "param_name": "hard-500",
+        "seed": 1080,
+        "rand_region": 0,
+    }
+}
+
+
 maze_dirs = [
     "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
     "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",

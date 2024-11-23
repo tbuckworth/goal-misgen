@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import wandb
 from torch import nn
@@ -157,6 +159,10 @@ class TrustedValue(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
     def optimize_value(self, storage, value_model, value_optimizer, env_type):
+        filepath = f'{self.logger.logdir}/{env_type}'
+        if not os.path.exists(filepath):
+            os.mkdir(filepath)
+
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -209,9 +215,10 @@ class TrustedValue(BaseAgent):
             if mean_val_loss < min_val_loss:
                 # Save the model
                 print("Saving model.")
+
                 torch.save({'model_state_dict': value_model.state_dict(),
                             'optimizer_state_dict': value_optimizer.state_dict()},
-                           self.logger.logdir + f'/{env_type}/model_min_val_loss.pth')
+                           f'{filepath}/model_min_val_loss.pth')
                 min_val_loss = mean_val_loss
             else:
                 if e >= self.val_epoch - 1:

@@ -11,7 +11,8 @@ import os, time, argparse
 import random
 import torch
 
-from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config
+from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
+    create_shifted_venv
 
 try:
     import wandb
@@ -78,7 +79,11 @@ def train(args):
     algo = hyperparameters.get('algo', 'ppo')
 
     env = create_venv(args, hyperparameters)
-    env_valid = create_venv(args, hyperparameters, is_valid=True)
+    if algo != "trusted-value":
+        env_valid = create_venv(args, hyperparameters, is_valid=True)
+    else:
+        env_valid = create_shifted_venv(args, hyperparameters)
+
 
     ############
     ## LOGGER ##
@@ -143,13 +148,12 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
-    if algo == 'canon':
+    if algo in ['canon','trusted-value']:
         hidden_dims = hyperparameters.get("hidden_dims", [32])
         architecture = hyperparameters.get("architecture")
         if architecture == "impala":
             value_model = ImpalaValueModel(observation_shape[0], hidden_dims)
             value_model_val = ImpalaValueModel(observation_shape[0], hidden_dims)
-
         else:
             value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
             value_model_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
@@ -220,7 +224,7 @@ def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     hidden_state_dim = model.output_dim
     if algo == 'ppo':
         storage_cons = Storage
-    elif algo in ['ppo-lirl', 'canon']:
+    elif algo in ['ppo-lirl', 'canon', 'trusted-value']:
         storage_cons = LirlStorage
     else:
         raise NotImplementedError(f"{algo} not implemented")
