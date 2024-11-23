@@ -287,7 +287,7 @@ class Canonicaliser(BaseAgent):
             for sample in generator:
                 (obs_batch, nobs_batch, act_batch, done_batch,
                  old_log_prob_act_batch, old_value_batch, return_batch,
-                 adv_batch, rew_batch, logp_eval_policy_batch) = sample
+                 adv_batch, rew_batch, logp_eval_policy_batch, _, _, _) = sample
                 value_batch = value_model(obs_batch).squeeze()
                 next_value_batch = value_model(nobs_batch).squeeze()
                 target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
@@ -303,7 +303,7 @@ class Canonicaliser(BaseAgent):
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, _ = sample
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, _, _, _, _ = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
                     next_value_batch_val = value_model(nobs_batch_val).squeeze()
@@ -343,7 +343,7 @@ class Canonicaliser(BaseAgent):
                                                            recurrent=recurrent)
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _ = sample
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _, _, _ = sample
                 mask_batch = (1 - done_batch)
                 dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
@@ -390,7 +390,7 @@ class Canonicaliser(BaseAgent):
         return summary
 
     def sample_next_data(self, sample):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, _, _, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         value = self.value_model(obs_batch)
         next_value = self.value_model(nobs_batch)
@@ -407,7 +407,7 @@ class Canonicaliser(BaseAgent):
 
         recurrent = self.policy.is_recurrent()
         if self.use_unique_obs:
-            generator = storage.fetch_unique_generator()
+            generator = storage.fetch_unique_generator(mini_batch_size=self.mini_batch_size)
         else:
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=recurrent)
@@ -432,13 +432,17 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonise(self, sample, value_model):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, n_nobs_batch, n_done_batch, n_rew_batch, n_rew_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
-        val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
+        next_next_val_batch = value_model(n_nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
 
-        adjustment = self.gamma * next_val_batch * (1 - done_batch) - val_batch
+        next_val = next_val_batch * (1 - done_batch) + rew_batch * done_batch
+
+        next_next_val = next_next_val_batch * (1 - done_batch) * (1-n_done_batch) + n_rew_batch * n_done_batch
+
+        adjustment = self.gamma * next_next_val - next_val
         # canon_logp = logp_batch + adjustment
         # canon_true_r = rew_batch + adjustment
         return logp_batch, rew_batch, adjustment

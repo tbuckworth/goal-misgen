@@ -52,7 +52,7 @@ unique_ascent_dirs = ['logs/train/ascent/ascent/2024-11-19__11-58-01__seed_1080'
                       'logs/train/ascent/Ascent/2024-11-19__13-27-49__seed_81']
 
 maze_dict = {
-    "shifted":{
+    "shifted": {
         "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
         "exp_name": "maze1",
         "env_name": "maze_aisc",
@@ -62,7 +62,7 @@ maze_dict = {
         "seed": 1080,
         "rand_region": 10,
     },
-    "unshifted":{
+    "unshifted": {
         "model_file": "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
         "exp_name": "maze1",
         "env_name": "maze_aisc",
@@ -73,7 +73,6 @@ maze_dict = {
         "rand_region": 0,
     }
 }
-
 
 maze_dirs = [
     "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
@@ -87,6 +86,10 @@ coinrun_dirs = [
 
 generalising_ascender = [
     get_model_with_largest_checkpoint('logs/train/ascent/Ascent/2024-11-19__12-04-10__seed_50')
+]
+
+ascent_misgeneralising_but_low_valid_distance = [
+    "logs/train/ascent/Ascent/2024-11-19__12-55-04__seed_42"
 ]
 
 if __name__ == '__main__':
@@ -111,7 +114,7 @@ if __name__ == '__main__':
                 "env_name": "get",
                 "exp_name": "ascent",
                 "param_name": "ascent-canon",
-                "wandb_tags": ["ascent misgen4","pre-trained-value"],  # "coinrun misgen3"],
+                "wandb_tags": ["ascent misgen7", "pre-trained-value", "revamp"],  # "coinrun misgen3"],
                 "num_checkpoints": 1,
                 "use_wandb": True,
                 "num_timesteps": int(65000),
@@ -119,7 +122,7 @@ if __name__ == '__main__':
                 "mini_batch_size": 2048,
                 "n_val_envs": 0,
                 "n_envs": 256,
-                "use_unique_obs": False,
+                "use_unique_obs": True,
                 # "learning_rate": 1e-3,
             }
             run_next_hyperparameters(hparams)
