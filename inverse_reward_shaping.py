@@ -62,7 +62,7 @@ gamma = 0.99
 
 # %%
 if ascender_long:
-    n_states = 21
+    n_states = 5
     n_actions = 2
     T = torch.zeros(n_states, n_actions, n_states)
     for i in range(n_states - 2):
@@ -142,6 +142,41 @@ plt.scatter(clp,cr)
 plt.show()
 plt.scatter(nclp,ncr)
 plt.show()
+
+# %%
+def learn_from_normalization(T, R, V, gamma, n_iterations=1000):
+    L = torch.randn(n_states, n_actions, requires_grad=True)
+    R = R.unsqueeze(-1)
+    R.requires_grad = False
+    optimizer = torch.optim.Adam([L], lr=1e-2)
+    for i in range(n_iterations):
+        NV = einops.einsum(T, V, "states actions next_states, next_states -> states actions")
+        adj = gamma * NV - V.unsqueeze(-1)
+        CL = L + adj
+        CR = R + adj
+        NCL = CL/CL.pow(2).mean().sqrt()
+        NCR = CR/CR.pow(2).mean().sqrt()
+        loss = ((NCR - NCL) ** 2).mean()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if i % 100 == 0:
+            print(f"{loss:.4f}")
+    return L
+
+# %%
+# works:
+logits_fn = learn_from_normalization(T, true_R, V, gamma, n_iterations=2000)
+print(logits_fn.softmax(dim=-1).round(decimals=2))
+
+# doesn't work:
+logits_fn = learn_from_normalization(T, true_R, soft_V, gamma, n_iterations=2000)
+print(logits_fn.softmax(dim=-1).round(decimals=2))
+
+uniform_V = torch.FloatTensor([-10, -5, 0, 5, 10])
+logits_fn = learn_from_normalization(T, true_R, uniform_V, gamma, n_iterations=2000)
+print(logits_fn.softmax(dim=-1).round(decimals=2))
+
 
 
 # %%
