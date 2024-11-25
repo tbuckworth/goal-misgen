@@ -437,6 +437,6 @@ class Canonicaliser(BaseAgent):
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
-
+        # N.B. Rew is function of next states in our storage
         adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
         return logp_batch, rew_batch, adjustment
