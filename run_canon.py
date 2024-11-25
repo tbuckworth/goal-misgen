@@ -92,40 +92,50 @@ ascent_misgeneralising_but_low_valid_distance = [
     "logs/train/ascent/Ascent/2024-11-19__12-55-04__seed_42"
 ]
 
+
+def hp_run():
+    global hparams
+    hparams = {
+        # "model_file": model_file,
+        "model_file": get_model_with_largest_checkpoint(model_file),
+        # coinrun unshifted
+        # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
+
+        # coinrun shifted
+        # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",
+
+        # unshifted maze:
+        # "model_file":  "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
+
+        # shifted maze:
+        # "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
+        "epoch": 0,
+        "algo": "canon",
+        "env_name": "get",
+        "exp_name": "ascent",
+        "param_name": "ascent-canon",
+        "wandb_tags": ["ascent misgen8", "pre-trained-value", "revamp"],  # "coinrun misgen3"],
+        "num_checkpoints": 1,
+        "use_wandb": True,
+        "num_timesteps": int(65000),
+        "val_epoch": 0,
+        "mini_batch_size": 2048,
+        "n_val_envs": 0,
+        "n_envs": 256,
+        "use_unique_obs": True,
+        # "learning_rate": 1e-3,
+    }
+    run_next_hyperparameters(hparams)
+
+
 if __name__ == '__main__':
+    ignore_errors = False
     for model_file in unique_ascent_dirs:
-        try:
-            hparams = {
-                # "model_file": model_file,
-                "model_file": get_model_with_largest_checkpoint(model_file),
-                # coinrun unshifted
-                # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
-
-                # coinrun shifted
-                # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",
-
-                # unshifted maze:
-                # "model_file":  "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
-
-                # shifted maze:
-                # "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
-                "epoch": 0,
-                "algo": "canon",
-                "env_name": "get",
-                "exp_name": "ascent",
-                "param_name": "ascent-canon",
-                "wandb_tags": ["ascent misgen7", "pre-trained-value", "revamp"],  # "coinrun misgen3"],
-                "num_checkpoints": 1,
-                "use_wandb": True,
-                "num_timesteps": int(65000),
-                "val_epoch": 0,
-                "mini_batch_size": 2048,
-                "n_val_envs": 0,
-                "n_envs": 256,
-                "use_unique_obs": True,
-                # "learning_rate": 1e-3,
-            }
-            run_next_hyperparameters(hparams)
-        except Exception as e:
-            print(e)
+        if not ignore_errors:
+            hp_run()
+        else:
+            try:
+                hp_run()
+            except Exception as e:
+                print(e)
 

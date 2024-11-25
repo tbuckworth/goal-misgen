@@ -73,12 +73,16 @@ class Storage():
             self.adv_batch = (self.adv_batch - torch.mean(self.adv_batch)) / (torch.std(self.adv_batch) + 1e-8)
 
     def fetch_unique_generator(self, mini_batch_size=None):
+        # Logic for getting indices of unique tensors
+        # TODO: if stochastic, then we need the triples (obs, acts, next_obs)
         all_obs = self.obs_batch[:-1].reshape(-1, *self.obs_shape)
-        unique_obs, rev_index = all_obs.unique(dim=0, return_inverse=True)
-        if len(unique_obs) == len(all_obs):
+        all_acts = self.act_batch.reshape(-1,1)
+        all_pairs = torch.concat((all_obs, all_acts), dim=-1)
+        unique_pairs, rev_index = all_pairs.unique(dim=0, return_inverse=True)
+        if len(unique_pairs) == len(all_pairs):
             return self.fetch_train_generator(mini_batch_size)
-        indices = [(rev_index == i).argwhere()[0].item() for i in range(len(unique_obs))]
-        assert (all_obs[indices] == unique_obs).all(), "Check logic, but this should be correct"
+        indices = [(rev_index == i).argwhere()[0].item() for i in range(len(unique_pairs))]
+        assert (all_pairs[indices] == unique_pairs).all(), "Check logic, but this should be correct"
         yield from self.collect_and_yield(indices)
 
     def fetch_train_generator(self, mini_batch_size=None, recurrent=False, valid_envs=0, valid=False):
@@ -163,11 +167,8 @@ class LirlStorage(Storage):
                 self.device)
             nobs_batch = torch.FloatTensor(self.obs_batch[1:, valid_envs:]).reshape(-1, *self.obs_shape)[indices].to(
                 self.device)
-            n_nobs_batch = torch.FloatTensor(self.obs_batch[2:, valid_envs:]).reshape(-1, *self.obs_shape)[indices].to(
-                self.device)
             act_batch = torch.FloatTensor(self.act_batch[:, valid_envs:]).reshape(-1)[indices].to(self.device)
             done_batch = torch.FloatTensor(self.done_batch[:, valid_envs:]).reshape(-1)[indices].to(self.device)
-            next_done_batch = torch.FloatTensor(self.done_batch[1:, valid_envs:]).reshape(-1)[indices].to(self.device)
 
             log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch[:, valid_envs:]).reshape(-1)[indices].to(
                 self.device)
@@ -175,7 +176,6 @@ class LirlStorage(Storage):
             return_batch = torch.FloatTensor(self.return_batch[:, valid_envs:]).reshape(-1)[indices].to(self.device)
             adv_batch = torch.FloatTensor(self.adv_batch[:, valid_envs:]).reshape(-1)[indices].to(self.device)
             rew_batch = torch.FloatTensor(self.rew_batch[:, valid_envs:]).reshape(-1)[indices].to(self.device)
-            n_rew_batch = torch.FloatTensor(self.rew_batch[1:, valid_envs:]).reshape(-1)[indices].to(self.device)
             log_prob_eval_policy = torch.FloatTensor(self.log_prob_eval_policy[:, valid_envs:]).reshape(-1)[indices].to(
                 self.device)
 
@@ -184,19 +184,15 @@ class LirlStorage(Storage):
                 self.device)
             nobs_batch = torch.FloatTensor(self.obs_batch[1:, :valid_envs]).reshape(-1, *self.obs_shape)[indices].to(
                 self.device)
-            n_nobs_batch = torch.FloatTensor(self.obs_batch[2:, :valid_envs]).reshape(-1, *self.obs_shape)[indices].to(
-                self.device)
             act_batch = torch.FloatTensor(self.act_batch[:, :valid_envs]).reshape(-1)[indices].to(self.device)
             done_batch = torch.FloatTensor(self.done_batch[:, :valid_envs]).reshape(-1)[indices].to(self.device)
-            next_done_batch = torch.FloatTensor(self.done_batch[1:, :valid_envs]).reshape(-1)[indices].to(self.device)
             log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch[:, :valid_envs]).reshape(-1)[indices].to(
                 self.device)
             value_batch = torch.FloatTensor(self.value_batch[:-1, :valid_envs]).reshape(-1)[indices].to(self.device)
             return_batch = torch.FloatTensor(self.return_batch[:, :valid_envs]).reshape(-1)[indices].to(self.device)
             adv_batch = torch.FloatTensor(self.adv_batch[:, :valid_envs]).reshape(-1)[indices].to(self.device)
             rew_batch = torch.FloatTensor(self.rew_batch[:, :valid_envs]).reshape(-1)[indices].to(self.device)
-            n_rew_batch = torch.FloatTensor(self.rew_batch[1:, valid_envs:]).reshape(-1)[indices].to(self.device)
             log_prob_eval_policy = torch.FloatTensor(self.log_prob_eval_policy[:, :valid_envs]).reshape(-1)[indices].to(
                 self.device)
 
-        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, n_nobs_batch, next_done_batch, n_rew_batch
+        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy
