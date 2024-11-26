@@ -211,6 +211,10 @@ def load_summary():
     val_distance = "Evaluation Distance"
     ratio = "Distance Ratio"
     diff = "Distance Difference"
+    train_len = "Mean Training Episode Length"
+    val_len = "Mean Evaluation Episode Length"
+    train_rpl = "Mean Training Reward/Timestep"
+    val_rpl = "Mean Evaluation Reward/Timestep"
 
     # Collect and filter data
     all_data = []
@@ -222,11 +226,15 @@ def load_summary():
         row[val_distance] = run.summary["Loss/l2_normalized_l2_distance_Validation"]
         row["run"] = run.name
         row["logdir"] = run.config["logdir"]
+        row[train_len] = run.summary.mean_episode_len
+        row[val_len] = run.summary.val_mean_episode_len
         all_data.append(row)
 
     df = pd.DataFrame(all_data)
     df[ratio] = df[val_distance] / df[train_distance]
     df[diff] = df[val_distance] - df[train_distance]
+    df[train_rpl] = df[train_rewards] / df[train_len]
+    df[val_rpl] = df[val_rewards] / df[val_len]
 
     df.to_csv("data/l2_dist.csv", index=False)
 
@@ -243,13 +251,13 @@ def load_summary():
         y_pred = p(x_smooth)
         # Plot the trendline
         ax.plot(x_smooth, y_pred,
-                 color='black',
-                 alpha=0.5,
-                 linestyle='-.',
-                 # linewidth=5,
-                 # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
-                 label=f'$R^2$ = {r_squared:.2f}',
-                 )
+                color='black',
+                alpha=0.5,
+                linestyle='-.',
+                # linewidth=5,
+                # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
+                label=f'$R^2$ = {r_squared:.2f}',
+                )
         ax.legend()
         ax.set_title(y_metric)
         ax.set_xlabel(val_rewards)
@@ -260,17 +268,17 @@ def load_summary():
     plt.show()
 
     # Alternative
-
-    ax1 = df.plot.scatter(x=val_rewards, y=train_distance, alpha=0.7, color='b', label=train_distance)
-    df.plot.scatter(x=val_rewards, y=val_distance, alpha=0.7, color='r', ax=ax1, label=val_distance)
+    x_metric = val_rewards #val_rpl also interesting
+    ax1 = df.plot.scatter(x=x_metric, y=train_distance, alpha=0.7, color='b', label=train_distance)
+    df.plot.scatter(x=x_metric, y=val_distance, alpha=0.7, color='r', ax=ax1, label=val_distance)
 
     for y_metric, color, linestyle in zip([train_distance, val_distance], ['b', 'r'], [':','--']):
         # PLOT:
-        # df.plot.scatter(x=val_rewards, y=y_metric, ax=ax1, alpha=0.7, color=color)
-        z = np.polyfit(df[val_rewards], df[y_metric], 1)  # Linear fit (degree=1)
+        # df.plot.scatter(x=x_metric, y=y_metric, ax=ax1, alpha=0.7, color=color)
+        z = np.polyfit(df[x_metric], df[y_metric], 1)  # Linear fit (degree=1)
         p = np.poly1d(z)
-        r_squared = np.corrcoef(df[val_rewards], df[y_metric])[0, 1] ** 2
-        x_smooth = np.linspace(df[val_rewards].min(), df[val_rewards].max(),
+        r_squared = np.corrcoef(df[x_metric], df[y_metric])[0, 1] ** 2
+        x_smooth = np.linspace(df[x_metric].min(), df[x_metric].max(),
                                50)  # Adjust the number of points for smoothness
         # Compute the corresponding y values for the trendline
         y_pred = p(x_smooth)
@@ -286,7 +294,7 @@ def load_summary():
     ax1.set_ylabel("Distance")
     plt.legend()
     plt.tight_layout()
-    plt.savefig("data/ascent_distances_overlapping.png")
+    plt.savefig("data/ascent_distances_overlapping2.png")
     plt.show()
 
     print(df)
