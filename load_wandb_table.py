@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from imitation.scripts.config.train_rl import train_rl_ex
 from matplotlib import pyplot as plt
+from scipy import stats
 
 try:
     import wandb
@@ -199,11 +200,34 @@ def load_all():
 
 
 def load_summary():
+    # Original:
+    env_name = "ascent"
+    tag = "canon misgen3"
+    train_dist_metric = "Loss/l2_normalized_l2_distance_Training"
+    val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
+
+
+    env_name = "maze_aisc"
+    tag = "canon maze1"
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+
+    env_name = "coinrun"
+    tag = "canon coinrun1"
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+
+    #New
+    env_name = "ascent_new"
+    tag = "canon ascent1"
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+
     # Fetch runs from a project
     api = wandb.Api()
     project_name = "goal-misgen"
     runs = api.runs(f"ic-ai-safety/{project_name}",
-                    filters={"$and": [{"tags": "canon misgen3", "state": "finished"}]}
+                    filters={"$and": [{"tags": tag, "state": "finished"}]}
                     )
     train_rewards = "Mean Training Episode Rewards"
     val_rewards = "Mean Evaluation Episode Rewards"
@@ -216,14 +240,17 @@ def load_summary():
     train_rpl = "Mean Training Reward/Timestep"
     val_rpl = "Mean Evaluation Reward/Timestep"
 
+
     # Collect and filter data
     all_data = []
     for run in runs:
         row = {}
+        if "mean_episode_rewards" not in run.summary.keys():
+            continue
         row[train_rewards] = run.summary.mean_episode_rewards
         row[val_rewards] = run.summary.val_mean_episode_rewards
-        row[train_distance] = run.summary["Loss/l2_normalized_l2_distance_Training"]
-        row[val_distance] = run.summary["Loss/l2_normalized_l2_distance_Validation"]
+        row[train_distance] = run.summary[train_dist_metric]
+        row[val_distance] = run.summary[val_dist_metric]
         row["run"] = run.name
         row["logdir"] = run.config["logdir"]
         row[train_len] = run.summary.mean_episode_len
@@ -236,7 +263,7 @@ def load_summary():
     df[train_rpl] = df[train_rewards] / df[train_len]
     df[val_rpl] = df[val_rewards] / df[val_len]
 
-    df.to_csv("data/l2_dist.csv", index=False)
+    df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(6, 3), sharey=True)  # Adjust figsize as needed
     for ax, y_metric in zip(axes, [train_distance, val_distance]):
@@ -264,7 +291,7 @@ def load_summary():
         ax.set_ylabel("Distance")
         # plt.legend()
     plt.tight_layout()
-    plt.savefig("data/ascent_distances.png")
+    plt.savefig(f"data/{env_name}_distances.png")
     plt.show()
 
     # Alternative
@@ -294,10 +321,19 @@ def load_summary():
     ax1.set_ylabel("Distance")
     plt.legend()
     plt.tight_layout()
-    plt.savefig("data/ascent_distances_overlapping2.png")
+    plt.savefig(f"data/{env_name}_distances_overlapping.png")
     plt.show()
 
     print(df)
+
+    goal_misgen_dists = df[df[val_rewards] < -6][val_distance]
+    misgen_dists = df[np.bitwise_and(df[val_rewards] > -6,df[val_rewards] < 7.5)][val_distance]
+    gen_dists = df[df[val_rewards] > 7.5][val_distance]
+
+    t_statistic, p_value = stats.ttest_ind(goal_misgen_dists, misgen_dists)
+
+    df[val_distance].plot.hist(bins=100)
+    plt.show()
 
 
 if __name__ == "__main__":

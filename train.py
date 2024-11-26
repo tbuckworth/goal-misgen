@@ -79,7 +79,7 @@ def train(args):
     algo = hyperparameters.get('algo', 'ppo')
 
     env = create_venv(args, hyperparameters)
-    if algo != "trusted-value":
+    if algo not in ["trusted-value","canon"]:
         env_valid = create_venv(args, hyperparameters, is_valid=True)
     else:
         env_valid = create_shifted_venv(args, hyperparameters)
