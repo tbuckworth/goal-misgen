@@ -116,19 +116,20 @@ def hp_run(model_file):
         "epoch": 0,
         "algo": "canon",
         "env_name": "get",
-        "exp_name": "maze",
+        "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze1", "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon ascent new1", "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 0,
+        "val_epoch": 200,
         "mini_batch_size": 2048,
         "n_val_envs": 0,
         "n_envs": 256,
         "num_levels": 100000,
         "distribution_mode": "hard",
         "seed": 42,
+        "load_value_models": True,
 
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
@@ -140,7 +141,7 @@ def hp_run(model_file):
 
 if __name__ == '__main__':
     ignore_errors = True
-    for model_file in new_maze_dirs:
+    for model_file in unique_ascent_dirs:
         if not ignore_errors:
             hp_run(model_file)
         else:

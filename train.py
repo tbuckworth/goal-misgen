@@ -46,7 +46,7 @@ def train(args):
     other_params = {}
     if args.model_file is not None:
         other_params = hyperparameters
-        hyperparameters = get_config(re.sub(r"\/model_\d*.pth","",args.model_file))
+        hyperparameters = get_config(re.sub(r"\/model_\d*.pth", "", args.model_file))
         if env_name == "get":
             args.env_name = env_name = hyperparameters.get("env_name")
         del hyperparameters["device"]
@@ -79,11 +79,10 @@ def train(args):
     algo = hyperparameters.get('algo', 'ppo')
 
     env = create_venv(args, hyperparameters)
-    if algo not in ["trusted-value","canon"]:
+    if algo not in ["trusted-value", "canon"]:
         env_valid = create_venv(args, hyperparameters, is_valid=True)
     else:
         env_valid = create_shifted_venv(args, hyperparameters)
-
 
     ############
     ## LOGGER ##
@@ -148,7 +147,7 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
-    if algo in ['canon','trusted-value']:
+    if algo in ['canon', 'trusted-value']:
         if hyperparameters.get("load_value_models", False):
             value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training")
             value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation")
@@ -159,19 +158,29 @@ def train(args):
         if architecture == "impala":
             value_model = ImpalaValueModel(observation_shape[0], hidden_dims)
             value_model_val = ImpalaValueModel(observation_shape[0], hidden_dims)
+            value_model_logp = ImpalaValueModel(observation_shape[0], hidden_dims)
+            value_model_logp_val = ImpalaValueModel(observation_shape[0], hidden_dims)
+
         else:
             value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
             value_model_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+            value_model_logp = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+            value_model_logp_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+
         value_model.to(device)
         value_model_val.to(device)
+        value_model_logp.to(device)
+        value_model_logp_val.to(device)
 
         trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if trusted_policy_name == "uniform":
             trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(env.observation_space.shape))
         elif trusted_policy_name == "gen":
-            trusted_policy = CraftedTorchPolicy(False, policy.action_size, device, input_dims=len(env.observation_space.shape))
+            trusted_policy = CraftedTorchPolicy(False, policy.action_size, device,
+                                                input_dims=len(env.observation_space.shape))
         elif trusted_policy_name == "misgen":
-            trusted_policy = CraftedTorchPolicy(True, policy.action_size, device, input_dims=len(env.observation_space.shape))
+            trusted_policy = CraftedTorchPolicy(True, policy.action_size, device,
+                                                input_dims=len(env.observation_space.shape))
         else:
             raise NotImplementedError
 
@@ -181,6 +190,8 @@ def train(args):
             storage_trusted=storage_trusted,
             storage_trusted_val=storage_trusted_val,
             trusted_policy=trusted_policy,
+            value_model_logp=value_model_logp,
+            value_model_logp_val=value_model_logp_val,
         )
         hyperparameters.update(canon_params)
 
@@ -203,7 +214,6 @@ def train(args):
         checkpoint = torch.load(value_dir_valid)
         agent.value_model_val.load_state_dict(checkpoint["model_state_dict"])
         agent.value_optimizer_val.load_state_dict(checkpoint["optimizer_state_dict"])
-
 
     ##############
     ## TRAINING ##

@@ -42,6 +42,8 @@ class Canonicaliser(BaseAgent):
                  num_rew_updates=10,
                  value_model=None,
                  value_model_val=None,
+                 value_model_logp=None,
+                 value_model_logp_val=None,
                  val_epoch=100,
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
@@ -71,6 +73,8 @@ class Canonicaliser(BaseAgent):
         self.inv_temp = inv_temp_rew_model
         self.value_model = value_model
         self.value_model_val = value_model_val
+        self.value_model_logp = value_model_logp
+        self.value_model_logp_val = value_model_logp_val
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
         self.n_steps = n_steps
@@ -85,6 +89,8 @@ class Canonicaliser(BaseAgent):
             self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer = optim.Adam(self.value_model.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer_val = optim.Adam(self.value_model_val.parameters(), lr=learning_rate, eps=1e-5)
+        self.value_optimizer_logp = optim.Adam(self.value_model_logp.parameters(), lr=learning_rate, eps=1e-5)
+        self.value_optimizer_logp_val = optim.Adam(self.value_model_logp_val.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -211,16 +217,21 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
-        self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
-        self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
+        if False: # TODO: make this correct
+            self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
+            self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
+        self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
+        self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
+
+
 
         with torch.no_grad():
             if self.print_ascent_rewards:
                 print("Train Env Rew:")
-            df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model)
+            df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model, self.value_model_logp)
             if self.print_ascent_rewards:
                 print("Valid Env Rew:")
-            df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val)
+            df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val, self.value_model_logp_val)
 
             df_train["Env"] = "Train"
             df_valid["Env"] = "Valid"
@@ -253,7 +264,7 @@ class Canonicaliser(BaseAgent):
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
-    def optimize_value(self, storage, value_model, value_optimizer, env_type):
+    def optimize_value(self, storage, value_model, value_optimizer, env_type, rew_type="reward"):
         distance = self.dist_funcs["l2_dist"]
         normalize = self.norm_funcs["l2_norm"]
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
@@ -281,8 +292,8 @@ class Canonicaliser(BaseAgent):
                                                             )
             val_losses = []
             val_losses_valid = []
-            clp = []
-            ctr = []
+            # clp = []
+            # ctr = []
 
             for sample in generator:
                 (obs_batch, nobs_batch, act_batch, done_batch,
@@ -290,25 +301,36 @@ class Canonicaliser(BaseAgent):
                  adv_batch, rew_batch, logp_eval_policy_batch) = sample
                 value_batch = value_model(obs_batch).squeeze()
                 next_value_batch = value_model(nobs_batch).squeeze()
-                target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
+                if rew_type == "reward":
+                    R = rew_batch
+                elif rew_type == "logits":
+                    R = logp_eval_policy_batch
+                else:
+                    raise NotImplementedError
+                target = R + self.gamma * next_value_batch * (1 - done_batch)
                 value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
-                with torch.no_grad():
-                    adjustment = self.gamma * next_value_batch * (1 - done_batch) - value_batch
-                    canon_logp = logp_eval_policy_batch + adjustment
-                    canon_true_r = rew_batch + adjustment
-                    clp.append(canon_logp)
-                    ctr.append(canon_true_r)
+                # with torch.no_grad():
+                #     adjustment = self.gamma * next_value_batch * (1 - done_batch) - value_batch
+                    # canon_logp = logp_eval_policy_batch + adjustment
+                    # canon_true_r = R + adjustment
+                    # clp.append(canon_logp)
+                    # ctr.append(canon_true_r)
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, _ = sample
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
                     next_value_batch_val = value_model(nobs_batch_val).squeeze()
-
-                    target = rew_batch_val + self.gamma * next_value_batch_val * (1 - done_batch_val)
+                    if rew_type == "reward":
+                        R = rew_batch_val
+                    elif rew_type == "logits":
+                        R = logp_eval_policy_batch_val
+                    else:
+                        raise NotImplementedError
+                    target = R + self.gamma * next_value_batch_val * (1 - done_batch_val)
 
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
@@ -317,15 +339,15 @@ class Canonicaliser(BaseAgent):
             value_optimizer.zero_grad()
             grad_accumulation_cnt += 1
 
-            canon_logp = torch.concat(clp)
-            canon_true_r = torch.concat(ctr)
-            dist = distance(normalize(canon_logp), normalize(canon_true_r))
+            # canon_logp = torch.concat(clp)
+            # canon_true_r = torch.concat(ctr)
+            # dist = distance(normalize(canon_logp), normalize(canon_true_r))
 
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/value_loss_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{env_type}': np.mean(val_losses_valid),
-                f'Loss/l2_normalized_l2_distance_{env_type}': dist.item(),
+                # f'Loss/l2_normalized_l2_distance_{env_type}': dist.item(),
             })
 
     def optimize(self):
@@ -397,7 +419,7 @@ class Canonicaliser(BaseAgent):
 
         return rew_batch, obs_batch, act_batch, value, next_value, dist.log_prob(act_batch), done_batch
 
-    def canonicalise_and_evaluate_efficient(self, storage, value_model):
+    def canonicalise_and_evaluate_efficient(self, storage, value_model, value_model_logp):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -412,13 +434,14 @@ class Canonicaliser(BaseAgent):
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=recurrent)
 
-        tuples = [self.sample_and_canonise(sample, value_model) for sample in generator]
-        logp_batch, rew_batch, adj_batch = zip(*tuples)
+        tuples = [self.sample_and_canonise(sample, value_model, value_model_logp) for sample in generator]
+        logp_batch, rew_batch, adj_batch, adj_batch_logp = zip(*tuples)
         logp = torch.concat(list(logp_batch))
         rew = torch.concat(list(rew_batch))
         adj = torch.concat(list(adj_batch))
+        adj_logp = torch.concat(list(adj_batch_logp))
 
-        canon_logp = logp + adj
+        canon_logp = logp + adj_logp
         canon_true_r = rew + adj
 
         data = []
@@ -431,7 +454,7 @@ class Canonicaliser(BaseAgent):
                     d = dist.item()
         return pd.DataFrame(data), d
 
-    def sample_and_canonise(self, sample, value_model):
+    def sample_and_canonise(self, sample, value_model, value_model_logp):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         val_batch = value_model(obs_batch).squeeze()
@@ -439,4 +462,12 @@ class Canonicaliser(BaseAgent):
         logp_batch = dist.log_prob(act_batch)
         # N.B. Rew is function of next states in our storage
         adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
-        return logp_batch, rew_batch, adjustment
+
+        val_batch_logp = value_model_logp(obs_batch).squeeze()
+        next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
+        # N.B. Rew is function of next states in our storage
+        adjustment_logp = self.gamma * next_val_batch_logp * (1 - done_batch) - val_batch_logp
+
+
+
+        return logp_batch, rew_batch, adjustment, adjustment_logp
