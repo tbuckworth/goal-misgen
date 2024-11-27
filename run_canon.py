@@ -103,7 +103,7 @@ ascent_misgeneralising_but_low_valid_distance = [
 def hp_run(model_file):
     hparams = {
         # "model_file": model_file,
-        "model_file": get_model_with_largest_checkpoint(model_file),
+        # "model_file": get_model_with_largest_checkpoint(model_file),
         # coinrun unshifted
         # "model_file":  "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
 
@@ -117,7 +117,7 @@ def hp_run(model_file):
         # "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
         "epoch": 0,
         "algo": "canon",
-        "env_name": "get",
+        "env_name": "ascent",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
         "wandb_tags": ["canon ascent new1", "pre-trained-value"],  # "coinrun misgen3"],
@@ -134,16 +134,16 @@ def hp_run(model_file):
         "load_value_models": True,
 
         # "use_unique_obs": True,
-        # "architecture": "crafted-policy",
-        # "misgen": model_file,
+        "architecture": "crafted-policy",
+        "misgen": model_file,
         # "learning_rate": 1e-3,
     }
     run_next_hyperparameters(hparams)
 
 
 if __name__ == '__main__':
-    ignore_errors = True
-    for model_file in unique_ascent_dirs:
+    ignore_errors = False
+    for model_file in [True, False]:
         if not ignore_errors:
             hp_run(model_file)
         else:
