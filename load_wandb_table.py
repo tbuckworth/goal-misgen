@@ -199,8 +199,8 @@ def load_all():
     print(final)
 
 
-def load_summary():
-    env = "maze"
+def load_summary(exclude_crafted=True):
+    env = "ascent-new2"
     if env == "ascent":
         # Original:
         env_name = "ascent"
@@ -221,6 +221,12 @@ def load_summary():
         #New
         env_name = "ascent_new"
         tag = "canon ascent1"
+        train_dist_metric = "L2_L2_Train"
+        val_dist_metric = "L2_L2_Valid"
+    elif env == "ascent-new2":
+        # New
+        env_name = "ascent_new2"
+        tag = "canon ascent new1"
         train_dist_metric = "L2_L2_Train"
         val_dist_metric = "L2_L2_Valid"
 
@@ -256,9 +262,12 @@ def load_summary():
         row["logdir"] = run.config["logdir"]
         row[train_len] = run.summary.mean_episode_len
         row[val_len] = run.summary.val_mean_episode_len
+        row["architecture"] = run.config["architecture"]
         all_data.append(row)
 
     df = pd.DataFrame(all_data)
+    if exclude_crafted:
+        df = df[df["architecture"]!="crafted-policy"]
     df[ratio] = df[val_distance] / df[train_distance]
     df[diff] = df[val_distance] - df[train_distance]
     df[train_rpl] = df[train_rewards] / df[train_len]
