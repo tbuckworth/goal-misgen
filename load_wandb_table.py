@@ -209,7 +209,7 @@ def load_summary(exclude_crafted=True):
         val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
     elif env == "maze":
         env_name = "maze_aisc"
-        tag = "canon maze1"
+        tag = "canon maze new1"#"canon maze1"
         train_dist_metric = "L2_L2_Train"
         val_dist_metric = "L2_L2_Valid"
     elif env == "coinrun":
