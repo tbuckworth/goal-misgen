@@ -200,28 +200,29 @@ def load_all():
 
 
 def load_summary():
-    # Original:
-    env_name = "ascent"
-    tag = "canon misgen3"
-    train_dist_metric = "Loss/l2_normalized_l2_distance_Training"
-    val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
-
-
-    env_name = "maze_aisc"
-    tag = "canon maze1"
-    train_dist_metric = "L2_L2_Train"
-    val_dist_metric = "L2_L2_Valid"
-
-    env_name = "coinrun"
-    tag = "canon coinrun1"
-    train_dist_metric = "L2_L2_Train"
-    val_dist_metric = "L2_L2_Valid"
-
-    #New
-    env_name = "ascent_new"
-    tag = "canon ascent1"
-    train_dist_metric = "L2_L2_Train"
-    val_dist_metric = "L2_L2_Valid"
+    env = "maze"
+    if env == "ascent":
+        # Original:
+        env_name = "ascent"
+        tag = "canon misgen3"
+        train_dist_metric = "Loss/l2_normalized_l2_distance_Training"
+        val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
+    elif env == "maze":
+        env_name = "maze_aisc"
+        tag = "canon maze1"
+        train_dist_metric = "L2_L2_Train"
+        val_dist_metric = "L2_L2_Valid"
+    elif env == "coinrun":
+        env_name = "coinrun"
+        tag = "canon coinrun1"
+        train_dist_metric = "L2_L2_Train"
+        val_dist_metric = "L2_L2_Valid"
+    elif env == "ascent-new":
+        #New
+        env_name = "ascent_new"
+        tag = "canon ascent1"
+        train_dist_metric = "L2_L2_Train"
+        val_dist_metric = "L2_L2_Valid"
 
     # Fetch runs from a project
     api = wandb.Api()
