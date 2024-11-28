@@ -62,7 +62,7 @@ gamma = 0.99
 
 # %%
 if ascender_long:
-    n_states = 21
+    n_states = 5
     n_actions = 2
     T = torch.zeros(n_states, n_actions, n_states)
     for i in range(n_states - 2):
@@ -114,34 +114,117 @@ def soft_q_value_iteration(T, R, gamma, n_iterations=1000):
             pi = Q.softmax(dim=1)
             return Q, V, pi
     print('soft value iteration did not converge after', n_iterations, 'iterations')
+    return None, None, None
 
 
 soft_Q, soft_V, soft_pi = soft_q_value_iteration(T, true_R, gamma, 10000)
 
 # %%
+def uniform_value_iteration(T, R, gamma, n_iterations=1000):
+    V = torch.zeros(n_states)
+    R = R.unsqueeze(-1)
+    # Uniform policy probability
+    uniform_prob = 1 / n_actions
+
+    for _ in range(n_iterations):
+        Q = R + gamma * T @ V
+        V = (Q * uniform_prob).sum(dim=1)
+    return V
+
+V_u = uniform_value_iteration(T, true_R, gamma)
+
+# %%
+def mean_aggregate_by_indices(values, indices):
+    # Compute the unique indices and their counts
+    unique_indices, counts = torch.unique(indices, return_counts=True)
+    # Sum the values corresponding to each index
+    aggregated_sums = torch.zeros(unique_indices.max() + 1, dtype=values.dtype).scatter_add_(0, indices, values)
+    # Compute the mean by dividing the sums by the counts
+    means = aggregated_sums / counts
+    # Result for only the indices present
+    return means[unique_indices]
+
+# %%
+pi_s = soft_pi
+logits = torch.FloatTensor([[-5,0]]).repeat(n_states,1)
+pi_s = logits.softmax(dim=-1)
+
 state = T.argwhere().T[0]
 next_state = T.argwhere().T[2]
 R = true_R[next_state]
-logp = soft_pi.log()[1:-1].reshape(-1)
+logp = pi_s.log()[1:-1].reshape(-1)
+V_u_R = uniform_value_iteration(T, true_R, gamma)
 
-# USE EITHER V or soft_V here:
-adjustment = gamma * soft_V[next_state] - soft_V[state]
+logp_R = mean_aggregate_by_indices(logp, next_state)
+V_u_logp = uniform_value_iteration(T, logp_R, gamma)
+
+R_adjustment = gamma * V_u[next_state] - V_u[state]
+logpR_adjustment = gamma * V_u_logp[next_state] - V_u_logp[state]
+
 #This is because T.argwhere() has nothing for terminal states and then next_state doesn't exist
 # full_adjustment = torch.concat((soft_V[:1],soft_V[:1], adjustment, soft_V[-1:]))
-clp = logp + adjustment
-cr = R + adjustment
+clp = logp + logpR_adjustment
+cr = R + R_adjustment
 
-nclp = norm_funcs["l2_norm"](clp)
-ncr = norm_funcs["l2_norm"](cr)
+clpa = mean_aggregate_by_indices(clp, next_state)
+cra = mean_aggregate_by_indices(cr, next_state)
 
-print(f'Distance: {dist_funcs["l2_dist"](nclp, ncr).item():.4f}')
 
-plt.scatter(logp, R)
-plt.show()
-plt.scatter(clp,cr)
-plt.show()
-plt.scatter(nclp,ncr)
-plt.show()
+nclpa = norm_funcs["l2_norm"](clpa)
+ncra = norm_funcs["l2_norm"](cra)
+
+def print_and_plot(clp, cr, logp, R):
+    nclp = norm_funcs["l2_norm"](clp)
+    ncr = norm_funcs["l2_norm"](cr)
+    print(f'Distance: {dist_funcs["l2_dist"](nclp, ncr).item():.4f}')
+    plt.scatter(logp, R)
+    plt.show()
+    plt.scatter(clp,cr)
+    plt.show()
+    plt.scatter(nclp,ncr)
+    plt.show()
+
+print_and_plot(clp.detach(), cr.detach(), logp.detach(), R.detach())
+print_and_plot(clpa.detach(),cra.detach(), logp.detach(), R.detach())
+
+# %%
+def learn_from_canonicalisation(T, true_R, gamma, n_iterations=1000):
+    state = T.argwhere().T[0]
+    next_state = T.argwhere().T[2]
+    R = true_R[next_state]
+    V_u_R = uniform_value_iteration(T, true_R, gamma)
+    R_adjustment = gamma * V_u_R[next_state] - V_u_R[state]
+    cr = R + R_adjustment
+    ncr = norm_funcs["l2_norm"](cr)
+
+    L = torch.randn(n_states, n_actions, requires_grad=True)
+    optimizer = torch.optim.Adam([L], lr=1e-2)
+
+    for i in range(n_iterations):
+        pi_s = L.softmax(dim=-1)
+        logp = pi_s.log()[1:-1].reshape(-1)
+        logp_R = mean_aggregate_by_indices(logp, next_state)
+        V_u_logp = uniform_value_iteration(T, logp_R, gamma)
+
+        logpR_adjustment = gamma * V_u_logp[next_state] - V_u_logp[state]
+
+        clp = logp + logpR_adjustment
+
+        nclp = norm_funcs["l2_norm"](clp)
+        loss = ((nclp-ncr)**2).mean()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if i % 100 == 0:
+            print(f"{loss:.4f}")
+    return L
+
+# %%
+
+logits_fn = learn_from_canonicalisation(T, true_R, gamma=0.99, n_iterations=700)
+print(logits_fn.softmax(dim=-1).round(decimals=2))
+
+
 
 # %%
 def learn_from_normalization(T, R, V, gamma, n_iterations=1000):
