@@ -195,7 +195,8 @@ def learn_from_canonicalisation(T, true_R, gamma, n_iterations=1000):
     V_u_R = uniform_value_iteration(T, true_R, gamma)
     R_adjustment = gamma * V_u_R[next_state] - V_u_R[state]
     cr = R + R_adjustment
-    ncr = norm_funcs["l2_norm"](cr)
+    cra = mean_aggregate_by_indices(cr, next_state)
+    ncra = norm_funcs["l2_norm"](cra)
 
     L = torch.randn(n_states, n_actions, requires_grad=True)
     optimizer = torch.optim.Adam([L], lr=1e-2)
@@ -209,19 +210,21 @@ def learn_from_canonicalisation(T, true_R, gamma, n_iterations=1000):
         logpR_adjustment = gamma * V_u_logp[next_state] - V_u_logp[state]
 
         clp = logp + logpR_adjustment
+        clpa = mean_aggregate_by_indices(clp, next_state)
 
-        nclp = norm_funcs["l2_norm"](clp)
-        loss = ((nclp-ncr)**2).mean()
+        nclpa = norm_funcs["l2_norm"](clpa)
+        loss = ((nclpa-ncra)**2).mean()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if i % 100 == 0:
             print(f"{loss:.4f}")
+            print(L.softmax(dim=-1).round(decimals=2))
     return L
 
 # %%
 
-logits_fn = learn_from_canonicalisation(T, true_R, gamma=0.99, n_iterations=700)
+logits_fn = learn_from_canonicalisation(T, true_R, gamma=0.99, n_iterations=10000)
 print(logits_fn.softmax(dim=-1).round(decimals=2))
 
 
