@@ -189,7 +189,10 @@ dist_funcs["l2_dist"](
     norm_funcs["l2_norm"](CR.reshape(-1)),
     norm_funcs["l2_norm"](CL.reshape(-1))
 )
-La = log_pi2sas(log_pi-log_pi.min()/2)
+
+A = log_pi-log_pi.sum(-1).unsqueeze(-1)/2
+A = log_pi + 2.5
+La = log_pi2sas(A)
 CLa = canonicalise(T, La, gamma)
 
 dist_funcs["l2_dist"](
