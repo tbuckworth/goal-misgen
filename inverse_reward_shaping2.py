@@ -153,19 +153,57 @@ def uniform_policy_evaluation(T, R, gamma, n_iterations=1000):
             return V
     return V
 
+def log_pi2sas(log_pi):
+    return log_pi.unsqueeze(-1).tile((n_states))
+
+def canonicalise(T, R, gamma, policy_evaluation=uniform_policy_evaluation, n_iterations=1000):
+    Vu = policy_evaluation(T, R, gamma, n_iterations)
+    Vns = Vu.tile(*T.shape[:-1], 1)
+    Vs = Vu.unsqueeze(-1).tile((n_actions)).unsqueeze(-1).tile((n_states))
+    CR = (T*(R-Vs+gamma*Vns)).sum(dim=-1)
+    return CR
 
 # %%
 state, action, next_state = T.argwhere().T
 
 R = true_R.tile(*T.shape[:-1],1)
+CR = canonicalise(T, R, gamma)
 
-Vu = uniform_policy_evaluation(T, R, gamma, n_iterations=1000)
-Vns = Vu.tile(*T.shape[:-1], 1)
-Vs = Vu.unsqueeze(-1).tile((n_actions)).unsqueeze(-1).tile((n_states))
-CR = (T*(R-Vs+gamma*Vns)).sum(dim=-1)
+logits = torch.FloatTensor([[-5,0]]).repeat(n_states,1)
+# logits[0] = 0
+# logits[-1] = 0
+log_pi = logits.log_softmax(dim=-1)
+L = log_pi2sas(log_pi)
+CL = canonicalise(T, L, gamma)
 
+cr_vec = CR.reshape(-1).cpu().numpy()
+cl_vec = CL.reshape(-1).cpu().numpy()
 
+plt.scatter(
+    x=cr_vec,
+    y=cl_vec
+)
+plt.show()
 
+dist_funcs["l2_dist"](
+    norm_funcs["l2_norm"](CR.reshape(-1)),
+    norm_funcs["l2_norm"](CL.reshape(-1))
+)
+La = log_pi2sas(log_pi-log_pi.min()/2)
+CLa = canonicalise(T, La, gamma)
+
+dist_funcs["l2_dist"](
+    norm_funcs["l2_norm"](CR.reshape(-1)),
+    norm_funcs["l2_norm"](CLa.reshape(-1))
+)
+
+cla_vec = CLa.reshape(-1).cpu().numpy()
+
+plt.scatter(
+    x=cr_vec,
+    y=cla_vec
+)
+plt.show()
 
 
 # %%
