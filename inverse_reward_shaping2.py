@@ -140,6 +140,35 @@ def uniform_value_iteration(T, R, gamma, n_iterations=1000, print_message=False)
 V_u = uniform_value_iteration(T, true_R, gamma)
 
 # %%
+def uniform_policy_evaluation(T, R, gamma, n_iterations=1000):
+    V = torch.zeros(n_states)
+    # Uniform policy probability
+    uniform_prob = 1 / n_actions
+
+    for _ in range(n_iterations):
+        old_V = V
+        Q = (T * (R + gamma * V)).sum(dim=-1)
+        V = (Q * uniform_prob).sum(dim=-1)
+        if (V - old_V).abs().max() < 1e-5:
+            return V
+    return V
+
+
+# %%
+state, action, next_state = T.argwhere().T
+
+R = true_R.tile(*T.shape[:-1],1)
+
+Vu = uniform_policy_evaluation(T, R, gamma, n_iterations=1000)
+Vns = Vu.tile(*T.shape[:-1], 1)
+Vs = Vu.unsqueeze(-1).tile((n_actions)).unsqueeze(-1).tile((n_states))
+CR = (T*(R-Vs+gamma*Vns)).sum(dim=-1)
+
+
+
+
+
+# %%
 def mean_aggregate_by_indices(values, indices):
     # Compute the unique indices and their counts
     unique_indices, counts = torch.unique(indices, return_counts=True)
