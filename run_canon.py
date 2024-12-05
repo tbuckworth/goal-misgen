@@ -142,7 +142,7 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
-    ignore_errors = False
+    ignore_errors = True
     for model_file in reversed(unique_ascent_dirs):
         if not ignore_errors:
             hp_run(model_file)
