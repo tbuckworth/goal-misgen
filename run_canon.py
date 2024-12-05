@@ -27,24 +27,24 @@ local_unique_ascent_dirs = [
 ]
 
 unique_ascent_dirs = [
-    # 'logs/train/ascent/ascent/2024-11-19__11-58-01__seed_1080',
-    # 'logs/train/ascent/ascent/2024-11-19__11-58-34__seed_1080',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-04-10__seed_50',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-04-27__seed_6033',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-04-32__seed_42',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-04-40__seed_0',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-10-48__seed_81',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-17-49__seed_81',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-20-19__seed_0',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-33-33__seed_0',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-37-43__seed_50',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-37-43__seed_81',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-37-50__seed_6033',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-38-08__seed_6033',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-38-59__seed_42',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-39-01__seed_6033',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033',
-    # 'logs/train/ascent/Ascent/2024-11-19__12-43-07__seed_50',
+    'logs/train/ascent/ascent/2024-11-19__11-58-01__seed_1080',
+    'logs/train/ascent/ascent/2024-11-19__11-58-34__seed_1080',
+    'logs/train/ascent/Ascent/2024-11-19__12-04-10__seed_50',
+    'logs/train/ascent/Ascent/2024-11-19__12-04-27__seed_6033',
+    'logs/train/ascent/Ascent/2024-11-19__12-04-32__seed_42',
+    'logs/train/ascent/Ascent/2024-11-19__12-04-40__seed_0',
+    'logs/train/ascent/Ascent/2024-11-19__12-10-48__seed_81',
+    'logs/train/ascent/Ascent/2024-11-19__12-17-49__seed_81',
+    'logs/train/ascent/Ascent/2024-11-19__12-20-19__seed_0',
+    'logs/train/ascent/Ascent/2024-11-19__12-33-33__seed_0',
+    'logs/train/ascent/Ascent/2024-11-19__12-37-43__seed_50',
+    'logs/train/ascent/Ascent/2024-11-19__12-37-43__seed_81',
+    'logs/train/ascent/Ascent/2024-11-19__12-37-50__seed_6033',
+    'logs/train/ascent/Ascent/2024-11-19__12-38-08__seed_6033',
+    'logs/train/ascent/Ascent/2024-11-19__12-38-59__seed_42',
+    'logs/train/ascent/Ascent/2024-11-19__12-39-01__seed_6033',
+    'logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033',
+    'logs/train/ascent/Ascent/2024-11-19__12-43-07__seed_50',
     'logs/train/ascent/Ascent/2024-11-19__12-43-59__seed_0',
     'logs/train/ascent/Ascent/2024-11-19__12-55-04__seed_42',
     'logs/train/ascent/Ascent/2024-11-19__12-55-21__seed_81',
@@ -118,9 +118,9 @@ def hp_run(model_file):
         "epoch": 0,
         "algo": "canon",
         "env_name": "get",
-        "exp_name": "maze",
+        "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze new1", "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon maze new2", "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -143,7 +143,7 @@ def hp_run(model_file):
 
 if __name__ == '__main__':
     ignore_errors = False
-    for model_file in maze_dirs + new_maze_dirs:
+    for model_file in unique_ascent_dirs:
         if not ignore_errors:
             hp_run(model_file)
         else:
