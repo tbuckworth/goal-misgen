@@ -304,7 +304,8 @@ class Canonicaliser(BaseAgent):
                 if rew_type == "reward":
                     R = rew_batch
                 elif rew_type == "logits":
-                    R = logp_eval_policy_batch
+                    exp_pi = logp_eval_policy_batch.exp().exp()
+                    R = exp_pi - exp_pi.mean()
                 else:
                     raise NotImplementedError
                 target = R + self.gamma * next_value_batch * (1 - done_batch)
@@ -327,7 +328,8 @@ class Canonicaliser(BaseAgent):
                     if rew_type == "reward":
                         R = rew_batch_val
                     elif rew_type == "logits":
-                        R = logp_eval_policy_batch_val
+                        exp_pi = logp_eval_policy_batch.exp().exp()
+                        R = exp_pi - exp_pi.mean()
                     else:
                         raise NotImplementedError
                     target = R + self.gamma * next_value_batch_val * (1 - done_batch_val)
@@ -441,7 +443,10 @@ class Canonicaliser(BaseAgent):
         adj = torch.concat(list(adj_batch))
         adj_logp = torch.concat(list(adj_batch_logp))
 
-        canon_logp = logp + adj_logp
+        exp_pi = logp.exp().exp()
+        adv = exp_pi - exp_pi.mean()
+
+        canon_logp = adv + adj_logp
         canon_true_r = rew + adj
 
         data = []
