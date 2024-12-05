@@ -157,6 +157,8 @@ def log_pi2sas(log_pi):
     return log_pi.unsqueeze(-1).tile((n_states))
 
 def canonicalise(T, R, gamma, policy_evaluation=uniform_policy_evaluation, n_iterations=1000):
+    #TODO: remove terminal start states?
+    # term = T.sum(dim=-1).sum(dim=-1)==0
     Vu = policy_evaluation(T, R, gamma, n_iterations)
     Vns = Vu.tile(*T.shape[:-1], 1)
     Vs = Vu.unsqueeze(-1).tile((n_actions)).unsqueeze(-1).tile((n_states))
@@ -190,8 +192,8 @@ dist_funcs["l2_dist"](
     norm_funcs["l2_norm"](CL.reshape(-1))
 )
 
-A = log_pi-log_pi.sum(-1).unsqueeze(-1)/2
-A = log_pi + 2.5
+exp_pi = log_pi.exp().exp()
+A = exp_pi - exp_pi.mean()
 La = log_pi2sas(A)
 CLa = canonicalise(T, La, gamma)
 
@@ -203,8 +205,10 @@ dist_funcs["l2_dist"](
 cla_vec = CLa.reshape(-1).cpu().numpy()
 
 plt.scatter(
-    x=cr_vec,
-    y=cla_vec
+    norm_funcs["l2_norm"](CR.reshape(-1)),
+    norm_funcs["l2_norm"](CLa.reshape(-1))
+    # x=cr_vec,
+    # y=cla_vec
 )
 plt.show()
 
