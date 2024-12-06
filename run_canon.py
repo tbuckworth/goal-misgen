@@ -151,3 +151,8 @@ if __name__ == '__main__':
                 hp_run(model_file)
             except Exception as e:
                 print(e)
+                try:
+                    import wandb
+                    wandb.finish()
+                except Exception as e:
+                    pass

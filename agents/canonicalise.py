@@ -480,10 +480,13 @@ class Canonicaliser(BaseAgent):
         val_batch_logp = value_model_logp(obs_batch).squeeze()
         next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
 
+        # N.B. This is for uniform policy, but probably makes sense for any policy.
+        inf_term_value = (1 / (1 - self.gamma)) * np.log(1 / dist.logits.shape[-1])
+
         if self.adjust_terminal_values:
-            next_val_batch[done_batch] = (1/(1-self.gamma))*torch.log(1/dist.logits.shape[-1])
+            next_val_batch[done_batch.bool()] = inf_term_value
             adjustment = self.gamma * next_val_batch - val_batch
-            next_val_batch_logp[done_batch] = (1/(1-self.gamma))*torch.log(1/dist.logits.shape[-1])
+            next_val_batch_logp[done_batch.bool()] = inf_term_value
             adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
         else:
             # N.B. Rew is function of next states in our storage
