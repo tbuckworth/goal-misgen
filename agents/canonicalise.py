@@ -55,11 +55,13 @@ class Canonicaliser(BaseAgent):
                  trusted_policy=None,
                  n_val_envs=0,
                  use_unique_obs=False,
+                 adjust_terminal_values=True,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
 
+        self.adjust_terminal_values = adjust_terminal_values
         self.use_unique_obs = use_unique_obs
         if n_val_envs >= n_envs:
             raise IndexError(f"n_val_envs:{n_val_envs} must be less than n_envs:{n_envs}")
@@ -304,8 +306,12 @@ class Canonicaliser(BaseAgent):
                 if rew_type == "reward":
                     R = rew_batch
                 elif rew_type == "logits":
-                    exp_pi = logp_eval_policy_batch.exp().exp()
-                    R = exp_pi - exp_pi.mean()
+                    if self.adjust_terminal_values:
+                        R = logp_eval_policy_batch
+                    else:
+                        raise NotImplementedError("Need to get mean log pi across all the actions, so needs to be stored\n"
+                                                  "Maybe just store log pi - mean(log pi) = advantage estimate")
+                        R = logp_eval_policy_batch - logp_eval_policy_batch.mean(dim=-1)
                 else:
                     raise NotImplementedError
                 target = R + self.gamma * next_value_batch * (1 - done_batch)
@@ -328,8 +334,13 @@ class Canonicaliser(BaseAgent):
                     if rew_type == "reward":
                         R = rew_batch_val
                     elif rew_type == "logits":
-                        exp_pi = logp_eval_policy_batch.exp().exp()
-                        R = exp_pi - exp_pi.mean()
+                        if self.adjust_terminal_values:
+                            R = logp_eval_policy_batch_val
+                        else:
+                            raise NotImplementedError(
+                                "Need to get mean log pi across all the actions, so needs to be stored\n"
+                                "Maybe just store log pi - mean(log pi) = advantage estimate")
+                            R = logp_eval_policy_batch_val - logp_eval_policy_batch_val.mean(dim=-1)
                     else:
                         raise NotImplementedError
                     target = R + self.gamma * next_value_batch_val * (1 - done_batch_val)
@@ -465,14 +476,19 @@ class Canonicaliser(BaseAgent):
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
-        # N.B. Rew is function of next states in our storage
-        adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
 
         val_batch_logp = value_model_logp(obs_batch).squeeze()
         next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
-        # N.B. Rew is function of next states in our storage
-        adjustment_logp = self.gamma * next_val_batch_logp * (1 - done_batch) - val_batch_logp
 
-
+        if self.adjust_terminal_values:
+            next_val_batch[done_batch] = (1/(1-self.gamma))*torch.log(1/dist.logits.shape[-1])
+            adjustment = self.gamma * next_val_batch - val_batch
+            next_val_batch_logp[done_batch] = (1/(1-self.gamma))*torch.log(1/dist.logits.shape[-1])
+            adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
+        else:
+            # N.B. Rew is function of next states in our storage
+            adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
+            # N.B. Rew is function of next states in our storage
+            adjustment_logp = self.gamma * next_val_batch_logp * (1 - done_batch) - val_batch_logp
 
         return logp_batch, rew_batch, adjustment, adjustment_logp

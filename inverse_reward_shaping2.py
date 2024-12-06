@@ -62,15 +62,16 @@ gamma = 0.99
 
 # %%
 if ascender_long:
-    n_states = 5
+    n_states = 6
     n_actions = 2
     T = torch.zeros(n_states, n_actions, n_states)
-    for i in range(n_states - 2):
+    for i in range(n_states - 3):
         T[i+1, 1, i+2] = 1
         T[i+1, 0, i] = 1
+    T[(0,-1,-2), :, -1] = 1
 
 true_R = torch.zeros(n_states)
-true_R[-1] = 10
+true_R[-2] = 10
 true_R[0] = -10
 
 gamma = 0.99
@@ -172,8 +173,10 @@ R = true_R.tile(*T.shape[:-1],1)
 CR = canonicalise(T, R, gamma)
 
 logits = torch.FloatTensor([[-5,0]]).repeat(n_states,1)
-# logits[0] = 0
-# logits[-1] = 0
+logits[0] = 0
+logits[-1] = 0
+logits[-2] = 0
+
 log_pi = logits.log_softmax(dim=-1)
 L = log_pi2sas(log_pi)
 CL = canonicalise(T, L, gamma)
@@ -188,8 +191,8 @@ plt.scatter(
 plt.show()
 
 dist_funcs["l2_dist"](
-    norm_funcs["l2_norm"](CR.reshape(-1)),
-    norm_funcs["l2_norm"](CL.reshape(-1))
+    norm_funcs["l2_norm"](CR[:-1].reshape(-1)),
+    norm_funcs["l2_norm"](CL[:-1].reshape(-1))
 )
 
 exp_pi = log_pi.exp().exp()
