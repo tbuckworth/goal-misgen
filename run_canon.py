@@ -91,9 +91,9 @@ coinrun_dirs = [
     "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
 ]
 
-generalising_ascender = [
-    get_model_with_largest_checkpoint('logs/train/ascent/Ascent/2024-11-19__12-04-10__seed_50')
-]
+# generalising_ascender = [
+#     get_model_with_largest_checkpoint('logs/train/ascent/Ascent/2024-11-19__12-04-10__seed_50')
+# ]
 
 ascent_misgeneralising_but_low_valid_distance = [
     "logs/train/ascent/Ascent/2024-11-19__12-55-04__seed_42"
@@ -120,7 +120,7 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze new2", "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon maze new3", "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
