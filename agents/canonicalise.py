@@ -55,14 +55,14 @@ class Canonicaliser(BaseAgent):
                  trusted_policy=None,
                  n_val_envs=0,
                  use_unique_obs=False,
-                 adjust_terminal_values=True,
+                 soft_canonicalisation=True,
                  load_value_models=False, **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
 
         self.load_value_models = load_value_models
-        self.adjust_terminal_values = adjust_terminal_values
+        self.soft_canonicalisation = soft_canonicalisation
         self.use_unique_obs = use_unique_obs
         if n_val_envs >= n_envs:
             raise IndexError(f"n_val_envs:{n_val_envs} must be less than n_envs:{n_envs}")
@@ -115,7 +115,8 @@ class Canonicaliser(BaseAgent):
             mask = torch.FloatTensor(1 - done).to(device=self.device)
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
             logp_eval_policy = dist.log_prob(act).cpu().numpy()
-            if not self.adjust_terminal_values:
+            if not self.soft_canonicalisation:
+                # converting log pi to implied hard advantage func:
                 return logp_eval_policy - dist.probs.log().mean(dim=-1)
         return logp_eval_policy
 
@@ -459,7 +460,7 @@ class Canonicaliser(BaseAgent):
         val_batch_logp = value_model_logp(obs_batch).squeeze()
         next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
 
-        if self.adjust_terminal_values:
+        if self.soft_canonicalisation:
             # N.B. This is for uniform policy, but probably makes sense for any policy.
             inf_term_value = (1 / (1 - self.gamma)) * np.log(1 / dist.logits.shape[-1])
             next_val_batch[done_batch.bool()] = inf_term_value
