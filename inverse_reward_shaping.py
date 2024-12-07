@@ -1,5 +1,6 @@
 # %%
 import numpy as np
+import pandas as pd
 import torch
 import einops
 
@@ -120,15 +121,23 @@ def soft_q_value_iteration(T, R, gamma, n_iterations=1000):
 soft_Q, soft_V, soft_pi = soft_q_value_iteration(T, true_R, gamma, 10000)
 
 # %%
-def uniform_value_iteration(T, R, gamma, n_iterations=1000):
+def value_iteration(T, R, gamma, pi, n_iterations=1000):
     V = torch.zeros(n_states)
     R = R.unsqueeze(-1)
-    # Uniform policy probability
-    uniform_prob = 1 / n_actions
 
     for _ in range(n_iterations):
+        old_V = V
         Q = R + gamma * T @ V
-        V = (Q * uniform_prob).sum(dim=1)
+        V = (Q * pi).sum(dim=1)
+        if (V - old_V).abs().max() < 1e-5:
+            return V
+    return V
+
+def uniform_value_iteration(T, R, gamma, n_iterations=1000):
+    return value_iteration(T, R, gamma, 1/n_actions, n_iterations)
+
+def hard_value_iteration(T, R, gamma, n_iterations=1000):
+    _, V, _ = q_value_iteration(T, R, gamma, n_iterations)
     return V
 
 V_u = uniform_value_iteration(T, true_R, gamma)
@@ -144,31 +153,42 @@ def mean_aggregate_by_indices(values, indices):
     # Result for only the indices present
     return means[unique_indices]
 
+def canonicalise_policy(logits, state, next_state, T, gamma, value_learner=uniform_value_iteration):
+    log_pi = logits.log_softmax(dim=-1)
+    logp = log_pi[1:-1].reshape(-1)
+    logp_R = mean_aggregate_by_indices(logp, next_state)
+
+    V_u_logp, adjustment, clp = canonicalise_reward(T, gamma, logp, logp_R, next_state, state, value_learner)
+    return logp, V_u_logp, adjustment, clp
+
+
+def canonicalise_reward(T, gamma, logp, logp_R, next_state, state, value_learner):
+    V_u_logp = value_learner(T, logp_R, gamma)
+    adjustment = gamma * V_u_logp[next_state] - V_u_logp[state]
+    clp = logp + adjustment
+    return V_u_logp, adjustment, clp
+
+
+def reward_as_policy(true_R, next_state, n_states, n_actions):
+    z = torch.zeros(n_actions)
+    return torch.concat((z,true_R[next_state],z)).reshape((n_states,n_actions))
+
+
 # %%
-pi_s = soft_pi
+value_learner = uniform_value_iteration
+# pi_s = soft_pi
 logits = torch.FloatTensor([[-5,0]]).repeat(n_states,1)
 pi_s = logits.softmax(dim=-1)
+log_policy = pi_s.log()
 
-state = T.argwhere().T[0]
-next_state = T.argwhere().T[2]
+state, action, next_state = T.argwhere().T
 R = true_R[next_state]
-logp = pi_s.log()[1:-1].reshape(-1)
-V_u_R = uniform_value_iteration(T, true_R, gamma)
+V_u_R, R_adjustment, cr = canonicalise_reward(T, gamma, R, true_R, next_state, state, value_learner)
 
-logp_R = mean_aggregate_by_indices(logp, next_state)
-V_u_logp = uniform_value_iteration(T, logp_R, gamma)
-
-R_adjustment = gamma * V_u[next_state] - V_u[state]
-logpR_adjustment = gamma * V_u_logp[next_state] - V_u_logp[state]
-
-#This is because T.argwhere() has nothing for terminal states and then next_state doesn't exist
-# full_adjustment = torch.concat((soft_V[:1],soft_V[:1], adjustment, soft_V[-1:]))
-clp = logp + logpR_adjustment
-cr = R + R_adjustment
+logp, V_u_logp, logp_adjustment, clp = canonicalise_policy(log_policy, state, next_state, T, gamma, value_learner)
 
 clpa = mean_aggregate_by_indices(clp, next_state)
 cra = mean_aggregate_by_indices(cr, next_state)
-
 
 nclpa = norm_funcs["l2_norm"](clpa)
 ncra = norm_funcs["l2_norm"](cra)
@@ -187,12 +207,16 @@ def print_and_plot(clp, cr, logp, R):
 print_and_plot(clp.detach(), cr.detach(), logp.detach(), R.detach())
 print_and_plot(clpa.detach(),cra.detach(), logp.detach(), R.detach())
 
+
+
+
+
 # %%
-def learn_from_canonicalisation(T, true_R, gamma, n_iterations=1000):
+def learn_from_canonicalisation(T, true_R, gamma, value_learner=uniform_value_iteration, n_iterations=1000):
     state = T.argwhere().T[0]
     next_state = T.argwhere().T[2]
     R = true_R[next_state]
-    V_u_R = uniform_value_iteration(T, true_R, gamma)
+    V_u_R = value_learner(T, true_R, gamma)
     R_adjustment = gamma * V_u_R[next_state] - V_u_R[state]
     cr = R + R_adjustment
     cra = mean_aggregate_by_indices(cr, next_state)
@@ -205,7 +229,7 @@ def learn_from_canonicalisation(T, true_R, gamma, n_iterations=1000):
         pi_s = L.softmax(dim=-1)
         logp = pi_s.log()[1:-1].reshape(-1)
         logp_R = mean_aggregate_by_indices(logp, next_state)
-        V_u_logp = uniform_value_iteration(T, logp_R, gamma)
+        V_u_logp = value_learner(T, logp_R, gamma)
 
         logpR_adjustment = gamma * V_u_logp[next_state] - V_u_logp[state]
 
@@ -224,9 +248,56 @@ def learn_from_canonicalisation(T, true_R, gamma, n_iterations=1000):
 
 # %%
 
-logits_fn = learn_from_canonicalisation(T, true_R, gamma=0.99, n_iterations=10000)
+logits_fn = learn_from_canonicalisation(T, true_R, gamma=0.99, n_iterations=1000)
 print(logits_fn.softmax(dim=-1).round(decimals=2))
 
+value_learner = hard_value_iteration
+
+V_u_R, R_adjustment, cr = canonicalise_reward(T, gamma, R, true_R, next_state, state, value_learner)
+
+logp, V_u_logp, logp_adjustment, clp = canonicalise_policy(log_policy, state, next_state, T, gamma, value_learner)
+
+learned_logp, V_u_learned_logp, learned_logp_adjustment, cllp = canonicalise_policy(logits_fn, state, next_state, T, gamma, value_learner)
+sopt_logp, V_u_sopt_logp, sopt_logp_adjustment, cslp = canonicalise_policy(soft_pi.log(), state, next_state, T, gamma, value_learner)
+
+colnames = ["state","action","next state",
+            "reward","value", "prev value", "adjustment","can reward","norm can reward",
+            "log pi","lp value","lp prev value", "lp adjustment","can log pi","norm can log pi",
+            "learned log pi", "learned lp value", "learned lp prev value", "learned lp adjustment", "can learned log pi", "norm can learned log pi",
+            "sopt log pi", "sopt lp value","sopt lp prev value", "sopt lp adjustment", "can sopt log pi", "norm can sopt log pi",
+            ]
+state_adj = (n_states-1)//2
+data = torch.stack((
+    state-state_adj,
+    action,
+    next_state-state_adj,
+    R,
+    V_u_R[next_state],
+    V_u_R[state],
+    R_adjustment,
+    cr,
+    norm_funcs["l2_norm"](cr),
+    logp,
+    V_u_logp[next_state],
+    V_u_logp[state],
+    logp_adjustment,
+    clp,
+    norm_funcs["l2_norm"](clp),
+    learned_logp,
+    V_u_learned_logp[next_state],
+    V_u_learned_logp[state],
+    learned_logp_adjustment,
+    cllp,
+    norm_funcs["l2_norm"](cllp),
+    sopt_logp,
+    V_u_sopt_logp[next_state],
+    V_u_sopt_logp[state],
+    sopt_logp_adjustment,
+    cslp,
+    norm_funcs["l2_norm"](cslp),
+)).T
+if True:
+    pd.DataFrame(data=data.detach().cpu().numpy(), columns=colnames).T.to_csv("data/2pos_states_canon_non_uniform.csv")
 
 
 # %%
