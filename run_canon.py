@@ -120,7 +120,7 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze new3", "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon maze new4 hard", "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -132,6 +132,7 @@ def hp_run(model_file):
         "distribution_mode": "hard",
         "seed": 42,
         "load_value_models": True,
+        "soft_canonicalisation": False,
 
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",

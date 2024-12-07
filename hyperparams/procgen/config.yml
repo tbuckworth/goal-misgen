@@ -142,6 +142,7 @@ ascent-canon:
     use_unique_obs: False
     misgen: False
     load_value_models: False
+    soft_canonicalisation: False
 
 trusted-value:
     algo: trusted-value
