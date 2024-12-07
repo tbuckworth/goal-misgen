@@ -143,8 +143,8 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
-    ignore_errors = True
-    for model_file in unique_ascent_dirs:
+    ignore_errors = False
+    for model_file in local_unique_ascent_dirs[:len(local_unique_ascent_dirs)//2]:
         if not ignore_errors:
             hp_run(model_file)
         else:

@@ -114,11 +114,11 @@ class Canonicaliser(BaseAgent):
             hidden_state = torch.FloatTensor(hidden_state).to(device=self.device)
             mask = torch.FloatTensor(1 - done).to(device=self.device)
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
-            logp_eval_policy = dist.log_prob(act).cpu().numpy()
+            logp_eval_policy = dist.log_prob(act)
             if not self.soft_canonicalisation:
                 # converting log pi to implied hard advantage func:
-                return logp_eval_policy - dist.probs.log().mean(dim=-1)
-        return logp_eval_policy
+                return (logp_eval_policy - dist.probs.log().mean(dim=-1)).cpu().numpy()
+        return logp_eval_policy.cpu().numpy()
 
     def predict(self, obs, hidden_state, done, policy=None):
         if policy is None:
