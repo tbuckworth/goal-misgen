@@ -56,11 +56,12 @@ class Canonicaliser(BaseAgent):
                  n_val_envs=0,
                  use_unique_obs=False,
                  adjust_terminal_values=True,
-                 **kwargs):
+                 load_value_models=False, **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
 
+        self.load_value_models = load_value_models
         self.adjust_terminal_values = adjust_terminal_values
         self.use_unique_obs = use_unique_obs
         if n_val_envs >= n_envs:
@@ -114,6 +115,8 @@ class Canonicaliser(BaseAgent):
             mask = torch.FloatTensor(1 - done).to(device=self.device)
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
             logp_eval_policy = dist.log_prob(act).cpu().numpy()
+            if not self.adjust_terminal_values:
+                return logp_eval_policy - dist.probs.log().mean(dim=-1)
         return logp_eval_policy
 
     def predict(self, obs, hidden_state, done, policy=None):
@@ -219,7 +222,7 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
-        if False: # TODO: make this correct
+        if not self.load_value_models: # TODO: make this correct
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
         self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
@@ -267,13 +270,11 @@ class Canonicaliser(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
     def optimize_value(self, storage, value_model, value_optimizer, env_type, rew_type="reward"):
-        distance = self.dist_funcs["l2_dist"]
-        normalize = self.norm_funcs["l2_norm"]
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
-        grad_accumulation_steps = batch_size / self.mini_batch_size
-        grad_accumulation_cnt = 1
+        # grad_accumulation_steps = batch_size / self.mini_batch_size
+        # grad_accumulation_cnt = 1
 
         if self.reset_rew_model_weights:
             value_model.apply(orthogonal_init)
@@ -294,8 +295,6 @@ class Canonicaliser(BaseAgent):
                                                             )
             val_losses = []
             val_losses_valid = []
-            # clp = []
-            # ctr = []
 
             for sample in generator:
                 (obs_batch, nobs_batch, act_batch, done_batch,
@@ -306,24 +305,14 @@ class Canonicaliser(BaseAgent):
                 if rew_type == "reward":
                     R = rew_batch
                 elif rew_type == "logits":
-                    if self.adjust_terminal_values:
-                        R = logp_eval_policy_batch
-                    else:
-                        raise NotImplementedError("Need to get mean log pi across all the actions, so needs to be stored\n"
-                                                  "Maybe just store log pi - mean(log pi) = advantage estimate")
-                        R = logp_eval_policy_batch - logp_eval_policy_batch.mean(dim=-1)
+                    R = logp_eval_policy_batch
                 else:
                     raise NotImplementedError
                 target = R + self.gamma * next_value_batch * (1 - done_batch)
                 value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
-                # with torch.no_grad():
-                #     adjustment = self.gamma * next_value_batch * (1 - done_batch) - value_batch
-                    # canon_logp = logp_eval_policy_batch + adjustment
-                    # canon_true_r = R + adjustment
-                    # clp.append(canon_logp)
-                    # ctr.append(canon_true_r)
+                
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
@@ -334,13 +323,7 @@ class Canonicaliser(BaseAgent):
                     if rew_type == "reward":
                         R = rew_batch_val
                     elif rew_type == "logits":
-                        if self.adjust_terminal_values:
-                            R = logp_eval_policy_batch_val
-                        else:
-                            raise NotImplementedError(
-                                "Need to get mean log pi across all the actions, so needs to be stored\n"
-                                "Maybe just store log pi - mean(log pi) = advantage estimate")
-                            R = logp_eval_policy_batch_val - logp_eval_policy_batch_val.mean(dim=-1)
+                        R = logp_eval_policy_batch_val
                     else:
                         raise NotImplementedError
                     target = R + self.gamma * next_value_batch_val * (1 - done_batch_val)
@@ -350,17 +333,13 @@ class Canonicaliser(BaseAgent):
                 val_losses_valid.append(value_loss_val.item())
             value_optimizer.step()
             value_optimizer.zero_grad()
-            grad_accumulation_cnt += 1
+            # grad_accumulation_cnt += 1
 
-            # canon_logp = torch.concat(clp)
-            # canon_true_r = torch.concat(ctr)
-            # dist = distance(normalize(canon_logp), normalize(canon_true_r))
 
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/value_loss_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{env_type}': np.mean(val_losses_valid),
-                # f'Loss/l2_normalized_l2_distance_{env_type}': dist.item(),
             })
 
     def optimize(self):
@@ -480,15 +459,16 @@ class Canonicaliser(BaseAgent):
         val_batch_logp = value_model_logp(obs_batch).squeeze()
         next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
 
-        # N.B. This is for uniform policy, but probably makes sense for any policy.
-        inf_term_value = (1 / (1 - self.gamma)) * np.log(1 / dist.logits.shape[-1])
-
         if self.adjust_terminal_values:
+            # N.B. This is for uniform policy, but probably makes sense for any policy.
+            inf_term_value = (1 / (1 - self.gamma)) * np.log(1 / dist.logits.shape[-1])
             next_val_batch[done_batch.bool()] = inf_term_value
             adjustment = self.gamma * next_val_batch - val_batch
             next_val_batch_logp[done_batch.bool()] = inf_term_value
             adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
         else:
+            # make it hard advantage func:
+            logp_batch -= dist.probs.log().mean(dim=-1)
             # N.B. Rew is function of next states in our storage
             adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
             # N.B. Rew is function of next states in our storage

@@ -141,6 +141,7 @@ ascent-canon:
     n_val_envs: 64
     use_unique_obs: False
     misgen: False
+    load_value_models: False
 
 trusted-value:
     algo: trusted-value
