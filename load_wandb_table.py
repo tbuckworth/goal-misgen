@@ -200,35 +200,30 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "ascent-new2"
+    env = "ascent-soft"
+    env_name = env
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
     if env == "ascent":
         # Original:
-        env_name = "ascent"
         tag = "canon misgen3"
         train_dist_metric = "Loss/l2_normalized_l2_distance_Training"
         val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
     elif env == "maze":
         env_name = "maze_aisc"
-        tag = "canon maze new1"#"canon maze1"
-        train_dist_metric = "L2_L2_Train"
-        val_dist_metric = "L2_L2_Valid"
+        tag = "canon maze new1"
     elif env == "coinrun":
-        env_name = "coinrun"
         tag = "canon coinrun1"
-        train_dist_metric = "L2_L2_Train"
-        val_dist_metric = "L2_L2_Valid"
     elif env == "ascent-new":
-        #New
-        env_name = "ascent_new"
         tag = "canon ascent1"
-        train_dist_metric = "L2_L2_Train"
-        val_dist_metric = "L2_L2_Valid"
     elif env == "ascent-new2":
-        # New
-        env_name = "ascent_new2"
         tag = "canon ascent new1"
-        train_dist_metric = "L2_L2_Train"
-        val_dist_metric = "L2_L2_Valid"
+    elif env == "ascent-soft":
+        # Accidentally called it this doh!
+        tag = "canon maze new3"
+    elif env == "ascent-hard":
+        # Accidentally called it this doh!
+        tag = "canon maze new4 hard"
 
     # Fetch runs from a project
     api = wandb.Api()

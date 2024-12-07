@@ -434,10 +434,8 @@ class Canonicaliser(BaseAgent):
         adj = torch.concat(list(adj_batch))
         adj_logp = torch.concat(list(adj_batch_logp))
 
-        exp_pi = logp.exp().exp()
-        adv = exp_pi - exp_pi.mean()
 
-        canon_logp = adv + adj_logp
+        canon_logp = logp + adj_logp
         canon_true_r = rew + adj
 
         data = []

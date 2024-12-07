@@ -120,7 +120,7 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze new4 hard", "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon ascent hard", "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -143,8 +143,8 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
-    ignore_errors = True
-    for model_file in local_unique_ascent_dirs[len(local_unique_ascent_dirs)//2:]:
+    ignore_errors = False
+    for model_file in local_unique_ascent_dirs[:len(local_unique_ascent_dirs)//2]:
         if not ignore_errors:
             hp_run(model_file)
         else:
