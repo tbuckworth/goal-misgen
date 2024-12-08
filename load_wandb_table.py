@@ -219,11 +219,9 @@ def load_summary(exclude_crafted=True):
     elif env == "ascent-new2":
         tag = "canon ascent new1"
     elif env == "ascent-soft":
-        # Accidentally called it this doh!
-        tag = "canon maze new3"
+        tag = "canon ascent soft2"
     elif env == "ascent-hard":
-        # Accidentally called it this doh!
-        tag = "canon maze new4 hard"
+        tag = "canon ascent hard"
 
     # Fetch runs from a project
     api = wandb.Api()
