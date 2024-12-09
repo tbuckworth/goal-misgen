@@ -120,7 +120,7 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon ascent hard re-train value"],# "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon ascent hard re-train value2"],# "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -150,6 +150,7 @@ if __name__ == '__main__':
         else:
             try:
                 hp_run(model_file)
+                wandb.finish()
             except Exception as e:
                 print(e)
                 try:
