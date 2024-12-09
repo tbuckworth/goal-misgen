@@ -223,7 +223,7 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
-        if not self.load_value_models: # TODO: make this correct
+        if not self.load_value_models:
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
         self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
@@ -427,7 +427,7 @@ class Canonicaliser(BaseAgent):
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=recurrent)
 
-        tuples = [self.sample_and_canonise(sample, value_model, value_model_logp) for sample in generator]
+        tuples = [self.sample_and_canonicalise(sample, value_model, value_model_logp) for sample in generator]
         logp_batch, rew_batch, adj_batch, adj_batch_logp = zip(*tuples)
         logp = torch.concat(list(logp_batch))
         rew = torch.concat(list(rew_batch))
@@ -437,6 +437,9 @@ class Canonicaliser(BaseAgent):
 
         canon_logp = logp + adj_logp
         canon_true_r = rew + adj
+
+        # This is useful to see why there is a gap (in ascender at least).
+        # torch.stack((logp, rew)).unique(dim=1).T
 
         data = []
         d = np.nan
@@ -448,7 +451,7 @@ class Canonicaliser(BaseAgent):
                     d = dist.item()
         return pd.DataFrame(data), d
 
-    def sample_and_canonise(self, sample, value_model, value_model_logp):
+    def sample_and_canonicalise(self, sample, value_model, value_model_logp):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         val_batch = value_model(obs_batch).squeeze()
@@ -472,5 +475,17 @@ class Canonicaliser(BaseAgent):
             adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
             # N.B. Rew is function of next states in our storage
             adjustment_logp = self.gamma * next_val_batch_logp * (1 - done_batch) - val_batch_logp
+
+        # torch.stack((rew_batch,
+        #              logp_batch,
+        #              # logp_batch+adjustment_logp,
+        #              # rew_batch+adjustment,
+        #              val_batch,
+        #              # next_val_batch * (1-done_batch),
+        #              val_batch_logp,
+        #              # next_val_batch_logp * (1-done_batch),
+        #              )).unique(dim=1).T
+        #
+        # torch.concat((obs_batch,val_batch.unsqueeze(-1)),dim=-1).unique(dim=0)
 
         return logp_batch, rew_batch, adjustment, adjustment_logp
