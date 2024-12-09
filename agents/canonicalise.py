@@ -339,8 +339,8 @@ class Canonicaliser(BaseAgent):
 
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
-                f'Loss/value_loss_{env_type}': np.mean(val_losses),
-                f'Loss/value_loss_valid_{env_type}': np.mean(val_losses_valid),
+                f'Loss/value_loss_{rew_type}_{env_type}': np.mean(val_losses),
+                f'Loss/value_loss_valid_{rew_type}_{env_type}': np.mean(val_losses_valid),
             })
 
     def optimize(self):
