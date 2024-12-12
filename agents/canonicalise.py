@@ -485,7 +485,11 @@ class Canonicaliser(BaseAgent):
         #              val_batch_logp,
         #              # next_val_batch_logp * (1-done_batch),
         #              )).unique(dim=1).T
-        #
-        # torch.concat((obs_batch,val_batch.unsqueeze(-1)),dim=-1).unique(dim=0)
 
+        vo = torch.concat((val_batch.unsqueeze(-1),obs_batch),dim=-1).unique(dim=0).round(decimals=2)
+        flt = vo[:,1]>vo[:,3]
+        import matplotlib.pyplot as plt
+        plt.scatter(vo[~flt,0].cpu().numpy(),vo[flt,0].cpu().numpy())
+        plt.scatter(vo[flt,0].cpu().numpy(),vo[flt,0].cpu().numpy())
+        plt.show()
         return logp_batch, rew_batch, adjustment, adjustment_logp
