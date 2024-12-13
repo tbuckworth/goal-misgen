@@ -147,7 +147,7 @@ class AscenderLong(TabularMDP):
         for i in range(n_states - 3):
             T[i + 1, 1, i + 2] = 1
             T[i + 1, 0, i] = 1
-        T[(0, -1, -2), :, -1] = 1
+        T[(0, -1, -2), :, -1] = 1/n_actions
 
         R = torch.zeros(n_states)
         R[-2] = 10
@@ -162,11 +162,12 @@ class AscenderLong(TabularMDP):
 
 class OneStep(TabularMDP):
     def __init__(self, gamma=0.99):
-        n_states = 4
+        n_states = 5
         n_actions = 2
         T = torch.zeros(n_states, n_actions, n_states)
         T[:2, 0, 2] = 1
         T[:2, 1, 1] = 1
+        T[2:, :, -1] = 1/n_actions
         R = torch.zeros(n_states)
         R[2] = 1
         consistent_pi = torch.zeros(n_states, n_actions)
