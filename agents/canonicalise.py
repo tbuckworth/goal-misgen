@@ -485,7 +485,7 @@ class Canonicaliser(BaseAgent):
         #              # next_val_batch_logp * (1-done_batch),
         #              )).unique(dim=1).T
 
-        plot_values_ascender(obs_batch, val_batch)
+        # plot_values_ascender(obs_batch, val_batch)
         
         return logp_batch, rew_batch, adjustment, adjustment_logp
 
