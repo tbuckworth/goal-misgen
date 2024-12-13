@@ -189,6 +189,9 @@ def main():
     mdp = AscenderLong(n_states=6)
     mdp.meg()
 
+    mdp = AscenderLong(n_states=20)
+    mdp.meg()
+
     print("done")
 
 
