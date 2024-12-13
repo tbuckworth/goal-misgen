@@ -3,6 +3,15 @@ import torch.nn.functional as F
 import numpy as np
 import einops
 
+
+class TabularPolicy:
+    def __init__(self, Q, V, pi):
+        self.Q = Q
+        self.V = V
+        self.pi = pi
+        self.log_pi = pi.log()
+
+
 # Define a tabular MDP
 class TabularMDP:
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, gamma=0.99):
@@ -11,6 +20,8 @@ class TabularMDP:
         self.transition_prob = transition_prob  # Shape: (n_states, n_actions, n_states)
         self.reward_vector = reward_vector  # Shape: (n_states,)
         self.gamma = gamma
+        self.soft_opt = self.soft_q_value_iteration()
+        self.hard_opt = self.q_value_iteration()
 
     def q_value_iteration(self, n_iterations=1000):
         T = self.transition_prob
@@ -29,9 +40,10 @@ class TabularMDP:
 
             if (Q - old_Q).abs().max() < 1e-5:
                 print(f'Q-value iteration converged in {i} iterations')
-                break
-        pi = torch.nn.functional.one_hot(Q.argmax(dim=1)).float()
-        return Q, V, pi
+                pi = torch.nn.functional.one_hot(Q.argmax(dim=1)).float()
+                return TabularPolicy(Q, V, pi)
+        print(f"Q-value iteration did not converge in {i} iterations")
+        return None
 
     def soft_q_value_iteration(self, n_iterations=1000, print_message=True):
         T = self.transition_prob
@@ -52,9 +64,9 @@ class TabularMDP:
                 if print_message:
                     print(f'soft value iteration converged in {i} iterations')
                 pi = Q.softmax(dim=1)
-                return Q, V, pi
+                return TabularPolicy(Q, V, pi)
         print('soft value iteration did not converge after', n_iterations, 'iterations')
-        return None, None, None
+        return None
 
 
     # def compute_q_values(self, policy):
@@ -119,14 +131,22 @@ class AscenderLong(TabularMDP):
         R[0] = -10
         super().__init__(n_states, n_actions, T, R, gamma)
 
+class OneStep(TabularMDP):
+    def __init__(self, gamma=0.99):
+        n_states = 4
+        n_actions = 2
+        T = torch.zeros(n_states, n_actions, n_states)
+        T[:2,0,2] = 1
+        T[:2,1,1] = 1
+        R = torch.zeros(n_states)
+        R[2] = 1
+        super().__init__(n_states, n_actions, T, R, gamma)
+
 
 def main():
-    # Initialize a simple MDP
     m = AscenderLong(n_states=6)
 
-    softQ, softV, softPi = m.soft_q_value_iteration()
 
-    hardQ, hardV, hardPi = m.q_value_iteration()
 
 
 
