@@ -3,8 +3,7 @@ import wandb
 from torch import nn
 
 from common import orthogonal_init
-from common.policy import UniformPolicy, CraftedTorchPolicy
-from helper_local import norm_funcs, dist_funcs
+from helper_local import norm_funcs, dist_funcs, plot_values_ascender
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
@@ -486,10 +485,7 @@ class Canonicaliser(BaseAgent):
         #              # next_val_batch_logp * (1-done_batch),
         #              )).unique(dim=1).T
 
-        vo = torch.concat((val_batch.unsqueeze(-1),obs_batch),dim=-1).unique(dim=0).round(decimals=2)
-        flt = vo[:,1]>vo[:,3]
-        import matplotlib.pyplot as plt
-        plt.scatter(vo[~flt,0].cpu().numpy(),vo[flt,0].cpu().numpy())
-        plt.scatter(vo[flt,0].cpu().numpy(),vo[flt,0].cpu().numpy())
-        plt.show()
+        plot_values_ascender(obs_batch, val_batch)
+        
         return logp_batch, rew_batch, adjustment, adjustment_logp
+

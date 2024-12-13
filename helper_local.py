@@ -5,6 +5,7 @@ import re
 import gym
 import gymnasium
 import numpy as np
+import torch
 import yaml
 from gym3 import ViewerWrapper, ToBaselinesVecEnv
 from procgen import ProcgenGym3Env, ProcgenEnv
@@ -212,3 +213,12 @@ dist_funcs = {
             "l1_dist": lambda x, y: (x - y).abs().mean(),
             "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
         }
+
+
+def plot_values_ascender(obs_batch, val_batch):
+    vo = torch.concat((val_batch.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(decimals=2)
+    flt = vo[:, 1] > vo[:, 3]
+    import matplotlib.pyplot as plt
+    plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
+    plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
+    plt.show()

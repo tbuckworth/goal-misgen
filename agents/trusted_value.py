@@ -6,7 +6,7 @@ from torch import nn
 
 from common import orthogonal_init
 from common.policy import UniformPolicy, CraftedTorchPolicy
-from helper_local import norm_funcs, dist_funcs
+from helper_local import norm_funcs, dist_funcs, plot_values_ascender
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
@@ -222,5 +222,7 @@ class TrustedValue(BaseAgent):
                 min_val_loss = mean_val_loss
             else:
                 if e >= self.val_epoch - 1:
+                    plot_values_ascender(obs_batch, value_batch)
                     return
             e += 1
+
