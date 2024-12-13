@@ -218,6 +218,9 @@ dist_funcs = {
 def plot_values_ascender(obs_batch, val_batch):
     vo = torch.concat((val_batch.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(decimals=2)
     flt = vo[:, 1] > vo[:, 3]
+    if flt.sum() != (~flt).sum():
+        print("Missing some observations")
+        return
     import matplotlib.pyplot as plt
     plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
     plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
