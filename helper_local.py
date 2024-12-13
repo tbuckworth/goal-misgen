@@ -215,7 +215,7 @@ dist_funcs = {
         }
 
 
-def plot_values_ascender(obs_batch, val_batch, epoch):
+def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
     vo = torch.concat((val_batch.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(decimals=2)
     flt = vo[:, 1] > vo[:, 3]
     import matplotlib.pyplot as plt
@@ -226,7 +226,8 @@ def plot_values_ascender(obs_batch, val_batch, epoch):
     plt.xlabel("State")
     plt.title(f"Ascender Values at epoch {epoch}")
     plt.legend()
-    plt.savefig(f'data/ascender_values_epoch:{epoch}.png')
+    plt.savefig(f'{logdir}/ascender_values_epoch_{epoch}.png')
+    plt.close()
     return
     # plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
     # plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())

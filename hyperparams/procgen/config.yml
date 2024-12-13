@@ -165,6 +165,7 @@ trusted-value:
     hidden_dims: [ 128, 128, 128 ]
     val_epoch: 1000
     n_val_envs: 64
+    save_pics_ascender: False
 
 
 ascent-crafted:

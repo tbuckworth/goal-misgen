@@ -1,14 +1,10 @@
 import os
 
-import pandas as pd
 import wandb
 from torch import nn
 
-from common import orthogonal_init
-from common.policy import UniformPolicy, CraftedTorchPolicy
-from helper_local import norm_funcs, dist_funcs, plot_values_ascender
+from helper_local import plot_values_ascender
 from .base_agent import BaseAgent
-from common.misc_util import adjust_lr
 import torch
 import torch.optim as optim
 import numpy as np
@@ -40,11 +36,13 @@ class TrustedValue(BaseAgent):
                  val_epoch=100,
                  trusted_policy=None,
                  n_val_envs=0,
+                 save_pics_ascender=False,
                  **kwargs):
 
         super(TrustedValue, self).__init__(env, policy, logger, storage, device,
                                            n_checkpoints, env_valid, storage_valid)
 
+        self.save_pics_ascender = save_pics_ascender
         if n_val_envs >= n_envs:
             raise IndexError(f"n_val_envs:{n_val_envs} must be less than n_envs:{n_envs}")
         self.n_val_envs = n_val_envs
@@ -65,7 +63,6 @@ class TrustedValue(BaseAgent):
         self.normalize_adv = normalize_adv
         self.normalize_rew = normalize_rew
         self.use_gae = use_gae
-
 
     def predict_temp(self, obs, act, hidden_state, done):
         with torch.no_grad():
@@ -223,7 +220,6 @@ class TrustedValue(BaseAgent):
             else:
                 if e >= self.val_epoch - 1:
                     return
-            if e % 100 == 0:
-                plot_values_ascender(obs_batch, value_batch.detach(), e)
+            if self.save_pics_ascender and e % 100 == 0:
+                plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
             e += 1
-
