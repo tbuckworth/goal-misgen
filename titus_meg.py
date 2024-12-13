@@ -157,7 +157,7 @@ class AscenderLong(TabularMDP):
         go_left[:, 0] = 1
         self.go_left = TabularPolicy("Go Left", go_left)
         self.custom_policies = [self.go_left]
-        super().__init__(n_states, n_actions, T, R, gamma, "Ascender")
+        super().__init__(n_states, n_actions, T, R, gamma, f"Ascender: {int(n_states-2/2)} Pos States")
 
 
 class OneStep(TabularMDP):
