@@ -156,21 +156,27 @@ def train(args):
             hidden_dims = hyperparameters.get("hidden_dims", [32])
         architecture = hyperparameters.get("architecture")
         if architecture == "impala":
+            # This is a crazy amount of GPU, shall we think about doing something about all this?
             value_model = ImpalaValueModel(observation_shape[0], hidden_dims)
             value_model_val = ImpalaValueModel(observation_shape[0], hidden_dims)
             value_model_logp = ImpalaValueModel(observation_shape[0], hidden_dims)
             value_model_logp_val = ImpalaValueModel(observation_shape[0], hidden_dims)
-
+            q_model = ImpalaValueModel(observation_shape[0], hidden_dims, output_dim=2)
+            q_model_val = ImpalaValueModel(observation_shape[0], hidden_dims, output_dim=2)
         else:
             value_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
             value_model_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
             value_model_logp = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
             value_model_logp_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [1])
+            q_model = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [2])
+            q_model_val = MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [2])
 
         value_model.to(device)
         value_model_val.to(device)
         value_model_logp.to(device)
         value_model_logp_val.to(device)
+        q_model.to(device)
+        q_model_val.to(device)
 
         trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if trusted_policy_name == "uniform":
@@ -192,6 +198,8 @@ def train(args):
             trusted_policy=trusted_policy,
             value_model_logp=value_model_logp,
             value_model_logp_val=value_model_logp_val,
+            q_model=q_model,
+            q_model_val=q_model_val,
         )
         hyperparameters.update(canon_params)
 

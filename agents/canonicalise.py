@@ -43,6 +43,8 @@ class Canonicaliser(BaseAgent):
                  value_model_val=None,
                  value_model_logp=None,
                  value_model_logp_val=None,
+                 q_model=None,
+                 q_model_val=None,
                  val_epoch=100,
                  inv_temp_rew_model=1.,
                  next_rew_loss_coef=1.,
@@ -80,6 +82,8 @@ class Canonicaliser(BaseAgent):
         self.value_model_val = value_model_val
         self.value_model_logp = value_model_logp
         self.value_model_logp_val = value_model_logp_val
+        self.q_model = q_model
+        self.q_model_val = q_model_val
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
         self.n_steps = n_steps
@@ -96,6 +100,8 @@ class Canonicaliser(BaseAgent):
         self.value_optimizer_val = optim.Adam(self.value_model_val.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer_logp = optim.Adam(self.value_model_logp.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer_logp_val = optim.Adam(self.value_model_logp_val.parameters(), lr=learning_rate, eps=1e-5)
+        self.q_optimizer = optim.Adam(self.q_model.parameters(), lr=learning_rate, eps=1e-5)
+        self.q_optimizer_val = optim.Adam(self.q_model_val.parameters(), lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
