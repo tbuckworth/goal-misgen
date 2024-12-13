@@ -142,11 +142,33 @@ class OneStep(TabularMDP):
         R[2] = 1
         super().__init__(n_states, n_actions, T, R, gamma)
 
+def titus_meg(pi, T, n_iterations=1000, print_losses=False):
+    n_states = T.shape[0]
+    h = torch.randn((n_states,1), requires_grad=True)
+    g = torch.randn((n_states,1), requires_grad=True)
+    log_pi = pi.log()
+    log_pi.requires_grad = False
+    T.requires_grad = False
 
+    optimizer = torch.optim.Adam([h, g], lr=1e-3)
+    for i in range(n_iterations):
+        old_g = g.detach().clone()
+        loss = ((log_pi + h - g)**2).mean()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if i % 10 == 0:
+            print(f"Loss:{loss:.4f}")
+        if (g - old_g).abs().max() < 1e-5:
+            print(f'implicit policy learning converged in {i} iterations')
+            return h, g
+    return h, g
 def main():
     m = AscenderLong(n_states=6)
 
+    h, g = titus_meg(m.soft,m.T, print_losses=True)
 
+    print("done")
 
 
 
