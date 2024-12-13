@@ -55,11 +55,14 @@ class Canonicaliser(BaseAgent):
                  n_val_envs=0,
                  use_unique_obs=False,
                  soft_canonicalisation=True,
-                 load_value_models=False, **kwargs):
+                 load_value_models=False,
+                 meg=True,
+                 **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
-
+        self.n_actions = self.env.action_space.n
+        self.meg = meg
         self.load_value_models = load_value_models
         self.soft_canonicalisation = soft_canonicalisation
         self.use_unique_obs = use_unique_obs
@@ -228,7 +231,11 @@ class Canonicaliser(BaseAgent):
         self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
         self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
 
-
+        if self.meg:
+            meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")
+            meg_valid = self.optimize_meg(self.storage_trusted, self.q_model_val, self.q_optimizer_val, "Validation")
+        else:
+            meg_train = meg_valid = np.nan
 
         with torch.no_grad():
             if self.print_ascent_rewards:
@@ -247,6 +254,8 @@ class Canonicaliser(BaseAgent):
                 "distances_pivoted": wandb.Table(dataframe=pivoted_df),
                 "L2_L2_Train": dt,
                 "L2_L2_Valid": dv,
+                "Meg_Train": meg_train,
+                "Meg_Valid": meg_valid,
             })
 
         self.env.close()
@@ -341,6 +350,70 @@ class Canonicaliser(BaseAgent):
                 f'Loss/value_loss_{rew_type}_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{rew_type}_{env_type}': np.mean(val_losses_valid),
             })
+
+    def optimize_meg(self, storage, q_model, optimizer, env_type):
+        batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
+        if batch_size < self.mini_batch_size:
+            self.mini_batch_size = batch_size
+
+        if self.reset_rew_model_weights:
+            q_model.apply(orthogonal_init)
+
+        max_ent = np.log(1 / self.n_actions)
+        q_model.train()
+        self.policy.eval()
+        for e in range(self.val_epoch):
+            recurrent = self.policy.is_recurrent()
+            generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+                                                      recurrent=recurrent,
+                                                      valid_envs=self.n_val_envs,
+                                                      valid=False,
+                                                      )
+            generator_valid = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
+                                                            recurrent=recurrent,
+                                                            valid_envs=self.n_val_envs,
+                                                            valid=True,
+                                                            )
+            losses = []
+            losses_valid = []
+            megs = []
+
+            for sample in generator:
+                (obs_batch, nobs_batch, act_batch, done_batch,
+                 old_log_prob_act_batch, old_value_batch, return_batch,
+                 adv_batch, rew_batch, logp_eval_policy_batch) = sample
+                q_value_batch = q_model(obs_batch).squeeze()
+                value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(-1)
+                loss = ((logp_eval_policy_batch + value_batch - q_value_batch)**2).mean()
+
+                loss.backward()
+                losses.append(loss.item())
+                log_pi_soft_star = q_value_batch.log_softmax(dim=-1)
+
+                meg = ((logp_eval_policy_batch.exp() * log_pi_soft_star).sum(dim=-1) - max_ent).mean()
+
+                megs.append(meg.item())
+            for sample in generator_valid:
+                obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val = sample
+                with torch.no_grad():
+                    q_value_batch_val = q_model(obs_batch_val).squeeze()
+
+                    value_batch_val = q_value_batch_val.logsumexp(dim=-1).unsqueeze(-1)
+                    loss_val = ((logp_eval_policy_batch_val + value_batch_val - q_value_batch_val) ** 2).mean()
+
+                losses_valid.append(loss_val.item())
+            optimizer.step()
+            optimizer.zero_grad()
+            # grad_accumulation_cnt += 1
+
+            wandb.log({
+                f'Loss/value_epoch_{env_type}': e,
+                f'Loss/meg_loss_{env_type}': np.mean(losses),
+                f'Loss/meg_loss_valid_{env_type}': np.mean(losses_valid),
+                f'Loss/mean_meg_{env_type}': np.mean(megs),
+            })
+        return np.mean(megs)
 
     def optimize(self):
         pi_loss_list, value_loss_list, entropy_loss_list, l1_reg_list, total_loss_list = [], [], [], [], []
@@ -474,18 +547,6 @@ class Canonicaliser(BaseAgent):
             adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
             # N.B. Rew is function of next states in our storage
             adjustment_logp = self.gamma * next_val_batch_logp * (1 - done_batch) - val_batch_logp
-
-        # torch.stack((rew_batch,
-        #              logp_batch,
-        #              # logp_batch+adjustment_logp,
-        #              # rew_batch+adjustment,
-        #              val_batch,
-        #              # next_val_batch * (1-done_batch),
-        #              val_batch_logp,
-        #              # next_val_batch_logp * (1-done_batch),
-        #              )).unique(dim=1).T
-
-        # plot_values_ascender(obs_batch, val_batch)
         
         return logp_batch, rew_batch, adjustment, adjustment_logp
 
