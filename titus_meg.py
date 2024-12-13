@@ -6,14 +6,15 @@ import einops
 
 
 class TabularPolicy:
-    def __init__(self, Q, V, pi):
+    def __init__(self, name, pi, Q=None, V=None):
+        self.name = name
         self.Q = Q
         self.V = V
         self.pi = pi
         # This is in case we have a full zero, we adjust policy.
         flt = (self.pi == 0).any(dim=-1)
-        self.pi[flt] = (self.pi[flt]*10).softmax(dim=-1)
-        assert (self.pi.sum(dim=-1) == 1).all(), "pi is not a probability distribution along final dim"
+        self.pi[flt] = (self.pi[flt] * 10).softmax(dim=-1)
+        assert (self.pi.sum(dim=-1).round(decimals=3) == 1).all(), "pi is not a probability distribution along final dim"
         self.log_pi = self.pi.log()
 
 
@@ -22,14 +23,18 @@ class TabularMDP:
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, gamma=0.99):
         self.n_states = n_states
         self.n_actions = n_actions
-        self.transition_prob = transition_prob  # Shape: (n_states, n_actions, n_states)
+        self.T = transition_prob  # Shape: (n_states, n_actions, n_states)
         self.reward_vector = reward_vector  # Shape: (n_states,)
         self.gamma = gamma
         self.soft_opt = self.soft_q_value_iteration()
         self.hard_opt = self.q_value_iteration()
 
+        q_uni = torch.zeros((n_states, n_actions))
+        unipi = q_uni.softmax(dim=-1)
+        self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
+
     def q_value_iteration(self, n_iterations=1000):
-        T = self.transition_prob
+        T = self.T
         R = self.reward_vector
         gamma = self.gamma
         n_states = self.n_states
@@ -45,13 +50,13 @@ class TabularMDP:
 
             if (Q - old_Q).abs().max() < 1e-5:
                 print(f'Q-value iteration converged in {i} iterations')
-                pi = torch.nn.functional.one_hot(Q.argmax(dim=1)).float()
-                return TabularPolicy(Q, V, pi)
+                pi = torch.nn.functional.one_hot(Q.argmax(dim=1),num_classes=n_actions).float()
+                return TabularPolicy("Hard", pi, Q, V)
         print(f"Q-value iteration did not converge in {i} iterations")
         return None
 
     def soft_q_value_iteration(self, n_iterations=1000, print_message=True):
-        T = self.transition_prob
+        T = self.T
         R = self.reward_vector
         gamma = self.gamma
         n_states = self.n_states
@@ -69,7 +74,7 @@ class TabularMDP:
                 if print_message:
                     print(f'soft value iteration converged in {i} iterations')
                 pi = Q.softmax(dim=1)
-                return TabularPolicy(Q, V, pi)
+                return TabularPolicy("Soft", pi, Q, V)
         print('soft value iteration did not converge after', n_iterations, 'iterations')
         return None
 
@@ -136,6 +141,11 @@ class AscenderLong(TabularMDP):
         R = torch.zeros(n_states)
         R[-2] = 10
         R[0] = -10
+
+        go_left = torch.zeros((n_states, n_actions))
+        go_left[:,0] = 1
+        self.go_left = TabularPolicy("Go Left", go_left)
+
         super().__init__(n_states, n_actions, T, R, gamma)
 
 
@@ -148,12 +158,20 @@ class OneStep(TabularMDP):
         T[:2, 1, 1] = 1
         R = torch.zeros(n_states)
         R[2] = 1
+        consistent_pi = torch.zeros(n_states, n_actions)
+        consistent_pi[:2] = torch.FloatTensor([0.2, 0.8])
+        consistent_pi[2:] = 0.5
+
+        inconsistent_pi = consistent_pi.clone()
+        inconsistent_pi[1] = torch.FloatTensor([0.8, 0.2])
+        self.consistent = TabularPolicy("Consistent", consistent_pi)
+        self.inconsistent = TabularPolicy("Inconsistent", inconsistent_pi)
+
         super().__init__(n_states, n_actions, T, R, gamma)
 
 
-def titus_meg(pi, T, n_iterations=1000, lr=1e-3, print_losses=False):
+def titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False):
     n_states, n_actions, _ = T.shape
-    # h = torch.randn(n_states, requires_grad=True)
     g = torch.randn(n_states, requires_grad=True)
     log_pi = pi.log()
     log_pi.requires_grad = False
@@ -162,33 +180,51 @@ def titus_meg(pi, T, n_iterations=1000, lr=1e-3, print_losses=False):
     optimizer = torch.optim.Adam([g], lr=lr)
     for i in range(n_iterations):
         old_g = g.detach().clone()
-        next_g = einops.einsum(T, g, "s a ns, ns -> s a")
-        v = next_g.logsumexp(dim=-1).unsqueeze(-1)
-        loss = ((log_pi + v - next_g) ** 2).mean()
+        q_est = einops.einsum(T, g, "s a ns, ns -> s a")
+        v = q_est.logsumexp(dim=-1).unsqueeze(-1)
+        meg_proxy = ((log_pi + v - q_est) ** 2).mean()
+
+        # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
+        log_pi_soft_star = q_est.log_softmax(dim=-1)
+
+        meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1/n_actions)).sum()
+
+        loss = meg_proxy
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
-            print(f"Loss:{loss:.4f}")
+            print(f"Tmeg:{meg_proxy:.4f}\tMeg:{meg:.4f}")
         if (g - old_g).abs().max() < 1e-5:
-            print(f'Titus Meg converged in {i} iterations')
-            return g, loss.item()
+            print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
+            return meg
     print(f'Titus Meg did not converge in {i} iterations')
-    return g, loss.item()
+    return meg
 
 
 def main():
-    m = AscenderLong(n_states=6)
+    env = OneStep()
+    titus_meg(env.soft_opt.pi, env.T)
+    titus_meg(env.hard_opt.pi, env.T)
+    titus_meg(env.uniform.pi, env.T)
+    titus_meg(env.consistent.pi, env.T)
+    titus_meg(env.inconsistent.pi, env.T)
 
-    g, loss = titus_meg(m.hard_opt.pi,
-                           m.transition_prob,
-                           n_iterations=5000,
-                           lr = 1e-2,
-                           print_losses=True
-                           )
-    nq = einops.einsum(m.hard_opt.Q, m.transition_prob, 'states actions, states actions next_states -> next_states')
-    plt.scatter(nq.detach().cpu().numpy(), g.detach().cpu().numpy())
-    plt.show()
+
+    mdp = AscenderLong(n_states=6)
+
+    titus_meg(mdp.soft_opt.pi, mdp.T)
+    titus_meg(mdp.hard_opt.pi, mdp.T)
+    titus_meg(mdp.uniform.pi, mdp.T)
+    titus_meg(mdp.go_left.pi, mdp.T)
+
+
+
+
+
+    # nq = einops.einsum(mdp.soft_opt.Q, mdp.transition_prob, 'states actions, states actions next_states -> next_states')
+    # plt.scatter(nq.detach().cpu().numpy(), g.detach().cpu().numpy())
+    # plt.show()
     print("done")
 
 
