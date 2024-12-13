@@ -30,15 +30,15 @@ class TabularMDP:
         self.T = transition_prob  # Shape: (n_states, n_actions, n_states)
         self.reward_vector = reward_vector  # Shape: (n_states,)
         self.gamma = gamma
-        self.soft_opt = self.soft_q_value_iteration()
-        self.hard_opt = self.q_value_iteration()
+        self.soft_opt = self.soft_q_value_iteration(print_message=False)
+        self.hard_opt = self.q_value_iteration(print_message=False)
 
         q_uni = torch.zeros((n_states, n_actions))
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
         self.policies = [self.soft_opt, self.hard_opt, self.uniform] + self.custom_policies
 
-    def q_value_iteration(self, n_iterations=1000):
+    def q_value_iteration(self, n_iterations=1000, print_message=True):
         T = self.T
         R = self.reward_vector
         gamma = self.gamma
@@ -54,7 +54,8 @@ class TabularMDP:
                 1)
 
             if (Q - old_Q).abs().max() < 1e-5:
-                print(f'Q-value iteration converged in {i} iterations')
+                if print_message:
+                    print(f'Q-value iteration converged in {i} iterations')
                 pi = torch.nn.functional.one_hot(Q.argmax(dim=1), num_classes=n_actions).float()
                 return TabularPolicy("Hard", pi, Q, V)
         print(f"Q-value iteration did not converge in {i} iterations")
@@ -84,7 +85,7 @@ class TabularMDP:
         return None
 
     def meg(self):
-        print(f"{self.name} Environment:")
+        print(f"\n{self.name} Environment:")
         megs = {}
         for policy in self.policies:
             meg = titus_meg(policy.pi, self.T, suppress=True)
@@ -183,22 +184,10 @@ class OneStep(TabularMDP):
 def main():
     env = OneStep()
     env.meg()
-    # titus_meg(env.soft_opt.pi, env.T)
-    # titus_meg(env.hard_opt.pi, env.T)
-    # titus_meg(env.uniform.pi, env.T)
-    # titus_meg(env.consistent.pi, env.T)
-    # titus_meg(env.inconsistent.pi, env.T)
 
     mdp = AscenderLong(n_states=6)
     mdp.meg()
-    # titus_meg(mdp.soft_opt.pi, mdp.T)
-    # titus_meg(mdp.hard_opt.pi, mdp.T)
-    # titus_meg(mdp.uniform.pi, mdp.T)
-    # titus_meg(mdp.go_left.pi, mdp.T)
 
-    # nq = einops.einsum(mdp.soft_opt.Q, mdp.transition_prob, 'states actions, states actions next_states -> next_states')
-    # plt.scatter(nq.detach().cpu().numpy(), g.detach().cpu().numpy())
-    # plt.show()
     print("done")
 
 
