@@ -215,13 +215,19 @@ dist_funcs = {
         }
 
 
-def plot_values_ascender(obs_batch, val_batch):
+def plot_values_ascender(obs_batch, val_batch, epoch):
     vo = torch.concat((val_batch.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(decimals=2)
     flt = vo[:, 1] > vo[:, 3]
-    if flt.sum() != (~flt).sum():
-        print("Missing some observations")
-        return
     import matplotlib.pyplot as plt
-    plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
-    plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
-    plt.show()
+    # if flt.sum() != (~flt).sum():
+    plt.scatter(vo[flt, 3].cpu().numpy(), vo[flt, 0].cpu().numpy(),label="Mirrored")
+    plt.scatter(vo[~flt, 3].cpu().numpy(), vo[~flt, 0].cpu().numpy(), label="Standard")
+    plt.ylabel("Value")
+    plt.xlabel("State")
+    plt.title(f"Ascender Values at epoch {epoch}")
+    plt.legend()
+    plt.savefig(f'data/ascender_values_epoch:{epoch}.png')
+    return
+    # plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
+    # plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
+    # plt.show()

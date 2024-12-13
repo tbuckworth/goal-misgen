@@ -222,7 +222,8 @@ class TrustedValue(BaseAgent):
                 min_val_loss = mean_val_loss
             else:
                 if e >= self.val_epoch - 1:
-                    plot_values_ascender(obs_batch, value_batch.detach())
                     return
+            if e % 100 == 0:
+                plot_values_ascender(obs_batch, value_batch.detach(), e)
             e += 1
 
