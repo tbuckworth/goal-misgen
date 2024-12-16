@@ -239,7 +239,7 @@ class Canonicaliser(BaseAgent):
 
         if self.meg:
             meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")
-            meg_valid = self.optimize_meg(self.storage_trusted, self.q_model_val, self.q_optimizer_val, "Validation")
+            meg_valid = self.optimize_meg(self.storage_trusted_val, self.q_model_val, self.q_optimizer_val, "Validation")
         else:
             meg_train = meg_valid = np.nan
 

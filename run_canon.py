@@ -133,7 +133,7 @@ def hp_run(model_file):
         "seed": 42,
         "hidden_dims": [256, 256, 256],
 
-        "load_value_models": False,
+        "load_value_models": True,
         "soft_canonicalisation": False,
 
         # "use_unique_obs": True,

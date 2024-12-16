@@ -200,10 +200,11 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "ascent-soft"
+    env = "ascent-hard_meg"
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
+    meg_adj = False
     if env == "ascent":
         # Original:
         tag = "canon misgen3"
@@ -222,6 +223,9 @@ def load_summary(exclude_crafted=True):
         tag = "canon ascent soft2"
     elif env == "ascent-hard":
         tag = "canon ascent hard"
+    elif env == "ascent-hard_meg":
+        tag = "canon ascent hard+meg2"
+        meg_adj = True
 
     # Fetch runs from a project
     api = wandb.Api()
@@ -239,7 +243,10 @@ def load_summary(exclude_crafted=True):
     val_len = "Mean Evaluation Episode Length"
     train_rpl = "Mean Training Reward/Timestep"
     val_rpl = "Mean Evaluation Reward/Timestep"
-
+    train_meg = "Meg Train"
+    val_meg = "Meg Valid"
+    train_dist_meg = "Distance/Meg Train"
+    val_dist_meg = "Distance/Meg Valid"
 
     # Collect and filter data
     all_data = []
@@ -256,6 +263,13 @@ def load_summary(exclude_crafted=True):
         row[train_len] = run.summary.mean_episode_len
         row[val_len] = run.summary.val_mean_episode_len
         row["architecture"] = run.config["architecture"]
+        if meg_adj:
+            try:
+                row[train_meg] = run.summary["Meg_Train"]
+                row[val_meg] = run.summary["Meg_Valid"]
+            except Exception as e:
+                print("No meg data")
+                pass
         all_data.append(row)
 
     df = pd.DataFrame(all_data)
@@ -265,44 +279,52 @@ def load_summary(exclude_crafted=True):
     df[diff] = df[val_distance] - df[train_distance]
     df[train_rpl] = df[train_rewards] / df[train_len]
     df[val_rpl] = df[val_rewards] / df[val_len]
+    if meg_adj:
+        df[train_dist_meg] = df[train_distance]/df[train_meg]
+        df[val_dist_meg] = df[val_distance]/df[val_meg]
 
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(6, 3), sharey=True)  # Adjust figsize as needed
-    for ax, y_metric in zip(axes, [train_distance, val_distance]):
-        # PLOT:
-        df.plot.scatter(x=val_rewards, y=y_metric, ax=ax, alpha=0.7)
-        z = np.polyfit(df[val_rewards], df[y_metric], 1)  # Linear fit (degree=1)
-        p = np.poly1d(z)
-        r_squared = np.corrcoef(df[val_rewards], df[y_metric])[0, 1] ** 2
-        x_smooth = np.linspace(df[val_rewards].min(), df[val_rewards].max(),
-                               50)  # Adjust the number of points for smoothness
-        # Compute the corresponding y values for the trendline
-        y_pred = p(x_smooth)
-        # Plot the trendline
-        ax.plot(x_smooth, y_pred,
-                color='black',
-                alpha=0.5,
-                linestyle='-.',
-                # linewidth=5,
-                # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
-                label=f'$R^2$ = {r_squared:.2f}',
-                )
-        ax.legend()
-        ax.set_title(y_metric)
-        ax.set_xlabel(val_rewards)
-        ax.set_ylabel("Distance")
-        # plt.legend()
-    plt.tight_layout()
-    plt.savefig(f"data/{env_name}_distances.png")
-    plt.show()
+    # fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(6, 3), sharey=True)  # Adjust figsize as needed
+    # for ax, y_metric in zip(axes, [train_distance, val_distance]):
+    #     # PLOT:
+    #     df.plot.scatter(x=val_rewards, y=y_metric, ax=ax, alpha=0.7)
+    #     z = np.polyfit(df[val_rewards], df[y_metric], 1)  # Linear fit (degree=1)
+    #     p = np.poly1d(z)
+    #     r_squared = np.corrcoef(df[val_rewards], df[y_metric])[0, 1] ** 2
+    #     x_smooth = np.linspace(df[val_rewards].min(), df[val_rewards].max(),
+    #                            50)  # Adjust the number of points for smoothness
+    #     # Compute the corresponding y values for the trendline
+    #     y_pred = p(x_smooth)
+    #     # Plot the trendline
+    #     ax.plot(x_smooth, y_pred,
+    #             color='black',
+    #             alpha=0.5,
+    #             linestyle='-.',
+    #             # linewidth=5,
+    #             # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
+    #             label=f'$R^2$ = {r_squared:.2f}',
+    #             )
+    #     ax.legend()
+    #     ax.set_title(y_metric)
+    #     ax.set_xlabel(val_rewards)
+    #     ax.set_ylabel("Distance")
+    #     # plt.legend()
+    # plt.tight_layout()
+    # plt.savefig(f"data/{env_name}_distances.png")
+    # plt.show()
 
     # Alternative
     x_metric = val_rewards #val_rpl also interesting
-    ax1 = df.plot.scatter(x=x_metric, y=train_distance, alpha=0.7, color='b', label=train_distance)
-    df.plot.scatter(x=x_metric, y=val_distance, alpha=0.7, color='r', ax=ax1, label=val_distance)
+    y_train = train_distance
+    y_valid = val_distance
+    if meg_adj:
+        y_train = train_dist_meg
+        y_valid = val_dist_meg
+    ax1 = df.plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=y_train)
+    df.plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=y_valid)
 
-    for y_metric, color, linestyle in zip([train_distance, val_distance], ['b', 'r'], [':','--']):
+    for y_metric, color, linestyle in zip([y_train, y_valid], ['b', 'r'], [':','--']):
         # PLOT:
         # df.plot.scatter(x=x_metric, y=y_metric, ax=ax1, alpha=0.7, color=color)
         z = np.polyfit(df[x_metric], df[y_metric], 1)  # Linear fit (degree=1)
