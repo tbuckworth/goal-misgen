@@ -388,25 +388,31 @@ class Canonicaliser(BaseAgent):
                 (obs_batch, nobs_batch, act_batch, done_batch,
                  old_log_prob_act_batch, old_value_batch, return_batch,
                  adv_batch, rew_batch, logp_eval_policy_batch) = sample
-                q_value_batch = q_model(obs_batch).squeeze()
-                value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(-1)
-                loss = ((logp_eval_policy_batch + value_batch - q_value_batch)**2).mean()
+                # Forcing it to be function of next state
+                q_value_batch = q_model(nobs_batch)
+                value_batch = q_value_batch.logsumexp(dim=-1)
+
+                target = logp_eval_policy_batch + value_batch - q_value_batch[act_batch]
+                loss = ((target*(1-done_batch)) ** 2).mean()
 
                 loss.backward()
                 losses.append(loss.item())
                 log_pi_soft_star = q_value_batch.log_softmax(dim=-1)
+                #TODO: Would be more efficient if we stored this earlier:
+                with torch.no_grad():
+                    dist, _, _ = self.policy(obs_batch, None, None)
 
-                meg = ((logp_eval_policy_batch.exp() * log_pi_soft_star).sum(dim=-1) - max_ent).mean()
+                meg = ((dist.probs * log_pi_soft_star).sum(dim=-1) - max_ent).mean()
 
                 megs.append(meg.item())
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
                     old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val = sample
                 with torch.no_grad():
-                    q_value_batch_val = q_model(obs_batch_val).squeeze()
+                    q_value_batch_val = q_model(obs_batch_val)
 
-                    value_batch_val = q_value_batch_val.logsumexp(dim=-1).unsqueeze(-1)
-                    loss_val = ((logp_eval_policy_batch_val + value_batch_val - q_value_batch_val) ** 2).mean()
+                    value_batch_val = q_value_batch_val.logsumexp(dim=-1)
+                    loss_val = ((logp_eval_policy_batch_val + value_batch_val - q_value_batch_val[act_batch_val]) ** 2).mean()
 
                 losses_valid.append(loss_val.item())
             optimizer.step()
