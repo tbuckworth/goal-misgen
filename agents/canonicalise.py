@@ -349,7 +349,8 @@ class Canonicaliser(BaseAgent):
             value_optimizer.step()
             value_optimizer.zero_grad()
             # grad_accumulation_cnt += 1
-
+            if e == self.val_epoch - 1:
+                plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
 
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
@@ -392,7 +393,8 @@ class Canonicaliser(BaseAgent):
                 q_value_batch = q_model(nobs_batch)
                 value_batch = q_value_batch.logsumexp(dim=-1)
 
-                target = logp_eval_policy_batch + value_batch - q_value_batch[act_batch]
+                next_q = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
+                target = logp_eval_policy_batch + value_batch - next_q
                 loss = ((target*(1-done_batch)) ** 2).mean()
 
                 loss.backward()
@@ -412,7 +414,8 @@ class Canonicaliser(BaseAgent):
                     q_value_batch_val = q_model(obs_batch_val)
 
                     value_batch_val = q_value_batch_val.logsumexp(dim=-1)
-                    loss_val = ((logp_eval_policy_batch_val + value_batch_val - q_value_batch_val[act_batch_val]) ** 2).mean()
+                    next_q = q_value_batch_val[torch.arange(len(act_batch_val)), act_batch_val.to(torch.int64)]
+                    loss_val = ((logp_eval_policy_batch_val + value_batch_val - next_q) ** 2).mean()
 
                 losses_valid.append(loss_val.item())
             optimizer.step()

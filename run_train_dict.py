@@ -15,7 +15,8 @@ if __name__ == '__main__':
         "mini_batch_size": 2048,
         "n_val_envs": 128,
         "n_envs": 256 + 128,
-        "hiddden_dims": [256, 256, 256, 256],
+        "n_pos_states": 10,
+        "hidden_dims": [256, 256, 256, 256],
         "save_pics_ascender": True,
     }
     run_next_hyperparameters(hparams)

@@ -232,3 +232,13 @@ def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
     # plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
     # plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
     # plt.show()
+    vo = torch.concat((val_batch.unsqueeze(-1), target.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(decimals=2)
+    flt = vo[:, 1] > vo[:, 3]
+    import matplotlib.pyplot as plt
+    # if flt.sum() != (~flt).sum():
+    plt.scatter(vo[flt, 3].cpu().numpy(), vo[flt, 0].cpu().numpy(), label="Mirrored")
+    plt.scatter(vo[~flt, 3].cpu().numpy(), vo[~flt, 0].cpu().numpy(), label="Standard")
+    plt.ylabel("Value")
+    plt.xlabel("State")
+    plt.title(f"Ascender Values at epoch {epoch}")
+    plt.legend()

@@ -77,8 +77,8 @@ maze_dict = {
 }
 
 maze_dirs = [
-    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080",#/model_200015872.pth",
-    "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080",#/model_200015872.pth",
+    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080",  # /model_200015872.pth",
+    "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080",  # /model_200015872.pth",
 ]
 
 new_maze_dirs = [
@@ -120,17 +120,19 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon ascent hard+meg"],# "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon ascent hard+meg2"],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 3,#300,
+        "val_epoch": 300,
         "mini_batch_size": 2048,
         "n_val_envs": 32,
-        "n_envs": int(256+32),
+        "n_envs": int(256 + 32),
         "num_levels": 100000,
         "distribution_mode": "hard",
         "seed": 42,
+        "hidden_dims": [256, 256, 256],
+
         "load_value_models": False,
         "soft_canonicalisation": False,
 
@@ -143,8 +145,8 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
-    ignore_errors = False
-    for model_file in local_unique_ascent_dirs[len(local_unique_ascent_dirs)//2:]:
+    ignore_errors = True
+    for model_file in local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:
@@ -154,6 +156,7 @@ if __name__ == '__main__':
                 print(e)
                 try:
                     import wandb
+
                     wandb.finish()
                 except Exception as e:
                     pass
