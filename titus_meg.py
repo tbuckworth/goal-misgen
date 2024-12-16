@@ -84,14 +84,20 @@ class TabularMDP:
         print('soft value iteration did not converge after', n_iterations, 'iterations')
         return None
 
-    def meg(self):
+    def meg(self, tabular=True):
+        if tabular:
+            meg_func = titus_meg
+        else:
+            meg_func = non_tabular_titus_meg
         print(f"\n{self.name} Environment:")
         megs = {}
         for policy in self.policies:
-            meg = titus_meg(policy.pi, self.T, suppress=True)
+            meg = meg_func(policy.pi, self.T, suppress=True)
             print(f"{policy.name}\tMeg: {meg:.4f}")
             megs[policy.name] = meg
         self.megs = megs
+
+
 
 def titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     n_states, n_actions, _ = T.shape
@@ -108,6 +114,40 @@ def titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=F
         meg_proxy = ((log_pi + v - q_est) ** 2).mean()
 
         # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
+        log_pi_soft_star = q_est.log_softmax(dim=-1)
+
+        meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
+
+        loss = meg_proxy
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if print_losses and i % 10 == 0:
+            print(f"Tmeg:{meg_proxy:.4f}\tMeg:{meg:.4f}")
+        if (g - old_g).abs().max() < 1e-5:
+            if not suppress:
+                print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
+            return meg
+    print(f'Titus Meg did not converge in {i} iterations')
+    return meg
+
+def non_tabular_titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+    n_states, n_actions, _ = T.shape
+    g = torch.randn((n_states, 1), requires_grad=True)
+    h = torch.randn((n_states, 1), requires_grad=True)
+
+    log_pi = pi.log()
+    log_pi.requires_grad = False
+    T.requires_grad = False
+
+    optimizer = torch.optim.Adam([g, h], lr=lr)
+    for i in range(n_iterations):
+        old_g = g.detach().clone()
+        # v = q_est.logsumexp(dim=-1).unsqueeze(-1)
+        meg_proxy = ((log_pi + h - g) ** 2).mean()
+
+        # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
+        q_est = einops.einsum(T, g.squeeze(), "s a ns, ns -> s a")
         log_pi_soft_star = q_est.log_softmax(dim=-1)
 
         meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
@@ -184,13 +224,19 @@ class OneStep(TabularMDP):
 
 def main():
     env = OneStep()
+
+    non_tabular_titus_meg(env.soft_opt.pi, env.T,print_losses=True,)
+
     env.meg()
+    env.meg(tabular=False)
 
     mdp = AscenderLong(n_states=6)
-    mdp.meg()
+    mdp.meg(tabular=True)
+    mdp.meg(tabular=False)
 
     mdp = AscenderLong(n_states=20)
     mdp.meg()
+    mdp.meg(tabular=False)
 
     print("done")
 

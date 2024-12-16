@@ -124,7 +124,7 @@ def hp_run(model_file):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 300,
+        "val_epoch": 3,#300,
         "mini_batch_size": 2048,
         "n_val_envs": 32,
         "n_envs": int(256+32),
@@ -143,8 +143,8 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
-    ignore_errors = True
-    for model_file in local_unique_ascent_dirs[:len(local_unique_ascent_dirs)//2]:
+    ignore_errors = False
+    for model_file in local_unique_ascent_dirs[len(local_unique_ascent_dirs)//2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:
