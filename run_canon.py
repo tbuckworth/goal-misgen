@@ -120,7 +120,7 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "ascent",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon ascent hard+meg2"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon ascent hard+meg3"],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),

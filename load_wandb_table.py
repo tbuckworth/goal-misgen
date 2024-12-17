@@ -224,7 +224,7 @@ def load_summary(exclude_crafted=True):
     elif env == "ascent-hard":
         tag = "canon ascent hard"
     elif env == "ascent-hard_meg":
-        tag = "canon ascent hard+meg2"
+        tag = "canon ascent hard+meg3"
         meg_adj = True
 
     # Fetch runs from a project
@@ -245,8 +245,8 @@ def load_summary(exclude_crafted=True):
     val_rpl = "Mean Evaluation Reward/Timestep"
     train_meg = "Meg Train"
     val_meg = "Meg Valid"
-    train_dist_meg = "Distance/Meg Train"
-    val_dist_meg = "Distance/Meg Valid"
+    train_dist_meg = "Distance * Meg - Train"
+    val_dist_meg = "Distance * Meg - Valid"
 
     # Collect and filter data
     all_data = []
@@ -280,8 +280,8 @@ def load_summary(exclude_crafted=True):
     df[train_rpl] = df[train_rewards] / df[train_len]
     df[val_rpl] = df[val_rewards] / df[val_len]
     if meg_adj:
-        df[train_dist_meg] = df[train_distance]/df[train_meg]
-        df[val_dist_meg] = df[val_distance]/df[val_meg]
+        df[train_dist_meg] = df[train_distance]*df[train_meg]
+        df[val_dist_meg] = df[val_distance]*df[val_meg]
 
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
@@ -350,6 +350,10 @@ def load_summary(exclude_crafted=True):
     plt.show()
 
     print(df)
+
+    ax = df.plot.scatter(x=x_metric, y=train_meg, alpha=0.7, color='b', label=train_meg)
+    df.plot.scatter(x=x_metric, y=val_meg, alpha=0.7, color='r', ax=ax, label=val_meg)
+    plt.show()
 
     goal_misgen_dists = df[df[val_rewards] < -6][val_distance]
     misgen_dists = df[np.bitwise_and(df[val_rewards] > -6,df[val_rewards] < 7.5)][val_distance]
