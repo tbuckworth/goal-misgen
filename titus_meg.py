@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import numpy as np
 import einops
 
+from common.meg.meg_colab import unknown_utility_meg
+
 
 class TabularPolicy:
     def __init__(self, name, pi, Q=None, V=None):
@@ -97,6 +99,9 @@ class TabularMDP:
             megs[policy.name] = meg
         self.megs = megs
 
+def matt_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+    #TODO: do Matt's new version
+    pass
 
 
 def titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
@@ -221,6 +226,12 @@ class OneStep(TabularMDP):
         self.custom_policies = [self.consistent, self.inconsistent]
         super().__init__(n_states, n_actions, T, R, gamma, "One Step")
 
+meg_funcs = {
+    "titus_meg": titus_meg,
+    "non_tabular_titus_meg": non_tabular_titus_meg,
+    "meg": unknown_utility_meg,
+    "matt_meg": matt_meg,
+}
 
 def main():
     env = OneStep()
