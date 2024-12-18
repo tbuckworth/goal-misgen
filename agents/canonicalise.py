@@ -550,10 +550,11 @@ class Canonicaliser(BaseAgent):
 
         if self.soft_canonicalisation:
             # N.B. This is for uniform policy, but probably makes sense for any policy.
-            inf_term_value = (1 / (1 - self.gamma)) * np.log(dist.logits.shape[-1])
-            next_val_batch[done_batch.bool()] = inf_term_value
+            # term_value = (1 / (1 - self.gamma)) * np.log(dist.logits.shape[-1])
+            term_value = 0
+            next_val_batch[done_batch.bool()] = term_value
             adjustment = self.gamma * next_val_batch - val_batch
-            next_val_batch_logp[done_batch.bool()] = inf_term_value
+            next_val_batch_logp[done_batch.bool()] = term_value
             adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
         else:
             # make it hard advantage func:

@@ -225,7 +225,7 @@ class OneStep(TabularMDP):
 def main():
     env = OneStep()
 
-    non_tabular_titus_meg(env.soft_opt.pi, env.T,print_losses=True,)
+    # non_tabular_titus_meg(env.soft_opt.pi, env.T,print_losses=True,)
 
     env.meg()
     env.meg(tabular=False)
