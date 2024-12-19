@@ -5,7 +5,7 @@ import numpy as np
 import einops
 
 from common.meg.meg_colab import unknown_utility_meg
-
+GAMMA = 0.9
 
 class TabularPolicy:
     def __init__(self, name, pi, Q=None, V=None):
@@ -24,7 +24,8 @@ class TabularPolicy:
 # Define a tabular MDP
 class TabularMDP:
     custom_policies = []
-    def __init__(self, n_states, n_actions, transition_prob, reward_vector, gamma=0.99, name="Unnamed"):
+    def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
+        self.mu = torch.ones(n_states) / n_states if mu is None else mu
         self.megs = {}
         self.name = name
         self.n_states = n_states
@@ -32,8 +33,8 @@ class TabularMDP:
         self.T = transition_prob  # Shape: (n_states, n_actions, n_states)
         self.reward_vector = reward_vector  # Shape: (n_states,)
         self.gamma = gamma
-        self.soft_opt = self.soft_q_value_iteration(print_message=False)
-        self.hard_opt = self.q_value_iteration(print_message=False)
+        self.soft_opt = self.soft_q_value_iteration(print_message=False, n_iterations=10000)
+        self.hard_opt = self.q_value_iteration(print_message=False, n_iterations=10000)
 
         q_uni = torch.zeros((n_states, n_actions))
         unipi = q_uni.softmax(dim=-1)
@@ -88,15 +89,15 @@ class TabularMDP:
 
     def meg(self, method="matt_meg"):
         meg_func = meg_funcs[method]
-        print(f"\n{self.name} Environment:")
+        print(f"\n{self.name} Environment\t{method}:")
         megs = {}
         for policy in self.policies:
-            meg = meg_func(policy.pi, self.T, suppress=True)
+            meg = meg_func(policy.pi, self.T, self.mu, suppress=True)
             print(f"{policy.name}\tMeg: {meg:.4f}")
             megs[policy.name] = meg
         self.megs = megs
 
-def matt_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     #TODO: do Matt's new version
     n_states, n_actions, _ = T.shape
     q = torch.randn(n_states, n_actions, requires_grad=True)
@@ -112,8 +113,7 @@ def matt_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=Fa
         v = q.logsumexp(dim=-1).unsqueeze(-1)
 
         target = v + log_pi
-        # TODO: this isn't correct:
-        meg_proxy = ((target - g) ** 2).mean()
+        meg_proxy = ((target - g.unsqueeze(-1)) ** 2).mean()
 
         # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
         log_pi_soft_star = q.log_softmax(dim=-1)
@@ -134,7 +134,7 @@ def matt_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=Fa
     return meg
 
 
-def titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     n_states, n_actions, _ = T.shape
     g = torch.randn(n_states, requires_grad=True)
     log_pi = pi.log()
@@ -213,7 +213,7 @@ def epsilon_greedy_policy(q_values, epsilon):
 
 
 class AscenderLong(TabularMDP):
-    def __init__(self, n_states, gamma=0.99):
+    def __init__(self, n_states, gamma=GAMMA):
         assert n_states % 2 == 0, (
             "Ascender requires a central starting state with an equal number of states to the left"
             " and right, plus an infinite terminal state. Therefore n_states must be even.")
@@ -228,6 +228,9 @@ class AscenderLong(TabularMDP):
         R[-2] = 10
         R[0] = -10
 
+        mu = torch.zeros(n_states)
+        mu[(n_states-1)//3] = 1.
+
         go_left = torch.zeros((n_states, n_actions))
         go_left[:, 0] = 1
         self.go_left = TabularPolicy("Go Left", go_left)
@@ -236,15 +239,18 @@ class AscenderLong(TabularMDP):
 
 
 class OneStep(TabularMDP):
-    def __init__(self, gamma=0.99):
+    def __init__(self, gamma=GAMMA):
         n_states = 5
         n_actions = 2
         T = torch.zeros(n_states, n_actions, n_states)
         T[:2, 0, 2] = 1
-        T[:2, 1, 1] = 1
+        T[:2, 1, 3] = 1
         T[2:, :, -1] = 1/n_actions
         R = torch.zeros(n_states)
         R[2] = 1
+        mu = torch.zeros(n_states)
+        mu[:2] = 0.5
+
         consistent_pi = torch.zeros(n_states, n_actions)
         consistent_pi[:2] = torch.FloatTensor([0.2, 0.8])
         consistent_pi[2:] = 0.5
@@ -254,26 +260,86 @@ class OneStep(TabularMDP):
         self.consistent = TabularPolicy("Consistent", consistent_pi)
         self.inconsistent = TabularPolicy("Inconsistent", inconsistent_pi)
         self.custom_policies = [self.consistent, self.inconsistent]
-        super().__init__(n_states, n_actions, T, R, gamma, "One Step")
+        super().__init__(n_states, n_actions, T, R, mu, gamma, "One Step")
+
+class MattGridworld(TabularMDP):
+    def __init__(self, gamma=GAMMA, N=5):
+        n_states = N * N
+
+        actions = ['up', 'down', 'left', 'right']
+        n_actions = len(actions)
+
+        T = torch.zeros((n_states, n_actions, n_states))
+
+        def state_index(x, y):
+            return x * N + y
+
+        def state_coords(s):
+            return divmod(s, N)
+
+        for x in range(N):
+            for y in range(N):
+                s = state_index(x, y)
+                for a_idx, action in enumerate(actions):
+                    if action == 'up':
+                        nx, ny = x - 1, y
+                    elif action == 'down':
+                        nx, ny = x + 1, y
+                    elif action == 'left':
+                        nx, ny = x, y - 1
+                    elif action == 'right':
+                        nx, ny = x, y + 1
+
+                    if action == 'up':
+                        ox, oy = x + 1, y
+                    elif action == 'down':
+                        ox, oy = x - 1, y
+                    elif action == 'left':
+                        ox, oy = x, y + 1
+                    elif action == 'right':
+                        ox, oy = x, y - 1
+
+                    if 0 <= nx < N and 0 <= ny < N:
+                        ns_intended = state_index(nx, ny)
+                    else:
+                        ns_intended = s
+
+                    if 0 <= ox < N and 0 <= oy < N:
+                        ns_opposite = state_index(ox, oy)
+                    else:
+                        ns_opposite = s
+
+                    T[s, a_idx, ns_intended] += 0.9
+                    T[s, a_idx, ns_opposite] += 0.1
+        U = torch.rand(n_states)
+        mu = torch.zeros(n_states)
+        mu[0] = 1
+        super().__init__(n_states, n_actions, T, U, mu, gamma, "Matt Gridworld")
+
 
 meg_funcs = {
     "titus_meg": titus_meg,
-    "non_tabular_titus_meg": non_tabular_titus_meg,
-    # What about gamma?
-    "meg": lambda pi, T, n_iter, lr, print_losses, suppress: unknown_utility_meg(pi, T, max_iterations=n_iter, lr=lr),
+    # "non_tabular_titus_meg": non_tabular_titus_meg,
     "matt_meg": matt_meg,
+    "meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA, mu=mu.cpu().numpy()),
 }
 
 def main():
     env = OneStep()
+    for mf in meg_funcs.keys():
+        env.meg(mf)
 
-    # non_tabular_titus_meg(env.soft_opt.pi, env.T,print_losses=True,)
+    env = MattGridworld()
+    for mf in meg_funcs.keys():
+        env.meg(mf)
 
     env.meg()
     env.meg("titus_meg")
 
     mdp = AscenderLong(n_states=6)
-    mdp.meg()
+    for mf in meg_funcs.keys():
+        print(mf)
+        mdp.meg(mf)
 
     mdp = AscenderLong(n_states=20)
     mdp.meg()
