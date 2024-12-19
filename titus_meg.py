@@ -109,23 +109,20 @@ def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, su
     for i in range(n_iterations):
         old_q = q.detach().clone()
         g = einops.einsum(q, T, "s a, s a ns -> ns")
-        # g(s') -> logsumexpQ(S,.) + log pi
         v = q.logsumexp(dim=-1).unsqueeze(-1)
 
-        target = v + log_pi
-        meg_proxy = ((target - g.unsqueeze(-1)) ** 2).mean()
+        target = einops.einsum(v + log_pi, T, 's a, s a ns -> ns')
+        loss = ((target - g) ** 2).mean()
 
-        # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
         log_pi_soft_star = q.log_softmax(dim=-1)
 
         meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
 
-        loss = meg_proxy
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
-            print(f"Tmeg:{meg_proxy:.4f}\tMeg:{meg:.4f}")
+            print(f"Tmeg:{loss:.4f}\tMeg:{meg:.4f}")
         if (q - old_q).abs().max() < 1e-5:
             if not suppress:
                 print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
