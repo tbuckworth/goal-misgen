@@ -86,11 +86,8 @@ class TabularMDP:
         print('soft value iteration did not converge after', n_iterations, 'iterations')
         return None
 
-    def meg(self, tabular=True):
-        if tabular:
-            meg_func = titus_meg
-        else:
-            meg_func = non_tabular_titus_meg
+    def meg(self, method="matt_meg"):
+        meg_func = meg_funcs[method]
         print(f"\n{self.name} Environment:")
         megs = {}
         for policy in self.policies:
@@ -101,7 +98,40 @@ class TabularMDP:
 
 def matt_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     #TODO: do Matt's new version
-    pass
+    n_states, n_actions, _ = T.shape
+    q = torch.randn(n_states, n_actions, requires_grad=True)
+    log_pi = pi.log()
+    log_pi.requires_grad = False
+    T.requires_grad = False
+
+    optimizer = torch.optim.Adam([q], lr=lr)
+    for i in range(n_iterations):
+        old_q = q.detach().clone()
+        g = einops.einsum(q, T, "s a, s a ns -> ns")
+        # g(s') -> logsumexpQ(S,.) + log pi
+        v = q.logsumexp(dim=-1).unsqueeze(-1)
+
+        target = v + log_pi
+        # TODO: this isn't correct:
+        meg_proxy = ((target - g) ** 2).mean()
+
+        # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
+        log_pi_soft_star = q.log_softmax(dim=-1)
+
+        meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
+
+        loss = meg_proxy
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if print_losses and i % 10 == 0:
+            print(f"Tmeg:{meg_proxy:.4f}\tMeg:{meg:.4f}")
+        if (q - old_q).abs().max() < 1e-5:
+            if not suppress:
+                print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
+            return meg
+    print(f'Titus Meg did not converge in {i} iterations')
+    return meg
 
 
 def titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
@@ -229,7 +259,8 @@ class OneStep(TabularMDP):
 meg_funcs = {
     "titus_meg": titus_meg,
     "non_tabular_titus_meg": non_tabular_titus_meg,
-    "meg": unknown_utility_meg,
+    # What about gamma?
+    "meg": lambda pi, T, n_iter, lr, print_losses, suppress: unknown_utility_meg(pi, T, max_iterations=n_iter, lr=lr),
     "matt_meg": matt_meg,
 }
 
@@ -239,15 +270,14 @@ def main():
     # non_tabular_titus_meg(env.soft_opt.pi, env.T,print_losses=True,)
 
     env.meg()
-    env.meg(tabular=False)
+    env.meg("titus_meg")
 
     mdp = AscenderLong(n_states=6)
-    mdp.meg(tabular=True)
-    mdp.meg(tabular=False)
+    mdp.meg()
 
     mdp = AscenderLong(n_states=20)
     mdp.meg()
-    mdp.meg(tabular=False)
+    mdp.meg()
 
     print("done")
 
