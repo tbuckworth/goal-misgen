@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 import torch
 import torch.nn.functional as F
 import numpy as np
 import einops
 
 from common.meg.meg_colab import unknown_utility_meg, state_action_occupancy
+from helper_local import norm_funcs, dist_funcs
 
 GAMMA = 0.9
 
@@ -20,15 +22,31 @@ class TabularPolicy:
         assert (self.pi.sum(dim=-1).round(
             decimals=3) == 1).all(), "pi is not a probability distribution along final dim"
         self.log_pi = self.pi.log()
+        self.R = None
 
 
 # Define a tabular MDP
+
+
+class RewardFunc:
+    def __init__(self, R, adjustment, v, next_v):
+        self.R = R
+        self.adjustment = adjustment
+        self.v = v
+        self.next_v = next_v
+        self.canonicalised_R = R + adjustment.unsqueeze(-1)
+
+
+
 class TabularMDP:
     custom_policies = []
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
         assert (transition_prob.sum(dim=-1)-1).abs().max()<1e-5, "Transition Probabilities do not sum to 1"
         self.mu = torch.ones(n_states) / n_states if mu is None else mu
         self.megs = {}
+        self.pircs = {}
+        self.normalize = norm_funcs["l2_norm"]
+        self.distance = dist_funcs["l2_dist"]
         self.name = name
         self.n_states = n_states
         self.n_actions = n_actions
@@ -89,15 +107,89 @@ class TabularMDP:
         print('soft value iteration did not converge after', n_iterations, 'iterations')
         return None
 
-    def meg(self, method="matt_meg"):
+    def calc_pirc(self, policy, pirc_type):
+        adv = policy.log_pi
+        if pirc_type == "Hard":
+            adv = policy.log_pi + policy.log_pi.mean(dim=-1).unsqueeze(-1)
+        elif pirc_type != "Soft":
+            raise NotImplementedError(f"pirc_type must be one of 'Hard','Soft'. Not {pirc_type}.")
+
+        policy.R = self.canonicalise(adv)
+
+        nca = self.normalize(policy.R.canonicalised_R)
+        ncr = self.normalize(self.R.canonicalised_R)
+
+        return self.distance(nca, ncr).item()
+
+
+    def meg(self, method="matt_meg", verbose=False):
         meg_func = meg_funcs[method]
-        print(f"\n{self.name} Environment\t{method}:")
+        if verbose:
+            print(f"\n{self.name} Environment\t{method}:")
         megs = {}
         for policy in self.policies:
             meg = meg_func(policy.pi, self.T, self.mu, suppress=True)
-            print(f"{policy.name}\tMeg: {meg:.4f}")
+            if verbose:
+                print(f"{policy.name}\tMeg: {meg:.4f}")
             megs[policy.name] = meg
-        self.megs = megs
+        self.megs[method] = megs
+
+    def pirc(self, pirc_type):
+        pircs = {}
+
+        for policy in self.policies:
+            pirc = self.calc_pirc(policy, pirc_type)
+            pircs[policy.name] = pirc
+        self.pircs[pirc_type] = pircs
+
+    def calc_megs(self, verbose=False):
+        for mf in meg_funcs.keys():
+            self.meg(mf)
+        df = pd.DataFrame(self.megs).round(decimals=2)
+        if verbose:
+            print(f"{self.name} Environment")
+            print(df)
+        return df
+
+    def calc_pircs(self, verbose=False):
+        self.R = self.canonicalise(self.reward_vector)
+        for pirc_type in ["Hard", "Soft"]:
+            self.pirc(pirc_type)
+        df = pd.DataFrame(self.pircs).round(decimals=2)
+        if verbose:
+            print(f"{self.name} Environment")
+            print(df)
+        return df
+
+    def canonicalise(self, R, trusted_pi=None):
+        if trusted_pi is None:
+            trusted_pi = self.uniform.pi
+
+        if R.ndim < 2:
+            # convert to next state reward
+            R = einops.einsum(self.T, R, 's a ns, s -> s a')
+        v = self.value_iteration(trusted_pi, R)
+        next_v = einops.einsum(v, trusted_pi, self.T, 's, s a, s a ns -> ns')
+
+        adjustment = self.gamma * next_v - v
+        return RewardFunc(R, v, next_v, adjustment)
+
+    def value_iteration(self, pi, R, n_iterations: int=10000):
+        T = self.T
+        n_states = self.n_states
+        V = torch.zeros((n_states,1))
+
+        for _ in range(n_iterations):
+            old_V = V
+            Q = einops.einsum(T,(R+self.gamma * V), "s a ns, s a -> s a")
+
+            # Q = (T * (R + self.gamma * V)).sum(dim=-1)
+            V = (Q * pi).sum(dim=-1).unsqueeze(-1)
+            if (V - old_V).abs().max() < 1e-5:
+                return V.squeeze()
+        print(f"Value Iteration did not converge after {n_iterations} iterations.")
+        return None
+
 
 def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     #TODO: do Matt's new version
@@ -241,7 +333,7 @@ class AscenderLong(TabularMDP):
         go_left[:, 0] = 1
         self.go_left = TabularPolicy("Go Left", go_left)
         self.custom_policies = [self.go_left]
-        super().__init__(n_states, n_actions, T, R, gamma, f"Ascender: {int(n_states-2/2)} Pos States")
+        super().__init__(n_states, n_actions, T, R, mu, gamma, f"Ascender: {int(n_states-2/2)} Pos States")
 
 
 class OneStep(TabularMDP):
@@ -326,30 +418,18 @@ class MattGridworld(TabularMDP):
 meg_funcs = {
     "titus_meg": titus_meg,
     # "non_tabular_titus_meg": non_tabular_titus_meg,
-    "matt_meg": matt_meg,
+    # "matt_meg": matt_meg,
     "meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA, mu=mu.cpu().numpy()),
 }
 
 def main():
-    env = OneStep()
-    for mf in meg_funcs.keys():
-        env.meg(mf)
 
-    env = MattGridworld()
-    for mf in meg_funcs.keys():
-        env.meg(mf)
+    envs = [OneStep(), AscenderLong(n_states=6), MattGridworld()]
+    for env in envs:
+        env.calc_pircs(verbose=True)
 
-    env.meg()
-    env.meg("titus_meg")
-
-    mdp = AscenderLong(n_states=6)
-    for mf in meg_funcs.keys():
-        print(mf)
-        mdp.meg(mf)
-
-    mdp = AscenderLong(n_states=20)
-    mdp.meg()
-    mdp.meg()
+    for env in envs:
+        env.calc_megs(verbose=True)
 
     print("done")
 
