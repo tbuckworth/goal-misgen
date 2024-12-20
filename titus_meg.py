@@ -59,7 +59,8 @@ class TabularMDP:
         q_uni = torch.zeros((n_states, n_actions))
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
-        self.policies = [self.soft_opt, self.hard_opt, self.uniform] + self.custom_policies
+        policies = [self.soft_opt, self.hard_opt, self.uniform] + self.custom_policies
+        self.policies = {p.name:p for p in policies}
 
     def q_value_iteration(self, n_iterations=1000, print_message=True):
         T = self.T
@@ -108,15 +109,18 @@ class TabularMDP:
         return None
 
     def calc_pirc(self, policy, pirc_type):
-        adv = policy.log_pi
         if pirc_type == "Hard":
             adv = policy.log_pi + policy.log_pi.mean(dim=-1).unsqueeze(-1)
-        elif pirc_type != "Soft":
+            policy.hard_canon = self.canonicalise(adv)
+            ca = policy.hard_canon.canonicalised_R
+        elif pirc_type == "Soft":
+            adv = policy.log_pi
+            policy.soft_canon = self.canonicalise(adv)
+            ca = policy.soft_canon.canonicalised_R
+        else:
             raise NotImplementedError(f"pirc_type must be one of 'Hard','Soft'. Not {pirc_type}.")
 
-        policy.R = self.canonicalise(adv)
-
-        nca = self.normalize(policy.R.canonicalised_R)
+        nca = self.normalize(ca)
         ncr = self.normalize(self.R.canonicalised_R)
 
         return self.distance(nca, ncr).item()
@@ -127,19 +131,19 @@ class TabularMDP:
         if verbose:
             print(f"\n{self.name} Environment\t{method}:")
         megs = {}
-        for policy in self.policies:
+        for name, policy in self.policies.items():
             meg = meg_func(policy.pi, self.T, self.mu, suppress=True)
             if verbose:
-                print(f"{policy.name}\tMeg: {meg:.4f}")
-            megs[policy.name] = meg
+                print(f"{name}\tMeg: {meg:.4f}")
+            megs[name] = meg
         self.megs[method] = megs
 
     def pirc(self, pirc_type):
         pircs = {}
 
-        for policy in self.policies:
+        for name, policy in self.policies.items():
             pirc = self.calc_pirc(policy, pirc_type)
-            pircs[policy.name] = pirc
+            pircs[name] = pirc
         self.pircs[pirc_type] = pircs
 
     def calc_megs(self, verbose=False):
@@ -423,12 +427,16 @@ meg_funcs = {
 }
 
 def main():
-
     envs = [OneStep(), AscenderLong(n_states=6), MattGridworld()]
-    for env in envs:
+    envs = {e.name:e for e in envs}
+
+    for name, env in envs.items():
         env.calc_pircs(verbose=True)
 
-    for env in envs:
+    c = envs["One Step"].policies["Hard"].hard_canon
+    c = envs["One Step"].R
+
+    for name, env in envs.items():
         env.calc_megs(verbose=True)
 
     print("done")
