@@ -25,7 +25,7 @@ def state_occupancy(pi: np.ndarray, T: np.ndarray, gamma: float, mu: np.ndarray,
         old_d = d.copy()
         try:
             d = mu + gamma * einops.einsum(pi, T, d,
-                                       'prev_states actions, prev_states actions states, prev_states -> states')
+                                           'prev_states actions, prev_states actions states, prev_states -> states')
         except Exception as e:
             raise e
         if np.allclose(d, old_d):
@@ -180,12 +180,69 @@ def unknown_utility_meg(pi: np.ndarray, T: np.ndarray, gamma: float = 0.9, mu: n
         grad = einops.einsum(d_pi - d_pi_soft, U, 'states, states -> states')
 
         U += lr * grad
-        da = state_action_occupancy(pi_soft, T, gamma, mu)
-
-        meg = einops.einsum(da, np.log(pi_soft + eps) - np.log(1 / num_actions), 'states actions, states actions ->')
 
         if np.allclose(U, old_U, atol=0.01):
+            da = state_action_occupancy(pi, T, gamma, mu)
+            meg = einops.einsum(da, np.log(pi_soft + eps) - np.log(1 / num_actions),
+                                'states actions, states actions ->')
             return meg
+
+    print(f"MEG failed to converge after {iter} iterations")
+
+
+def unknown_utility_meg2(pi: np.ndarray, T: np.ndarray, gamma: float = 0.9, mu: np.ndarray = None, max_iterations=10000,
+                         lr=0.1):
+    """
+    Computes MEG of a policy with respect to the set of reward functions linear in states.
+
+    Args:
+        pi (np.ndarray): Policy, with shape (num_states, num_actions).
+        T (np.ndarray): Transition probability table, with shape (num_states, num_actions, num_states).
+        mu (np.ndarray, optional): Initial state distribution with shape (num_states,). Defaults to uniform.
+        gamma (float, optional): Discount factor. Defaults to 0.9.
+
+    Returns:
+        float: MEG_U(pi), the goal-directedness of pi.
+
+    """
+    num_states, num_actions = pi.shape
+    assert T.shape == (num_states, num_actions,
+                       num_states), "Transition probability table must have shape (num_states, num_actions, num_states)"
+    if mu is None:
+        mu = np.ones(num_states) / num_states
+    else:
+        assert mu.shape == (num_states,), "Initial state distribution must have shape (num_states,)"
+    assert 0 <= gamma < 1, "Discount factor must be >=0 and <1"
+    assert np.allclose(pi.sum(axis=-1), 1), "Policy must sum to 1 across actions"
+    assert np.isclose(mu.sum(), 1), "Initial state distribution must sum to 1"
+
+    Q = np.random.rand(num_states, num_actions)
+    beta = 1.0
+    U = np.random.rand(num_states)
+    EU_pi = policy_evaluation(pi, U, T, gamma, mu)
+    pi_soft = np.ones((num_states, num_actions)) / num_actions
+    d_pi = np.random.rand(num_states)
+    current_meg = 0
+
+    eps = 1e-9
+
+    for iter in range(max_iterations):
+
+        old_U = U.copy()
+        old_meg = current_meg
+        Q, pi_soft = soft_value_iteration(U, T, beta, gamma, Q)
+
+        d_pi = state_occupancy(pi, T, gamma, mu, d=d_pi)
+        d_pi_soft = state_occupancy(pi_soft, T, gamma, mu, d=d_pi)
+        grad = einops.einsum(d_pi - d_pi_soft, U, 'states, states -> states')
+
+        U += lr * grad
+
+        if np.allclose(U, old_U, atol=0.01):
+            da = state_action_occupancy(pi, T, gamma, mu)
+            current_meg = einops.einsum(da, np.log(pi_soft + eps) - np.log(1 / num_actions),
+                                        'states actions, states actions ->')
+        return current_meg
 
     print(f"MEG failed to converge after {iter} iterations")
 
@@ -246,18 +303,3 @@ def matt_colab_env():
     U = np.random.rand(num_states)
     mu = np.zeros(num_states)
     mu[0] = 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -200,7 +200,7 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "ascent-hard_meg"
+    env = "ascent-soft_no_meg"
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
@@ -225,6 +225,14 @@ def load_summary(exclude_crafted=True):
         tag = "canon ascent hard"
     elif env == "ascent-hard_meg":
         tag = "canon ascent hard+meg3"
+        meg_adj = True
+    elif env == "ascent-hard_no_meg":
+        tag = "canon ascent hard+meg3"
+        meg_adj = False
+    elif env == "ascent-soft_no_meg":
+        tag = "canon ascent soft+meg"
+    elif env == "ascent-soft_meg":
+        tag = "canon ascent soft+meg"
         meg_adj = True
 
     # Fetch runs from a project

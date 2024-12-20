@@ -4,7 +4,8 @@ import torch.nn.functional as F
 import numpy as np
 import einops
 
-from common.meg.meg_colab import unknown_utility_meg
+from common.meg.meg_colab import unknown_utility_meg, state_action_occupancy
+
 GAMMA = 0.9
 
 class TabularPolicy:
@@ -25,6 +26,7 @@ class TabularPolicy:
 class TabularMDP:
     custom_policies = []
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
+        assert (transition_prob.sum(dim=-1)-1).abs().max()<1e-5, "Transition Probabilities do not sum to 1"
         self.mu = torch.ones(n_states) / n_states if mu is None else mu
         self.megs = {}
         self.name = name
@@ -114,20 +116,32 @@ def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, su
         target = einops.einsum(v + log_pi, T, 's a, s a ns -> ns')
         loss = ((target - g) ** 2).mean()
 
-        log_pi_soft_star = q.log_softmax(dim=-1)
-
-        meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
 
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
-            print(f"Tmeg:{loss:.4f}\tMeg:{meg:.4f}")
+            print(f"Loss:{loss:.4f}")
         if (q - old_q).abs().max() < 1e-5:
+            meg = calculate_meg(pi, q, T, GAMMA, mu)
             if not suppress:
-                print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
+                print(f'Matt Meg converged in {i} iterations. Meg:{meg:.4f}')
             return meg
-    print(f'Titus Meg did not converge in {i} iterations')
+    print(f'Matt Meg did not converge in {i} iterations')
+    return None
+
+
+def calculate_meg(pi, q, T, gamma, mu):
+    eps = 1e-9
+    n_actions = pi.shape[1]
+    pi_soft = q.softmax(dim=-1).detach().cpu().numpy()
+    da = state_action_occupancy(pi.cpu().numpy(), T.cpu().numpy(), gamma, mu.cpu().numpy())
+    meg = einops.einsum(da, np.log(pi_soft + eps) - np.log(1 / n_actions),
+                        'states actions, states actions ->')
+    return meg
+    #Titus incorrect version:
+    log_pi_soft_star = q.log_softmax(dim=-1)
+    meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
     return meg
 
 
@@ -141,27 +155,22 @@ def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, s
     optimizer = torch.optim.Adam([g], lr=lr)
     for i in range(n_iterations):
         old_g = g.detach().clone()
-        q_est = einops.einsum(T, g, "s a ns, ns -> s a")
-        v = q_est.logsumexp(dim=-1).unsqueeze(-1)
-        meg_proxy = ((log_pi + v - q_est) ** 2).mean()
+        q = einops.einsum(T, g, "s a ns, ns -> s a")
+        v = q.logsumexp(dim=-1).unsqueeze(-1)
+        loss = ((log_pi + v - q) ** 2).mean()
 
-        # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
-        log_pi_soft_star = q_est.log_softmax(dim=-1)
-
-        meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
-
-        loss = meg_proxy
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
-            print(f"Tmeg:{meg_proxy:.4f}\tMeg:{meg:.4f}")
+            print(f"Loss:{loss:.4f}")
         if (g - old_g).abs().max() < 1e-5:
+            meg = calculate_meg(pi, q, T, GAMMA, mu)
             if not suppress:
                 print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
             return meg
     print(f'Titus Meg did not converge in {i} iterations')
-    return meg
+    return None
 
 def non_tabular_titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     n_states, n_actions, _ = T.shape
@@ -219,7 +228,7 @@ class AscenderLong(TabularMDP):
         for i in range(n_states - 3):
             T[i + 1, 1, i + 2] = 1
             T[i + 1, 0, i] = 1
-        T[(0, -1, -2), :, -1] = 1/n_actions
+        T[(0, -1, -2), :, -1] = 1#/n_actions
 
         R = torch.zeros(n_states)
         R[-2] = 10
@@ -242,7 +251,7 @@ class OneStep(TabularMDP):
         T = torch.zeros(n_states, n_actions, n_states)
         T[:2, 0, 2] = 1
         T[:2, 1, 3] = 1
-        T[2:, :, -1] = 1/n_actions
+        T[2:, :, -1] = 1#/n_actions
         R = torch.zeros(n_states)
         R[2] = 1
         mu = torch.zeros(n_states)
