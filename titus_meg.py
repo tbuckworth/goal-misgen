@@ -30,12 +30,28 @@ class TabularPolicy:
 
 
 class RewardFunc:
-    def __init__(self, R, adjustment, v, next_v):
+    def __init__(self, R, v, next_v, adjustment):
         self.R = R
         self.adjustment = adjustment
         self.v = v
         self.next_v = next_v
-        self.canonicalised_R = R + adjustment
+        self.C = R + adjustment
+        self.n_actions = self.R.shape[1]
+        self.n_states = self.R.shape[0]
+        self.state = torch.arange(self.n_states).unsqueeze(-1).tile(self.n_actions)
+        self.action = torch.arange(self.n_actions).unsqueeze(0).tile(self.n_states, 1)
+        self.data = {
+            "State": self.state.reshape(-1),
+            "Action": self.action.reshape(-1),
+            "Reward": self.R.reshape(-1),
+            "Value": self.v.tile(self.n_actions).reshape(-1),
+            "Next Value": self.next_v.reshape(-1),
+            "Adjustment": self.adjustment.reshape(-1),
+            "Canonicalised Reward": self.C.reshape(-1),
+        }
+        self.df = pd.DataFrame(self.data).round(decimals=2)
+    def print(self):
+        print(self.df)
 
 
 class TabularMDP:
@@ -113,22 +129,19 @@ class TabularMDP:
         if pirc_type == "Hard":
             adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
             policy.hard_canon = self.canonicalise(adv)
-            ca = policy.hard_canon.canonicalised_R
+            ca = policy.hard_canon.C
         elif pirc_type == "Soft":
             adv = policy.log_pi
             policy.soft_canon = self.canonicalise(adv)
-            ca = policy.soft_canon.canonicalised_R
+            ca = policy.soft_canon.C
         else:
             raise NotImplementedError(f"pirc_type must be one of 'Hard','Soft'. Not {pirc_type}.")
 
         nca = self.normalize(ca)
-        ncr = self.normalize(self.R.canonicalised_R)
+        ncr = self.normalize(self.R.C)
 
-        nca = self.normalize((ca*self.T).sum(dim=-1))
-        ncr = self.normalize((self.R.canonicalised_R*self.T).sum(dim=-1))
-
-        plt.scatter(nca.cpu().numpy(), ncr.cpu().numpy())
-        plt.show()
+        # plt.scatter(nca.cpu().numpy(), ncr.cpu().numpy())
+        # plt.show()
 
         return self.distance(nca, ncr).item()
 
@@ -190,10 +203,12 @@ class TabularMDP:
 
         v = self.value_iteration(trusted_pi, R3)
 
-        next_v = v.view(1,1,-1)
-        adjustment = self.gamma * next_v - v.view(-1,1,1)
+        R2 = (R3 * self.T).sum(dim=-1)
 
-        return RewardFunc(R3, v.view(-1,1,1), next_v, adjustment)
+        next_v = (self.T * v.view(1, 1, -1)).sum(dim=-1)
+        adjustment = self.gamma * next_v - v.view(-1, 1)
+
+        return RewardFunc(R2, v.view(-1, 1), next_v, adjustment)
 
     def value_iteration(self, pi, R, n_iterations: int = 10000):
         T = self.T
@@ -202,7 +217,7 @@ class TabularMDP:
 
         for _ in range(n_iterations):
             old_V = V
-            Q = einops.einsum(T, (R + self.gamma * V.view(1,1,-1)), "s a ns, s a ns -> s a")
+            Q = einops.einsum(T, (R + self.gamma * V.view(1, 1, -1)), "s a ns, s a ns -> s a")
             V = einops.einsum(pi, Q, "s a, s a -> s")
             if (V - old_V).abs().max() < 1e-5:
                 return V
@@ -451,7 +466,7 @@ def main():
     for name, env in envs.items():
         env.calc_pircs(verbose=True)
 
-    c = envs["One Step"].policies["Hard"].hard_canon
+    c = envs["One Step"].policies["Soft"].soft_canon
     c = envs["One Step"].R
 
     for name, env in envs.items():
