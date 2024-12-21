@@ -51,7 +51,7 @@ class RewardFunc:
         }
         self.df = pd.DataFrame(self.data).round(decimals=2)
     def print(self):
-        print(self.df)
+        print(self.df.round(decimals=2))
 
 
 class TabularMDP:
@@ -71,15 +71,16 @@ class TabularMDP:
         self.reward_vector = reward_vector  # Shape: (n_states,)
         self.gamma = gamma
         self.soft_opt = self.soft_q_value_iteration(print_message=False, n_iterations=10000)
-        self.hard_opt = self.q_value_iteration(print_message=False, n_iterations=10000)
+        self.hard_opt = self.q_value_iteration(print_message=False, n_iterations=10000, argmax=True)
+        self.hard_smax = self.q_value_iteration(print_message=False, n_iterations=10000, argmax=False)
 
         q_uni = torch.zeros((n_states, n_actions))
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
-        policies = [self.soft_opt, self.hard_opt, self.uniform] + self.custom_policies
+        policies = [self.soft_opt, self.hard_opt, self.hard_smax, self.uniform] + self.custom_policies
         self.policies = {p.name: p for p in policies}
 
-    def q_value_iteration(self, n_iterations=1000, print_message=True):
+    def q_value_iteration(self, n_iterations=1000, print_message=True, argmax=True):
         T = self.T
         R = self.reward_vector
         gamma = self.gamma
@@ -97,8 +98,14 @@ class TabularMDP:
             if (Q - old_Q).abs().max() < 1e-5:
                 if print_message:
                     print(f'Q-value iteration converged in {i} iterations')
-                pi = torch.nn.functional.one_hot(Q.argmax(dim=1), num_classes=n_actions).float()
-                return TabularPolicy("Hard", pi, Q, V)
+                if argmax:
+                    pi = torch.nn.functional.one_hot(Q.argmax(dim=1), num_classes=n_actions).float()
+                    policy_name = "Hard Argmax"
+                else:
+                    policy_name = "Hard Smax"
+                    pi = (Q*1000).softmax(dim=-1)
+                return TabularPolicy(policy_name, pi, Q, V)
+
         print(f"Q-value iteration did not converge in {i} iterations")
         return None
 
@@ -138,7 +145,7 @@ class TabularMDP:
             raise NotImplementedError(f"pirc_type must be one of 'Hard','Soft'. Not {pirc_type}.")
 
         nca = self.normalize(ca)
-        ncr = self.normalize(self.R.C)
+        ncr = self.normalize(self.canon.C)
 
         # plt.scatter(nca.cpu().numpy(), ncr.cpu().numpy())
         # plt.show()
@@ -175,14 +182,23 @@ class TabularMDP:
         return df
 
     def calc_pircs(self, verbose=False):
-        self.R = self.canonicalise(self.reward_vector)
+        self.canon = self.canonicalise(self.reward_vector)
         for pirc_type in ["Hard", "Soft"]:
             self.pirc(pirc_type)
         df = pd.DataFrame(self.pircs).round(decimals=2)
         if verbose:
-            print(f"{self.name} Environment")
+            print(f"\n{self.name} Environment")
             print(df)
         return df
+
+    def meg_pirc(self):
+        if self.pircs == {}:
+            self.calc_pircs()
+        if self.megs == {}:
+            self.calc_megs()
+        d = {"Meg": self.megs, "PIRC": self.pircs}
+        df = pd.concat({k: pd.DataFrame.from_dict(v, orient='index').T for k, v in d.items()}, axis=1)
+        return df.round(decimals=2)
 
     def canonicalise(self, R, trusted_pi=None):
         if trusted_pi is None:
@@ -367,7 +383,7 @@ class AscenderLong(TabularMDP):
         go_left[:, 0] = 1
         self.go_left = TabularPolicy("Go Left", go_left)
         self.custom_policies = [self.go_left]
-        super().__init__(n_states, n_actions, T, R, mu, gamma, f"Ascender: {int(n_states - 2 / 2)} Pos States")
+        super().__init__(n_states, n_actions, T, R, mu, gamma, f"Ascender: {int((n_states - 2) // 2)} Pos States")
 
 
 class OneStep(TabularMDP):
@@ -451,23 +467,32 @@ class MattGridworld(TabularMDP):
 
 
 meg_funcs = {
-    "titus_meg": titus_meg,
+    "Titus Meg": titus_meg,
     # "non_tabular_titus_meg": non_tabular_titus_meg,
     # "matt_meg": matt_meg,
-    "meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA,
+    "Real Meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA,
                                                            mu=mu.cpu().numpy()),
 }
 
 
 def main():
-    envs = [OneStep(), AscenderLong(n_states=6), MattGridworld()]
+    envs = [MattGridworld(), OneStep(), AscenderLong(n_states=6), ]
     envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
-        env.calc_pircs(verbose=True)
+        print(f"\n{name}:\n{env.meg_pirc()}")
 
-    c = envs["One Step"].policies["Soft"].soft_canon
-    c = envs["One Step"].R
+    return
+
+    name = "Matt Gridworld"
+
+    envs[name].canon.print()
+    envs[name].policies["Hard Smax"].soft_canon.print()
+    envs[name].policies["Hard Smax"].hard_canon.print()
+
+    for _, env in envs.items():
+        for _, policy in env.policies.items():
+            print(((policy.hard_canon.v).abs()<1e-5).all())
 
     for name, env in envs.items():
         env.calc_megs(verbose=True)
