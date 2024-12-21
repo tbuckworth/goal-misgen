@@ -10,6 +10,7 @@ from helper_local import norm_funcs, dist_funcs
 
 GAMMA = 0.9
 
+
 class TabularPolicy:
     def __init__(self, name, pi, Q=None, V=None):
         self.name = name
@@ -34,14 +35,14 @@ class RewardFunc:
         self.adjustment = adjustment
         self.v = v
         self.next_v = next_v
-        self.canonicalised_R = R + adjustment.unsqueeze(-1)
-
+        self.canonicalised_R = R + adjustment
 
 
 class TabularMDP:
     custom_policies = []
+
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
-        assert (transition_prob.sum(dim=-1)-1).abs().max()<1e-5, "Transition Probabilities do not sum to 1"
+        assert (transition_prob.sum(dim=-1) - 1).abs().max() < 1e-5, "Transition Probabilities do not sum to 1"
         self.mu = torch.ones(n_states) / n_states if mu is None else mu
         self.megs = {}
         self.pircs = {}
@@ -60,7 +61,7 @@ class TabularMDP:
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
         policies = [self.soft_opt, self.hard_opt, self.uniform] + self.custom_policies
-        self.policies = {p.name:p for p in policies}
+        self.policies = {p.name: p for p in policies}
 
     def q_value_iteration(self, n_iterations=1000, print_message=True):
         T = self.T
@@ -110,7 +111,7 @@ class TabularMDP:
 
     def calc_pirc(self, policy, pirc_type):
         if pirc_type == "Hard":
-            adv = policy.log_pi + policy.log_pi.mean(dim=-1).unsqueeze(-1)
+            adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
             policy.hard_canon = self.canonicalise(adv)
             ca = policy.hard_canon.canonicalised_R
         elif pirc_type == "Soft":
@@ -123,8 +124,13 @@ class TabularMDP:
         nca = self.normalize(ca)
         ncr = self.normalize(self.R.canonicalised_R)
 
-        return self.distance(nca, ncr).item()
+        nca = self.normalize((ca*self.T).sum(dim=-1))
+        ncr = self.normalize((self.R.canonicalised_R*self.T).sum(dim=-1))
 
+        plt.scatter(nca.cpu().numpy(), ncr.cpu().numpy())
+        plt.show()
+
+        return self.distance(nca, ncr).item()
 
     def meg(self, method="matt_meg", verbose=False):
         meg_func = meg_funcs[method]
@@ -169,34 +175,43 @@ class TabularMDP:
         if trusted_pi is None:
             trusted_pi = self.uniform.pi
 
-        if R.ndim < 2:
-            # convert to next state reward
-            R = einops.einsum(self.T, R, 's a ns, s -> s a')
-        v = self.value_iteration(trusted_pi, R)
-        next_v = einops.einsum(v, trusted_pi, self.T, 's, s a, s a ns -> ns')
+        R3 = torch.zeros_like(self.T)
 
-        adjustment = self.gamma * next_v - v
-        return RewardFunc(R, v, next_v, adjustment)
+        if R.ndim == 1:
+            # State reward becomes state, action, next state
+            R3[:, :, :] = R
+        elif R.ndim == 2:
+            # State action reward becomes state, action, next state
+            R3 = R.unsqueeze(-1).tile(self.T.shape[-1])
+        elif R.ndim == 3:
+            R3 = R
+        else:
+            raise Exception(f"R.ndim must be 1, 2, or 3, not {R.ndim}.")
 
-    def value_iteration(self, pi, R, n_iterations: int=10000):
+        v = self.value_iteration(trusted_pi, R3)
+
+        next_v = v.view(1,1,-1)
+        adjustment = self.gamma * next_v - v.view(-1,1,1)
+
+        return RewardFunc(R3, v.view(-1,1,1), next_v, adjustment)
+
+    def value_iteration(self, pi, R, n_iterations: int = 10000):
         T = self.T
         n_states = self.n_states
-        V = torch.zeros((n_states,1))
+        V = torch.zeros((n_states))
 
         for _ in range(n_iterations):
             old_V = V
-            Q = einops.einsum(T,(R+self.gamma * V), "s a ns, s a -> s a")
-
-            # Q = (T * (R + self.gamma * V)).sum(dim=-1)
-            V = (Q * pi).sum(dim=-1).unsqueeze(-1)
+            Q = einops.einsum(T, (R + self.gamma * V.view(1,1,-1)), "s a ns, s a ns -> s a")
+            V = einops.einsum(pi, Q, "s a, s a -> s")
             if (V - old_V).abs().max() < 1e-5:
-                return V.squeeze()
+                return V
         print(f"Value Iteration did not converge after {n_iterations} iterations.")
         return None
 
 
 def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
-    #TODO: do Matt's new version
+    # TODO: do Matt's new version
     n_states, n_actions, _ = T.shape
     q = torch.randn(n_states, n_actions, requires_grad=True)
     log_pi = pi.log()
@@ -211,7 +226,6 @@ def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, su
 
         target = einops.einsum(v + log_pi, T, 's a, s a ns -> ns')
         loss = ((target - g) ** 2).mean()
-
 
         loss.backward()
         optimizer.step()
@@ -235,7 +249,7 @@ def calculate_meg(pi, q, T, gamma, mu):
     meg = einops.einsum(da, np.log(pi_soft + eps) - np.log(1 / n_actions),
                         'states actions, states actions ->')
     return meg
-    #Titus incorrect version:
+    # Titus incorrect version:
     log_pi_soft_star = q.log_softmax(dim=-1)
     meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
     return meg
@@ -267,6 +281,7 @@ def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, s
             return meg
     print(f'Titus Meg did not converge in {i} iterations')
     return None
+
 
 def non_tabular_titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     n_states, n_actions, _ = T.shape
@@ -324,20 +339,20 @@ class AscenderLong(TabularMDP):
         for i in range(n_states - 3):
             T[i + 1, 1, i + 2] = 1
             T[i + 1, 0, i] = 1
-        T[(0, -1, -2), :, -1] = 1#/n_actions
+        T[(0, -1, -2), :, -1] = 1  # /n_actions
 
         R = torch.zeros(n_states)
         R[-2] = 10
         R[0] = -10
 
         mu = torch.zeros(n_states)
-        mu[(n_states-1)//3] = 1.
+        mu[(n_states - 1) // 3] = 1.
 
         go_left = torch.zeros((n_states, n_actions))
         go_left[:, 0] = 1
         self.go_left = TabularPolicy("Go Left", go_left)
         self.custom_policies = [self.go_left]
-        super().__init__(n_states, n_actions, T, R, mu, gamma, f"Ascender: {int(n_states-2/2)} Pos States")
+        super().__init__(n_states, n_actions, T, R, mu, gamma, f"Ascender: {int(n_states - 2 / 2)} Pos States")
 
 
 class OneStep(TabularMDP):
@@ -347,7 +362,7 @@ class OneStep(TabularMDP):
         T = torch.zeros(n_states, n_actions, n_states)
         T[:2, 0, 2] = 1
         T[:2, 1, 3] = 1
-        T[2:, :, -1] = 1#/n_actions
+        T[2:, :, -1] = 1  # /n_actions
         R = torch.zeros(n_states)
         R[2] = 1
         mu = torch.zeros(n_states)
@@ -363,6 +378,7 @@ class OneStep(TabularMDP):
         self.inconsistent = TabularPolicy("Inconsistent", inconsistent_pi)
         self.custom_policies = [self.consistent, self.inconsistent]
         super().__init__(n_states, n_actions, T, R, mu, gamma, "One Step")
+
 
 class MattGridworld(TabularMDP):
     def __init__(self, gamma=GAMMA, N=5):
@@ -423,12 +439,14 @@ meg_funcs = {
     "titus_meg": titus_meg,
     # "non_tabular_titus_meg": non_tabular_titus_meg,
     # "matt_meg": matt_meg,
-    "meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA, mu=mu.cpu().numpy()),
+    "meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA,
+                                                           mu=mu.cpu().numpy()),
 }
+
 
 def main():
     envs = [OneStep(), AscenderLong(n_states=6), MattGridworld()]
-    envs = {e.name:e for e in envs}
+    envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
         env.calc_pircs(verbose=True)
