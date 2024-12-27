@@ -1,12 +1,17 @@
 import pandas as pd
 import torch
-# import torch.nn.functional as F
+import torch.nn.functional as F
+from torch import nn
 import numpy as np
 import einops
 
 from meg.meg_colab import unknown_utility_meg, state_action_occupancy
 
 # from helper_local import norm_funcs, dist_funcs
+
+def cosine_similarity_loss(vec1, vec2):
+    return 1 - F.cosine_similarity(vec1.reshape(-1), vec2.reshape(-1),dim=-1).mean()
+
 
 norm_funcs = {
     "l1_norm": lambda x: x if (x == 0).all() else x / x.abs().mean(),
@@ -92,6 +97,10 @@ class TabularMDP:
         q_uni = torch.zeros((n_states, n_actions))
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
+        self.hard_adv_cosine = self.hard_adv_learner(print_message=False,
+                                                     n_iterations=10000,
+                                                     criterion=cosine_similarity_loss,
+                                                     name="Hard Adv Cosine")
         self.hard_adv = self.hard_adv_learner(print_message=False, n_iterations=10000)
         self.hard_adv_stepped = self.hard_adv_learner_stepped(print_message=False, n_iterations=10000)
         self.hard_adv_cont = self.hard_adv_learner_continual(print_message=False, n_iterations=10000)
@@ -99,6 +108,7 @@ class TabularMDP:
                     self.hard_opt,
                     self.hard_smax,
                     self.hard_adv,
+                    self.hard_adv_cosine,
                     self.hard_adv_stepped,
                     self.hard_adv_cont,
                     self.uniform] + self.custom_policies
@@ -143,7 +153,7 @@ class TabularMDP:
         print(f"Q-value iteration did not converge in {i} iterations")
         return None
 
-    def hard_adv_learner(self, n_iterations=1000, lr=1e-1, print_message=True):
+    def hard_adv_learner(self, n_iterations=1000, lr=1e-1, print_message=True, criterion=nn.MSELoss(), name="Hard Adv"):
         T = self.T
         R = self.reward_vector
         gamma = self.gamma
@@ -159,7 +169,7 @@ class TabularMDP:
             old_logits = logits.detach().clone()
             log_pi = logits.log_softmax(dim=-1)
             g = log_pi - log_pi.mean(dim=-1).unsqueeze(-1)
-            loss = ((g - cr) ** 2).mean()
+            loss = criterion(g, cr)
 
             loss.backward()
             optimizer.step()
@@ -168,7 +178,7 @@ class TabularMDP:
                 if print_message:
                     print(f'hard adv learning converged in {i} iterations')
                 pi = logits.softmax(dim=-1).detach()
-                return TabularPolicy("Hard Adv", pi)
+                return TabularPolicy(name, pi)
         print('hard adv learning did not converge after', n_iterations, 'iterations')
         return None
 
@@ -333,7 +343,7 @@ class TabularMDP:
         for name, policy in self.policies.items():
             returns[name] = self.evaluate_policy(policy)
         self.returns["Hard"] = returns
-        df = pd.DataFrame({"Returns":self.returns}).round(decimals=2)
+        df = pd.DataFrame(self.returns).round(decimals=2)
         if verbose:
             print(f"{self.name} Environment")
             print(df)
