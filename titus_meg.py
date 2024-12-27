@@ -1,12 +1,23 @@
-import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-import torch.nn.functional as F
+# import torch.nn.functional as F
 import numpy as np
 import einops
 
-from common.meg.meg_colab import unknown_utility_meg, state_action_occupancy
-from helper_local import norm_funcs, dist_funcs
+from meg.meg_colab import unknown_utility_meg, state_action_occupancy
+
+# from helper_local import norm_funcs, dist_funcs
+
+norm_funcs = {
+    "l1_norm": lambda x: x if (x == 0).all() else x / x.abs().mean(),
+    "l2_norm": lambda x: x if (x == 0).all() else x / x.pow(2).mean().sqrt(),
+    "linf_norm": lambda x: x if (x == 0).all() else x / x.abs().max(),
+}
+
+dist_funcs = {
+    "l1_dist": lambda x, y: (x - y).abs().mean(),
+    "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+}
 
 GAMMA = 0.9
 
@@ -49,7 +60,10 @@ class RewardFunc:
             "Adjustment": self.adjustment.reshape(-1),
             "Canonicalised Reward": self.C.reshape(-1),
         }
+        if len(np.unique([v.shape for k, v in self.data.items()])) > 1:
+            raise Exception
         self.df = pd.DataFrame(self.data).round(decimals=2)
+
     def print(self):
         print(self.df.round(decimals=2))
 
@@ -103,10 +117,39 @@ class TabularMDP:
                     policy_name = "Hard Argmax"
                 else:
                     policy_name = "Hard Smax"
-                    pi = (Q*1000).softmax(dim=-1)
+                    pi = (Q * 1000).softmax(dim=-1)
                 return TabularPolicy(policy_name, pi, Q, V)
 
         print(f"Q-value iteration did not converge in {i} iterations")
+        return None
+
+    def hard_adv_learner(self, n_iterations=1000, lr=1e-1, print_message=True):
+        T = self.T
+        R = self.reward_vector
+        gamma = self.gamma
+        n_states = self.n_states
+        n_actions = self.n_actions
+
+        logits = torch.rand((n_states, n_actions), requires_grad=True)
+        optimizer = torch.optim.Adam([logits], lr=lr)
+        with torch.no_grad():
+            cr = self.canonicalise(R).C
+
+        for i in range(n_iterations):
+            old_logits = logits.detach().clone()
+            log_pi = logits.log_softmax(dim=-1)
+            g = log_pi - log_pi.mean(dim=-1).unsqueeze(-1)
+            loss = ((g - cr) ** 2).mean()
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            if torch.allclose(logits, old_logits):
+                if print_message:
+                    print(f'hard adv learning converged in {i} iterations')
+                pi = logits.softmax(dim=-1)
+                return TabularPolicy("Hard Adv", pi)
+        print('hard adv learning did not converge after', n_iterations, 'iterations')
         return None
 
     def soft_q_value_iteration(self, n_iterations=1000, print_message=True):
@@ -133,16 +176,24 @@ class TabularMDP:
         return None
 
     def calc_pirc(self, policy, pirc_type):
-        if pirc_type == "Hard":
+        if pirc_type in ["Hard", "Hard no C"]:
             adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
-            policy.hard_canon = self.canonicalise(adv)
-            ca = policy.hard_canon.C
+            if pirc_type == "Hard":
+                policy.hard_canon = self.canonicalise(adv)
+                ca = policy.hard_canon.C
+            elif pirc_type == "Hard no C":
+                v = torch.zeros((adv.shape[0], 1))
+                z = torch.zeros_like(adv)
+                policy.hard_no_canon = RewardFunc(adv, v, z, z)
+                ca = adv
+            else:
+                raise NotImplementedError
         elif pirc_type == "Soft":
             adv = policy.log_pi
             policy.soft_canon = self.canonicalise(adv)
             ca = policy.soft_canon.C
         else:
-            raise NotImplementedError(f"pirc_type must be one of 'Hard','Soft'. Not {pirc_type}.")
+            raise NotImplementedError(f"pirc_type must be one of 'Hard','Hard no C','Soft'. Not {pirc_type}.")
 
         nca = self.normalize(ca)
         ncr = self.normalize(self.canon.C)
@@ -183,7 +234,7 @@ class TabularMDP:
 
     def calc_pircs(self, verbose=False):
         self.canon = self.canonicalise(self.reward_vector)
-        for pirc_type in ["Hard", "Soft"]:
+        for pirc_type in ["Hard", "Hard no C", "Soft"]:
             self.pirc(pirc_type)
         df = pd.DataFrame(self.pircs).round(decimals=2)
         if verbose:
@@ -471,7 +522,7 @@ meg_funcs = {
     # "non_tabular_titus_meg": non_tabular_titus_meg,
     # "matt_meg": matt_meg,
     "Real Meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA,
-                                                           mu=mu.cpu().numpy()),
+                                                                mu=mu.cpu().numpy()),
 }
 
 
@@ -480,7 +531,8 @@ def main():
     envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
-        print(f"\n{name}:\n{env.meg_pirc()}")
+        env.calc_pircs(verbose=True)
+        # print(f"\n{name}:\n{env.meg_pirc()}")
 
     return
 
@@ -492,7 +544,7 @@ def main():
 
     for _, env in envs.items():
         for _, policy in env.policies.items():
-            print(((policy.hard_canon.v).abs()<1e-5).all())
+            print(((policy.hard_canon.v).abs() < 1e-5).all())
 
     for name, env in envs.items():
         env.calc_megs(verbose=True)
@@ -500,5 +552,11 @@ def main():
     print("done")
 
 
+def try_hard_meg_train():
+    env = AscenderLong(n_states=6)
+    policy = env.hard_adv_learner()
+
+    return
+
 if __name__ == "__main__":
-    main()
+    try_hard_meg_train()
