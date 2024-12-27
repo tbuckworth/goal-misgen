@@ -76,6 +76,7 @@ class TabularMDP:
         self.mu = torch.ones(n_states) / n_states if mu is None else mu
         self.megs = {}
         self.pircs = {}
+        self.returns = {}
         self.normalize = norm_funcs["l2_norm"]
         self.distance = dist_funcs["l2_dist"]
         self.name = name
@@ -91,8 +92,27 @@ class TabularMDP:
         q_uni = torch.zeros((n_states, n_actions))
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
-        policies = [self.soft_opt, self.hard_opt, self.hard_smax, self.uniform] + self.custom_policies
-        self.policies = {p.name: p for p in policies}
+        self.hard_adv = self.hard_adv_learner(print_message=False, n_iterations=10000)
+        self.hard_adv_stepped = self.hard_adv_learner_stepped(print_message=False, n_iterations=10000)
+        self.hard_adv_cont = self.hard_adv_learner_continual(print_message=False, n_iterations=10000)
+        policies = [self.soft_opt,
+                    self.hard_opt,
+                    self.hard_smax,
+                    self.hard_adv,
+                    self.hard_adv_stepped,
+                    self.hard_adv_cont,
+                    self.uniform] + self.custom_policies
+        self.policies = {p.name: p for p in policies if p is not None}
+
+    def evaluate_policy(self, policy: TabularPolicy):
+        R3 = torch.zeros_like(self.T)
+        # State reward becomes state, action, next state
+        R3[:, :, :] = self.reward_vector
+        v = self.value_iteration(policy.pi, R3)
+
+        ret = einops.einsum(self.mu,v, "s, s ->")
+        return ret.item()
+
 
     def q_value_iteration(self, n_iterations=1000, print_message=True, argmax=True):
         T = self.T
@@ -147,10 +167,76 @@ class TabularMDP:
             if torch.allclose(logits, old_logits):
                 if print_message:
                     print(f'hard adv learning converged in {i} iterations')
-                pi = logits.softmax(dim=-1)
+                pi = logits.softmax(dim=-1).detach()
                 return TabularPolicy("Hard Adv", pi)
         print('hard adv learning did not converge after', n_iterations, 'iterations')
         return None
+
+    def hard_adv_learner_stepped(self, n_iterations=1000, lr=1e-1, print_message=True):
+        T = self.T
+        R = self.reward_vector
+        gamma = self.gamma
+        n_states = self.n_states
+        n_actions = self.n_actions
+
+        logits = (torch.ones((n_states, n_actions))/n_actions).log()
+        logits.requires_grad = True
+
+        optimizer = torch.optim.Adam([logits], lr=lr)
+        for epoch in range(n_iterations):
+            start_logits = logits.detach().clone()
+            with torch.no_grad():
+                cr = self.canonicalise(R, logits.softmax(dim=-1)).C
+
+            for i in range(n_iterations):
+                old_logits = logits.detach().clone()
+                log_pi = logits.log_softmax(dim=-1)
+                g = log_pi - log_pi.mean(dim=-1).unsqueeze(-1)
+                loss = ((g - cr) ** 2).mean()
+
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                if torch.allclose(logits, old_logits):
+                    break
+            if torch.allclose(logits, start_logits):
+                if print_message:
+                    print(f'hard adv stepped converged in {epoch} epochs')
+                pi = logits.softmax(dim=-1).detach()
+                return TabularPolicy("Hard Adv Stepped", pi)
+        print('hard adv stepped did not converge after', n_iterations, 'epochs')
+        return None
+
+    def hard_adv_learner_continual(self, n_iterations=1000, lr=1e-1, print_message=True):
+        T = self.T
+        R = self.reward_vector
+        gamma = self.gamma
+        n_states = self.n_states
+        n_actions = self.n_actions
+
+        logits = (torch.ones((n_states, n_actions)) / n_actions).log()
+        logits.requires_grad = True
+        optimizer = torch.optim.Adam([logits], lr=lr)
+        for i in range(n_iterations):
+            start_logits = logits.detach().clone()
+            with torch.no_grad():
+                cr = self.canonicalise(R, logits.softmax(dim=-1)).C
+            log_pi = logits.log_softmax(dim=-1)
+            g = log_pi - log_pi.mean(dim=-1).unsqueeze(-1)
+            loss = ((g - cr) ** 2).mean()
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            if torch.allclose(logits, start_logits):
+                if print_message:
+                    print(f'hard adv continual converged in {i} iterations')
+                pi = logits.softmax(dim=-1).detach()
+                return TabularPolicy("Hard Adv Cont", pi)
+        print('hard adv continual did not converge after', n_iterations, 'iterations')
+        return None
+
 
     def soft_q_value_iteration(self, n_iterations=1000, print_message=True):
         T = self.T
@@ -242,12 +328,25 @@ class TabularMDP:
             print(df)
         return df
 
+    def calc_returns(self, verbose=False):
+        returns = {}
+        for name, policy in self.policies.items():
+            returns[name] = self.evaluate_policy(policy)
+        self.returns["Hard"] = returns
+        df = pd.DataFrame({"Returns":self.returns}).round(decimals=2)
+        if verbose:
+            print(f"{self.name} Environment")
+            print(df)
+        return df
+
     def meg_pirc(self):
         if self.pircs == {}:
             self.calc_pircs()
         if self.megs == {}:
             self.calc_megs()
-        d = {"Meg": self.megs, "PIRC": self.pircs}
+        if self.returns == {}:
+            self.calc_returns()
+        d = {"Meg": self.megs, "PIRC": self.pircs, "Expected Return": self.returns}
         df = pd.concat({k: pd.DataFrame.from_dict(v, orient='index').T for k, v in d.items()}, axis=1)
         return df.round(decimals=2)
 
@@ -428,7 +527,7 @@ class AscenderLong(TabularMDP):
         R[0] = -10
 
         mu = torch.zeros(n_states)
-        mu[(n_states - 1) // 3] = 1.
+        mu[(n_states - 1) // 2] = 1.
 
         go_left = torch.zeros((n_states, n_actions))
         go_left[:, 0] = 1
@@ -531,8 +630,8 @@ def main():
     envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
-        env.calc_pircs(verbose=True)
-        # print(f"\n{name}:\n{env.meg_pirc()}")
+        # env.calc_pircs(verbose=True)
+        print(f"\n{name}:\n{env.meg_pirc()}")
 
     return
 
@@ -552,11 +651,12 @@ def main():
     print("done")
 
 
-def try_hard_meg_train():
-    env = AscenderLong(n_states=6)
-    policy = env.hard_adv_learner()
-
+def try_hard_adv_train():
+    envs = [AscenderLong(n_states=6), MattGridworld(), OneStep(), ]
+    # envs[0].evaluate_policy(envs[0].uniform)
+    [env.calc_returns(verbose=True) for env in envs]
     return
 
 if __name__ == "__main__":
-    try_hard_meg_train()
+    main()
+    # try_hard_adv_train()
