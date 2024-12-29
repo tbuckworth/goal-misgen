@@ -174,7 +174,7 @@ class TabularMDP:
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-            if torch.allclose(logits, old_logits):
+            if torch.allclose(logits, old_logits, atol=1e-5):
                 if print_message:
                     print(f'hard adv learning converged in {i} iterations')
                 pi = logits.softmax(dim=-1).detach()
@@ -207,9 +207,9 @@ class TabularMDP:
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-                if torch.allclose(logits, old_logits):
+                if torch.allclose(logits, old_logits, atol=1e-5):
                     break
-            if torch.allclose(logits, start_logits):
+            if torch.allclose(logits, start_logits, atol=1e-5):
                 if print_message:
                     print(f'hard adv stepped converged in {epoch} epochs')
                 pi = logits.softmax(dim=-1).detach()
@@ -239,7 +239,7 @@ class TabularMDP:
             optimizer.step()
             optimizer.zero_grad()
 
-            if torch.allclose(logits, start_logits):
+            if torch.allclose(logits, start_logits, atol=1e-5):
                 if print_message:
                     print(f'hard adv continual converged in {i} iterations')
                 pi = logits.softmax(dim=-1).detach()
@@ -645,11 +645,11 @@ def main():
 
     return
 
-    name = "Matt Gridworld"
-
+    name = "Ascender: 2 Pos States"
+    policy = "Hard Smax"
     envs[name].canon.print()
-    envs[name].policies["Hard Smax"].soft_canon.print()
-    envs[name].policies["Hard Smax"].hard_canon.print()
+    envs[name].policies[policy].soft_canon.print()
+    envs[name].policies[policy].hard_canon.print()
 
     for _, env in envs.items():
         for _, policy in env.policies.items():
