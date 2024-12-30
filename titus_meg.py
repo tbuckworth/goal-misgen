@@ -7,10 +7,11 @@ import einops
 
 from meg.meg_colab import unknown_utility_meg, state_action_occupancy
 
+
 # from helper_local import norm_funcs, dist_funcs
 
 def cosine_similarity_loss(vec1, vec2):
-    return 1 - F.cosine_similarity(vec1.reshape(-1), vec2.reshape(-1),dim=-1).mean()
+    return 1 - F.cosine_similarity(vec1.reshape(-1), vec2.reshape(-1), dim=-1).mean()
 
 
 norm_funcs = {
@@ -77,6 +78,8 @@ class TabularMDP:
     custom_policies = []
 
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
+        self.new_pircs = {}
+        self.canon = None
         assert (transition_prob.sum(dim=-1) - 1).abs().max() < 1e-5, "Transition Probabilities do not sum to 1"
         self.mu = torch.ones(n_states) / n_states if mu is None else mu
         self.megs = {}
@@ -102,15 +105,15 @@ class TabularMDP:
                                                      criterion=cosine_similarity_loss,
                                                      name="Hard Adv Cosine")
         self.hard_adv = self.hard_adv_learner(print_message=False, n_iterations=10000)
-        self.hard_adv_stepped = self.hard_adv_learner_stepped(print_message=False, n_iterations=10000)
-        self.hard_adv_cont = self.hard_adv_learner_continual(print_message=False, n_iterations=10000)
+        # self.hard_adv_stepped = self.hard_adv_learner_stepped(print_message=False, n_iterations=10000)
+        # self.hard_adv_cont = self.hard_adv_learner_continual(print_message=False, n_iterations=10000)
         policies = [self.soft_opt,
                     self.hard_opt,
                     self.hard_smax,
                     self.hard_adv,
                     self.hard_adv_cosine,
-                    self.hard_adv_stepped,
-                    self.hard_adv_cont,
+                    # self.hard_adv_stepped,
+                    # self.hard_adv_cont,
                     self.uniform] + self.custom_policies
         self.policies = {p.name: p for p in policies if p is not None}
 
@@ -120,9 +123,8 @@ class TabularMDP:
         R3[:, :, :] = self.reward_vector
         v = self.value_iteration(policy.pi, R3)
 
-        ret = einops.einsum(self.mu,v, "s, s ->")
+        ret = einops.einsum(self.mu, v, "s, s ->")
         return ret.item()
-
 
     def q_value_iteration(self, n_iterations=1000, print_message=True, argmax=True):
         T = self.T
@@ -189,7 +191,7 @@ class TabularMDP:
         n_states = self.n_states
         n_actions = self.n_actions
 
-        logits = (torch.ones((n_states, n_actions))/n_actions).log()
+        logits = (torch.ones((n_states, n_actions)) / n_actions).log()
         logits.requires_grad = True
 
         optimizer = torch.optim.Adam([logits], lr=lr)
@@ -246,7 +248,6 @@ class TabularMDP:
                 return TabularPolicy("Hard Adv Cont", pi)
         print('hard adv continual did not converge after', n_iterations, 'iterations')
         return None
-
 
     def soft_q_value_iteration(self, n_iterations=1000, print_message=True):
         T = self.T
@@ -319,6 +320,15 @@ class TabularMDP:
             pircs[name] = pirc
         self.pircs[pirc_type] = pircs
 
+    def new_pirc(self, is_hard):
+        pircs = {}
+
+        for name, policy in self.policies.items():
+            pirc = self.calc_new_pirc(policy, is_hard)
+            pircs[name] = pirc
+        type_name = "Hard" if is_hard else "Soft"
+        self.new_pircs[type_name] = pircs
+
     def calc_megs(self, verbose=False):
         for mf in meg_funcs.keys():
             self.meg(mf)
@@ -333,6 +343,17 @@ class TabularMDP:
         for pirc_type in ["Hard", "Hard no C", "Soft"]:
             self.pirc(pirc_type)
         df = pd.DataFrame(self.pircs).round(decimals=2)
+        if verbose:
+            print(f"\n{self.name} Environment")
+            print(df)
+        return df
+
+    def calc_new_pircs(self, verbose=False):
+        if self.canon is None:
+            self.canon = self.canonicalise(self.reward_vector)
+        for is_hard in [True, False]:
+            self.new_pirc(is_hard)
+        df = pd.DataFrame(self.new_pircs).round(decimals=2)
         if verbose:
             print(f"\n{self.name} Environment")
             print(df)
@@ -357,6 +378,15 @@ class TabularMDP:
         if self.returns == {}:
             self.calc_returns()
         d = {"Meg": self.megs, "PIRC": self.pircs, "Expected Return": self.returns}
+        df = pd.concat({k: pd.DataFrame.from_dict(v, orient='index').T for k, v in d.items()}, axis=1)
+        return df.round(decimals=2)
+
+    def all_pirc(self):
+        if self.pircs == {}:
+            self.calc_pircs()
+        if self.new_pircs == {}:
+            self.calc_new_pircs()
+        d = {"PIRC": self.pircs, "New PIRC": self.new_pircs}
         df = pd.concat({k: pd.DataFrame.from_dict(v, orient='index').T for k, v in d.items()}, axis=1)
         return df.round(decimals=2)
 
@@ -399,6 +429,57 @@ class TabularMDP:
                 return V
         print(f"Value Iteration did not converge after {n_iterations} iterations.")
         return None
+
+    def reward_from_policy(self, policy: TabularPolicy, n_iterations=10000, lr=1e-1, hard=False):
+        T = self.T
+        gamma = self.gamma
+        n_states = self.n_states
+        n_actions = self.n_actions
+        A = policy.log_pi
+        if hard:
+            A = A - A.mean(dim=-1).unsqueeze(dim=-1)
+        Q = torch.randn((n_states, n_actions), requires_grad=True)
+        optimizer = torch.optim.Adam([Q], lr=lr)
+
+        for i in range(n_iterations):
+            old_Q = Q.detach().clone()
+            if hard:
+                V = einops.einsum(policy.pi, Q, "s a, s a -> s").unsqueeze(-1)
+            else:
+                V = Q.logsumexp(dim=-1).unsqueeze(-1)
+            A_hat = Q - V
+            loss = ((A - A_hat) ** 2).mean()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            if torch.allclose(Q, old_Q, atol=1e-5):
+                if hard:
+                    V = einops.einsum(policy.pi, Q, "s a, s a -> s")
+                else:
+                    V = Q.logsumexp(dim=-1)
+                # Vn = einops.einsum(T,V, "s a ns, ns -> s a")
+                next_v = (T * V.view(1, 1, -1)).sum(dim=-1)
+
+                return (A - gamma * next_v + V.unsqueeze(-1)).detach().cpu()
+        print(f"Reward from policy did not converge after {n_iterations} iterations.")
+        return None
+
+    def calc_new_pirc(self, policy, is_hard):
+        R = self.reward_from_policy(policy, hard=is_hard)
+        if R is None:
+            return np.nan
+        canon = self.canonicalise(R)
+        if is_hard:
+            policy.new_hard_canon = canon
+        else:
+            policy.new_soft_canon = canon
+
+        cr = canon.C
+
+        nca = self.normalize(cr)
+        ncr = self.normalize(self.canon.C)
+
+        return self.distance(nca, ncr).item()
 
 
 def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
@@ -663,10 +744,21 @@ def main():
 
 def try_hard_adv_train():
     envs = [AscenderLong(n_states=6), MattGridworld(), OneStep(), ]
+    envs = {e.name: e for e in envs}
     # envs[0].evaluate_policy(envs[0].uniform)
-    [env.calc_returns(verbose=True) for env in envs]
+    [print(env.all_pirc()) for name, env in envs.items()]
+
     return
+    name = "Ascender: 2 Pos States"
+    policy = "Hard Smax"
+    envs[name].canon.print()
+    envs[name].policies[policy].new_hard_canon.print()
+    envs[name].policies[policy].hard_canon.print()
+    envs[name].policies[policy].new_soft_canon.print()
+    envs[name].policies[policy].soft_canon.print()
+
+
 
 if __name__ == "__main__":
-    main()
-    # try_hard_adv_train()
+    # main()
+    try_hard_adv_train()
