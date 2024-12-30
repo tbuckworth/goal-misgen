@@ -78,6 +78,7 @@ class TabularMDP:
     custom_policies = []
 
     def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
+        self.own_pircs = {}
         self.new_pircs = {}
         self.canon = None
         assert (transition_prob.sum(dim=-1) - 1).abs().max() < 1e-5, "Transition Probabilities do not sum to 1"
@@ -272,11 +273,12 @@ class TabularMDP:
         print('soft value iteration did not converge after', n_iterations, 'iterations')
         return None
 
-    def calc_pirc(self, policy, pirc_type):
+    def calc_pirc(self, policy, pirc_type, own_policy=False):
+        trusted_pi = policy.pi if own_policy else None
         if pirc_type in ["Hard", "Hard no C"]:
             adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
             if pirc_type == "Hard":
-                policy.hard_canon = self.canonicalise(adv)
+                policy.hard_canon = self.canonicalise(adv, trusted_pi)
                 ca = policy.hard_canon.C
             elif pirc_type == "Hard no C":
                 v = torch.zeros((adv.shape[0], 1))
@@ -287,16 +289,17 @@ class TabularMDP:
                 raise NotImplementedError
         elif pirc_type == "Soft":
             adv = policy.log_pi
-            policy.soft_canon = self.canonicalise(adv)
+            policy.soft_canon = self.canonicalise(adv, trusted_pi)
             ca = policy.soft_canon.C
         else:
             raise NotImplementedError(f"pirc_type must be one of 'Hard','Hard no C','Soft'. Not {pirc_type}.")
 
-        nca = self.normalize(ca)
-        ncr = self.normalize(self.canon.C)
+        comp_canon = self.canon
+        if own_policy:
+            comp_canon = self.canonicalise(self.reward_vector, trusted_pi)
 
-        # plt.scatter(nca.cpu().numpy(), ncr.cpu().numpy())
-        # plt.show()
+        nca = self.normalize(ca)
+        ncr = self.normalize(comp_canon.C)
 
         return self.distance(nca, ncr).item()
 
@@ -312,12 +315,15 @@ class TabularMDP:
             megs[name] = meg
         self.megs[method] = megs
 
-    def pirc(self, pirc_type):
+    def pirc(self, pirc_type, own_policy=False):
         pircs = {}
 
         for name, policy in self.policies.items():
-            pirc = self.calc_pirc(policy, pirc_type)
+            pirc = self.calc_pirc(policy, pirc_type, own_policy)
             pircs[name] = pirc
+        if own_policy:
+            self.own_pircs[pirc_type] = pircs
+            return
         self.pircs[pirc_type] = pircs
 
     def new_pirc(self, is_hard):
@@ -338,11 +344,15 @@ class TabularMDP:
             print(df)
         return df
 
-    def calc_pircs(self, verbose=False):
+    def calc_pircs(self, verbose=False, own_policy=False):
         self.canon = self.canonicalise(self.reward_vector)
-        for pirc_type in ["Hard", "Hard no C", "Soft"]:
-            self.pirc(pirc_type)
-        df = pd.DataFrame(self.pircs).round(decimals=2)
+        hard_style = ["Hard no C"]
+        if own_policy:
+            hard_style = ["Hard"]
+        for pirc_type in hard_style + ["Soft"]:
+            self.pirc(pirc_type, own_policy)
+        p = self.own_pircs if own_policy else self.pircs
+        df = pd.DataFrame(p).round(decimals=2)
         if verbose:
             print(f"\n{self.name} Environment")
             print(df)
@@ -386,7 +396,9 @@ class TabularMDP:
             self.calc_pircs()
         if self.new_pircs == {}:
             self.calc_new_pircs()
-        d = {"PIRC": self.pircs, "New PIRC": self.new_pircs}
+        if self.own_pircs == {}:
+            self.calc_pircs(own_policy=True)
+        d = {"PIRC": self.pircs, "New PIRC": self.new_pircs, "Own PIRC": self.own_pircs}
         df = pd.concat({k: pd.DataFrame.from_dict(v, orient='index').T for k, v in d.items()}, axis=1)
         return df.round(decimals=2)
 
