@@ -200,7 +200,7 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "ascent-soft_no_meg"
+    env = "ascent-hard_no_meg"
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
@@ -358,7 +358,7 @@ def load_summary(exclude_crafted=True):
     plt.show()
 
     print(df)
-
+    return
     ax = df.plot.scatter(x=x_metric, y=train_meg, alpha=0.7, color='b', label=train_meg)
     df.plot.scatter(x=x_metric, y=val_meg, alpha=0.7, color='r', ax=ax, label=val_meg)
     plt.show()
