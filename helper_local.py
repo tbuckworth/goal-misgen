@@ -24,7 +24,9 @@ def get_value_dir_and_config_for_env(env_name, env_type):
     elif env_name == "coinrun":
         raise NotImplementedError("Need to train value for coinrun")
     elif env_name == "maze":
-        raise NotImplementedError("Need to train value for maze")
+        #TODO: check this works!
+        logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
+        # raise NotImplementedError("Need to train value for maze")
     else:
         raise NotImplementedError(f"{env_name} is not a recognised environment")
     cfg = get_config(logdir)

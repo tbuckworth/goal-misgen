@@ -133,7 +133,7 @@ def hp_run(model_file):
         "seed": 42,
         "hidden_dims": [256, 256, 256],
 
-        "load_value_models": False,
+        "load_value_models": True,
         "soft_canonicalisation": False,
 
         # "use_unique_obs": True,
@@ -146,7 +146,7 @@ def hp_run(model_file):
 
 if __name__ == '__main__':
     ignore_errors = True
-    for model_file in coinrun_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
+    for model_file in maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:
