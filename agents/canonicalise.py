@@ -63,6 +63,7 @@ class Canonicaliser(BaseAgent):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.hard_adv = not soft_canonicalisation
         self.n_actions = self.env.action_space.n
         self.meg = meg
         self.load_value_models = load_value_models
@@ -234,8 +235,9 @@ class Canonicaliser(BaseAgent):
         if not self.load_value_models:
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
-        self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
-        self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
+        if not self.hard_adv:
+            self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
+            self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
 
         if self.meg:
             meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")

@@ -198,8 +198,10 @@ def add_training_args(parser):
 
 
 def get_model_with_largest_checkpoint(folder):
-    files = [os.path.join(folder, x) for x in os.listdir(folder)]
     search = lambda x: re.search(r"model_(\d*).pth", x)
+    if search(folder):
+        return folder
+    files = [os.path.join(folder, x) for x in os.listdir(folder)]
     last_checkpoint = max([int(search(x).group(1)) for x in files if search(x)])
     return [x for x in files if re.search(f"model_{last_checkpoint}.pth", x)][0]
 

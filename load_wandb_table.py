@@ -200,7 +200,7 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "ascent-hard_no_meg"
+    env = "coinrun"
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"

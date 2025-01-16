@@ -118,9 +118,9 @@ def hp_run(model_file):
         "epoch": 0,
         "algo": "canon",
         "env_name": "get",
-        "exp_name": "ascent",
+        "exp_name": "coinrun",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon ascent soft+meg"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon coinrun hard"],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -133,8 +133,8 @@ def hp_run(model_file):
         "seed": 42,
         "hidden_dims": [256, 256, 256],
 
-        "load_value_models": True,
-        "soft_canonicalisation": True,
+        "load_value_models": False,
+        "soft_canonicalisation": False,
 
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
@@ -146,7 +146,7 @@ def hp_run(model_file):
 
 if __name__ == '__main__':
     ignore_errors = True
-    for model_file in local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
+    for model_file in coinrun_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:
