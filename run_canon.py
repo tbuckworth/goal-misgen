@@ -117,7 +117,7 @@ def hp_run(model_file):
         # "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
         "epoch": 0,
         "algo": "canon",
-        "env_name": "get",
+        "env_name": "maze",
         "exp_name": "coinrun",
         "param_name": "ascent-canon",
         "wandb_tags": ["canon coinrun hard"],  # "pre-trained-value"],  # "coinrun misgen3"],
