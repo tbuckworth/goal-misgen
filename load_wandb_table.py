@@ -267,9 +267,9 @@ def load_summary(exclude_crafted=True):
         row = {}
         if "mean_episode_rewards" not in run.summary.keys():
             continue
-        if run.summary.mean_episode_rewards > min_train_reward:
+        if run.summary.mean_episode_rewards < min_train_reward:
             continue
-        if train_distance not in run.summary.keys():
+        if train_dist_metric not in run.summary.keys():
             continue
         row[train_rewards] = run.summary.mean_episode_rewards
         row[val_rewards] = run.summary.val_mean_episode_rewards
