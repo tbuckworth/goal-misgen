@@ -6,7 +6,7 @@ if __name__ == '__main__':
         "architecture": "impala",
         # "distribution_mode": "hard",
         "seed": 1080,
-        "env_name": "coinrun",
+        "env_name": "maze_aisc",
         "exp_name": "value",
         "param_name": "trusted-value",
         "wandb_tags": ["trusted value"],

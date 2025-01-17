@@ -23,7 +23,7 @@ def get_value_dir_and_config_for_env(env_name, env_type):
         # logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
     elif env_name == "coinrun":
         raise NotImplementedError("Need to train value for coinrun")
-    elif env_name == "maze":
+    elif env_name == "maze" or env_name == "maze_aisc":
         #TODO: check this works!
         logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
         # raise NotImplementedError("Need to train value for maze")
@@ -34,12 +34,12 @@ def get_value_dir_and_config_for_env(env_name, env_type):
 
 def create_unshifted_venv(args, hyperparameters):
     args.rand_region = 0
-    args.rand_percent = 0
-    return create_venv(args, hyperparameters, True)
+    args.random_percent = 0
+    return create_venv(args, hyperparameters, False)
 
 def create_shifted_venv(args, hyperparameters):
     args.rand_region = 10
-    args.rand_percent = 10
+    args.random_percent = 10
     return create_venv(args, hyperparameters, True)
 
 def create_venv(args, hyperparameters, is_valid=False):

@@ -1,3 +1,5 @@
+import re
+
 from helper_local import get_model_with_largest_checkpoint
 from hyperparameter_optimization import run_next_hyperparameters
 
@@ -77,7 +79,7 @@ maze_dict = {
 }
 
 maze_dirs = [
-    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",#problem
+    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",#problem Unshifted rand.region = 0
     "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
 ]
 
@@ -100,7 +102,15 @@ ascent_misgeneralising_but_low_valid_distance = [
 ]
 
 
+def get_seed(model_file):
+    try:
+        return re.search(r"seed_(\d+)", model_file).group(1)
+    except Exception as e:
+        print("seed not found, using 42")
+        return 42
+
 def hp_run(model_file):
+    seed = get_seed(model_file)
     hparams = {
         # "model_file": model_file,
         "model_file": get_model_with_largest_checkpoint(model_file),
@@ -117,10 +127,10 @@ def hp_run(model_file):
         # "model_file": "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
         "epoch": 0,
         "algo": "canon",
-        "env_name": "maze",
+        "env_name": "get",
         "exp_name": "coinrun",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze hard"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon maze hard3"],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -128,9 +138,9 @@ def hp_run(model_file):
         "mini_batch_size": 2048,
         "n_val_envs": 32,
         "n_envs": int(256 + 32),
-        "num_levels": 100000,
+        "num_levels": 10000,
         "distribution_mode": "hard",
-        "seed": 42,
+        "seed": seed,
         "hidden_dims": [256, 256, 256],
 
         "load_value_models": True,
