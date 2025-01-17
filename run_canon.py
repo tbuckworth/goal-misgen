@@ -135,7 +135,7 @@ def hp_run(model_file):
 
         "load_value_models": True,
         "soft_canonicalisation": False,
-
+        "meg": False,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
         # "misgen": model_file,
@@ -146,7 +146,7 @@ def hp_run(model_file):
 
 if __name__ == '__main__':
     ignore_errors = True
-    for model_file in maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
+    for model_file in new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:

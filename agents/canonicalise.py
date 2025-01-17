@@ -58,12 +58,11 @@ class Canonicaliser(BaseAgent):
                  use_unique_obs=False,
                  soft_canonicalisation=True,
                  load_value_models=False,
-                 meg=True,
+                 meg=False,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
-        self.hard_adv = not soft_canonicalisation
         self.n_actions = self.env.action_space.n
         self.meg = meg
         self.load_value_models = load_value_models
@@ -99,10 +98,16 @@ class Canonicaliser(BaseAgent):
             self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer = optim.Adam(self.value_model.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer_val = optim.Adam(self.value_model_val.parameters(), lr=learning_rate, eps=1e-5)
-        self.value_optimizer_logp = optim.Adam(self.value_model_logp.parameters(), lr=learning_rate, eps=1e-5)
-        self.value_optimizer_logp_val = optim.Adam(self.value_model_logp_val.parameters(), lr=learning_rate, eps=1e-5)
-        self.q_optimizer = optim.Adam(self.q_model.parameters(), lr=learning_rate, eps=1e-5)
-        self.q_optimizer_val = optim.Adam(self.q_model_val.parameters(), lr=learning_rate, eps=1e-5)
+        if self.soft_canonicalisation:
+            self.value_optimizer_logp = optim.Adam(self.value_model_logp.parameters(), lr=learning_rate, eps=1e-5)
+            self.value_optimizer_logp_val = optim.Adam(self.value_model_logp_val.parameters(), lr=learning_rate, eps=1e-5)
+        else:
+            self.value_optimizer_logp = self.value_optimizer_logp_val = None
+        if self.meg:
+            self.q_optimizer = optim.Adam(self.q_model.parameters(), lr=learning_rate, eps=1e-5)
+            self.q_optimizer_val = optim.Adam(self.q_model_val.parameters(), lr=learning_rate, eps=1e-5)
+        else:
+            self.q_optimizer = self.q_optimizer_val = None
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -235,7 +240,7 @@ class Canonicaliser(BaseAgent):
         if not self.load_value_models:
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
-        if not self.hard_adv:
+        if self.soft_canonicalisation:
             self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
             self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
 

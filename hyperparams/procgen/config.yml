@@ -143,6 +143,7 @@ ascent-canon:
     misgen: False
     load_value_models: False
     soft_canonicalisation: False
+    meg: False
 
 trusted-value:
     algo: trusted-value
