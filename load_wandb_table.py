@@ -200,11 +200,12 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "coinrun"
+    env = "canon maze hard"
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
+    min_train_reward = 9
     if env == "ascent":
         # Original:
         tag = "canon misgen3"
@@ -234,6 +235,10 @@ def load_summary(exclude_crafted=True):
     elif env == "ascent-soft_meg":
         tag = "canon ascent soft+meg"
         meg_adj = True
+    elif env == "canon maze hard":
+        tag = "canon maze hard"
+        meg_adj = False
+
 
     # Fetch runs from a project
     api = wandb.Api()
@@ -261,6 +266,10 @@ def load_summary(exclude_crafted=True):
     for run in runs:
         row = {}
         if "mean_episode_rewards" not in run.summary.keys():
+            continue
+        if run.summary.mean_episode_rewards > min_train_reward:
+            continue
+        if train_distance not in run.summary.keys():
             continue
         row[train_rewards] = run.summary.mean_episode_rewards
         row[val_rewards] = run.summary.val_mean_episode_rewards

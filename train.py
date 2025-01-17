@@ -12,7 +12,7 @@ import random
 import torch
 
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
-    create_shifted_venv, get_value_dir_and_config_for_env
+    create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv
 
 try:
     import wandb
@@ -78,10 +78,11 @@ def train(args):
     n_envs = hyperparameters.get('n_envs', 256)
     algo = hyperparameters.get('algo', 'ppo')
 
-    env = create_venv(args, hyperparameters)
     if algo not in ["trusted-value", "canon"]:
+        env = create_venv(args, hyperparameters)
         env_valid = create_venv(args, hyperparameters, is_valid=True)
     else:
+        env = create_unshifted_venv(args, hyperparameters)
         env_valid = create_shifted_venv(args, hyperparameters)
 
     ############

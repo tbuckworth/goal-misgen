@@ -77,13 +77,13 @@ maze_dict = {
 }
 
 maze_dirs = [
-    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080",  # /model_200015872.pth",
-    "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080",  # /model_200015872.pth",
+    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",#problem
+    "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
 ]
 
 new_maze_dirs = [
-    "logs/train/maze_aisc/maze1/2024-11-25__15-28-05__seed_42",  # rand.region = 10
-    "logs/train/maze_aisc/maze1/2024-11-25__15-29-49__seed_42",  # rand.region = 0
+    "logs/train/maze_aisc/maze1/2024-11-25__15-28-05__seed_42/model_200015872.pth",  # rand.region = 10
+    "logs/train/maze_aisc/maze1/2024-11-25__15-29-49__seed_42/model_200015872.pth",  # rand.region = 0 #problem
 ]
 
 coinrun_dirs = [
@@ -120,7 +120,7 @@ def hp_run(model_file):
         "env_name": "maze",
         "exp_name": "coinrun",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon coinrun hard"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon maze hard"],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -145,8 +145,8 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
-    ignore_errors = True
-    for model_file in new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
+    ignore_errors = False
+    for model_file in maze_dirs + new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:

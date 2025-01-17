@@ -32,6 +32,11 @@ def get_value_dir_and_config_for_env(env_name, env_type):
     cfg = get_config(logdir)
     return cfg, os.path.join(logdir, env_type, "model_min_val_loss.pth")
 
+def create_unshifted_venv(args, hyperparameters):
+    args.rand_region = 0
+    args.rand_percent = 0
+    return create_venv(args, hyperparameters, True)
+
 def create_shifted_venv(args, hyperparameters):
     args.rand_region = 10
     args.rand_percent = 10
