@@ -89,8 +89,8 @@ new_maze_dirs = [
 ]
 
 coinrun_dirs = [
-    "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",
-    "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",
+    "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth", # random_percent = 0
+    "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth", # random_percent = 10
 ]
 
 # generalising_ascender = [
@@ -128,9 +128,9 @@ def hp_run(model_file):
         "epoch": 0,
         "algo": "canon",
         "env_name": "get",
-        "exp_name": "coinrun",
+        "exp_name": "canon",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon maze hard3"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": ["canon coinrun hard new value"],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -156,7 +156,7 @@ def hp_run(model_file):
 
 if __name__ == '__main__':
     ignore_errors = False
-    for model_file in maze_dirs + new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
+    for model_file in coinrun_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file)
         else:

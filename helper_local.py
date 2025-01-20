@@ -22,10 +22,13 @@ def get_value_dir_and_config_for_env(env_name, env_type):
         logdir = "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080"
         # logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
     elif env_name == "coinrun":
-        raise NotImplementedError("Need to train value for coinrun")
+        # Training looked ok
+        logdir = "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080"
+        # raise NotImplementedError("Need to train value for coinrun")
     elif env_name == "maze" or env_name == "maze_aisc":
-        #TODO: check this works!
-        logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
+        # N.B. Training did look a bit funny
+        logdir = "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080"
+        # logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
         # raise NotImplementedError("Need to train value for maze")
     else:
         raise NotImplementedError(f"{env_name} is not a recognised environment")
