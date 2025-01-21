@@ -2,7 +2,8 @@ import os
 
 import torch
 
-from helper_local import initialize_policy, get_config, DictToArgs, latest_model_path, create_venv, create_venv_render
+from helper_local import initialize_policy, get_config, DictToArgs, latest_model_path, create_venv, create_venv_render, \
+    remove_duplicate_actions
 from imitation_rl import decompose_policy
 
 
@@ -31,6 +32,12 @@ def watch_agent(logdir, next_val_dir=None):
         args_dict = get_config(next_val_dir,"args_dict.npy")
         logdir = args_dict.get("agent_dir")
     args, cfg, device, model, policy, venv = load_policy(logdir, render=False)
+
+    obs = venv.reset()
+    x = torch.FloatTensor(obs).to(device)
+    dist, _, _ = policy.forward(x,None,None)
+    acts = dist.sample()
+    remove_duplicate_actions(dist, acts, venv)
 
     # env = create_venv(args, cfg, is_valid=False)
     # shenv = create_venv_render(args, cfg, is_valid=True)

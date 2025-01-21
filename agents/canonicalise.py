@@ -552,7 +552,8 @@ class Canonicaliser(BaseAgent):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
-            dist = remove_duplicate_actions(dist, self.env)
+            dist, act_batch = remove_duplicate_actions(dist, act_batch, self.env)
+
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)

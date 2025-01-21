@@ -260,15 +260,23 @@ def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
     plt.legend()
 
 
-def remove_duplicate_actions(dist, venv):
+def remove_duplicate_actions(dist, acts, venv):
     action_names = get_action_names(venv)
-    new_probs = group_by(dist.probs,action_names)
-    return Categorical(probs=new_probs)
+    new_probs, new_acts = group_by(dist.probs, acts, action_names, venv)
+    return Categorical(probs=new_probs), new_acts
 
+def match(a, b, dtype=np.int32):
+    if len(a.shape) > 1:
+        return np.array([match(x, b) for x in a], dtype=dtype)
+    a = a.tolist()
+    b = b.tolist()
+    return np.array([b.index(x) for x in a if x in b], dtype=dtype)
 
-def group_by(tensor, group_labels):
+def group_by(tensor, acts, group_labels, venv):
     # Step 1: Create a mapping of group labels to indices
     unique_groups, group_indices = np.unique(group_labels, return_inverse=True)
+
+    new_acts = match(unique_groups, group_labels, dtype=venv.action_space.dtype)[acts]
 
     # Step 2: Aggregate by group
     result = []
@@ -279,4 +287,4 @@ def group_by(tensor, group_labels):
 
     # Convert result to a PyTorch tensor
     result_tensor = torch.stack(result, dim=-1)
-    return result_tensor
+    return result_tensor, new_acts
