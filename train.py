@@ -155,16 +155,7 @@ def train(args):
             hidden_dims = value_cfg.get("hidden_dims", [32])
         else:
             hidden_dims = hyperparameters.get("hidden_dims", [32])
-        architecture = hyperparameters.get("architecture")
-        if architecture == "impala":
-            model_constructor = lambda x: ImpalaValueModel(observation_shape[0], hidden_dims, x)
-        else:
-            model_constructor = lambda x: MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [x])
-        # This is a crazy amount of GPU, shall we think about doing something about all this?
-        value_model = model_constructor(1)
-        value_model_val = model_constructor(1)
-        value_model.to(device)
-        value_model_val.to(device)
+        model_constructor, value_model, value_model_val = construct_value_models(device, hyperparameters, observation_shape, hidden_dims)
         if hyperparameters.get("soft_canonicalisation", False):
             value_model_logp = model_constructor(1)
             value_model_logp_val = model_constructor(1)
@@ -237,6 +228,20 @@ def train(args):
     agent.train(num_timesteps)
     if args.use_wandb:
         wandb.finish()
+
+
+def construct_value_models(device, hyperparameters, observation_shape, hidden_dims):
+    architecture = hyperparameters.get("architecture")
+    if architecture == "impala":
+        model_constructor = lambda x: ImpalaValueModel(observation_shape[0], hidden_dims, x)
+    else:
+        model_constructor = lambda x: MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [x])
+    # This is a crazy amount of GPU, shall we think about doing something about all this?
+    value_model = model_constructor(1)
+    value_model_val = model_constructor(1)
+    value_model.to(device)
+    value_model_val.to(device)
+    return model_constructor, value_model, value_model_val
 
 
 def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, seed):
