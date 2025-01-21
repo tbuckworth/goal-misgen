@@ -161,15 +161,15 @@ class LirlStorage(Storage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def store_values(self, value_model, mini_batch_size):
+    def store_values(self, value_model, device, mini_batch_size):
         batch_size = self.num_steps * self.num_envs
         sampler = BatchSampler(SubsetRandomSampler(range(batch_size)),
                                mini_batch_size,
                                drop_last=True)
         for indices in sampler:
             obs_batch = torch.FloatTensor(self.obs_batch).reshape(-1, *self.obs_shape)[indices].to(
-                self.device)
-            self.value_batch[indices] = value_model(obs_batch)
+                device)
+            self.value_batch[indices] = value_model(obs_batch).to(self.device)
 
 
     def collect_and_yield(self, indices, valid_envs=0, valid=False):
