@@ -1,5 +1,6 @@
 import contextlib
 import os
+import re
 from abc import ABC, abstractmethod
 import numpy as np
 import gymnasium
@@ -8,6 +9,9 @@ from gym import spaces
 import time
 from collections import deque
 import torch
+
+from helper_local import get_action_names, match
+
 # from imitation.data import rollout, types
 
 """
@@ -472,3 +476,30 @@ class EmbedderWrapper(VecEnvWrapper):
     def seed(self, seed=0):
         # this is a dummy seed
         self._seed = seed
+
+
+class ActionWrapper(VecEnvWrapper):
+    '''
+    This wrapper reduces down duplicate actions
+    '''
+
+    def __init__(self, env):
+        self.venv = env
+        self.observation_space = self.venv.observation_space
+        action_names = get_action_names(env)
+        self.unique_actions = np.unique(action_names)
+        n = len(np.unique(action_names))
+        self.action_space = gym.spaces.Discrete(n)
+        self.action_mapping = match(self.unique_actions, action_names, dtype=self.venv.action_space.dtype)
+        self.combos = [(x[0],) if len(x) == 1 else (x[0], x[1]) for x in
+                       [re.split("_", x) for x in self.unique_actions]]
+
+    def step_wait(self):
+        return self.venv.step_wait()
+
+    def reset(self):
+        return self.venv.reset()
+
+    def step_async(self, actions):
+        actions = self.action_mapping[actions]
+        return self.venv.step_async(actions)

@@ -3,12 +3,16 @@ import wandb
 from torch import nn
 
 from common import orthogonal_init
-from helper_local import norm_funcs, dist_funcs, plot_values_ascender
+from helper_local import norm_funcs, dist_funcs, plot_values_ascender, get_action_names
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
 import torch.optim as optim
 import numpy as np
+
+
+def remove_duplicate_actions(dist, env):
+    get_action_names(env)
 
 
 class Canonicaliser(BaseAgent):
@@ -549,6 +553,8 @@ class Canonicaliser(BaseAgent):
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
+        if self.remove_duplicate_actions:
+            dist = remove_duplicate_actions(dist)
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
