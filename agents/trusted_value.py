@@ -174,7 +174,7 @@ class TrustedValue(BaseAgent):
             e+=1
             if self.td_lmbda:
                 if e>1:
-                    storage.store_values(value_model, self.device, mini_batch_size=self.mini_batch_size)
+                    storage.store_values(value_model, self.device, mini_batch_size=self.mini_batch_size//4)
                 storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=False,
