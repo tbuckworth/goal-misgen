@@ -1,14 +1,10 @@
-import copy
 import os
 
 import torch
 
-from common.env.procgen_wrappers import get_action_names
 from helper_local import initialize_policy, get_config, DictToArgs, latest_model_path, create_venv, create_venv_render
 from imitation_rl import decompose_policy
 
-def remove_duplicate_actions(dist, venv):
-    get_action_names(venv)
 
 def get_env_args(cfg):
     # manual implementation for now

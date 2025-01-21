@@ -9,12 +9,14 @@ import torch
 import yaml
 from gym3 import ViewerWrapper, ToBaselinesVecEnv
 from procgen import ProcgenGym3Env, ProcgenEnv
+from torch.distributions import Categorical
 
 from common.ascent_env import AscentEnv
 from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, TransposeFrame, ScaledFloatFrame, \
-    DummyTerminalObsWrapper
+    DummyTerminalObsWrapper, get_action_names
 from common.model import NatureModel, ImpalaModel, MlpModel
 from common.policy import CategoricalPolicy, CraftedTorchPolicy
+
 
 def get_value_dir_and_config_for_env(env_name, env_type):
     assert env_type in ["Training","Validation"], f"{env_type} is not a valid type. Must be either 'Training' or 'Validation'"
@@ -256,3 +258,25 @@ def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
     plt.xlabel("State")
     plt.title(f"Ascender Values at epoch {epoch}")
     plt.legend()
+
+
+def remove_duplicate_actions(dist, venv):
+    action_names = get_action_names(venv)
+    new_probs = group_by(dist.probs,action_names)
+    return Categorical(probs=new_probs)
+
+
+def group_by(tensor, group_labels):
+    # Step 1: Create a mapping of group labels to indices
+    unique_groups, group_indices = np.unique(group_labels, return_inverse=True)
+
+    # Step 2: Aggregate by group
+    result = []
+    for i, group in enumerate(unique_groups):
+        group_mask = (group_indices == i)
+        aggregated_columns = tensor[..., group_mask].sum(dim=-1)  # Sum over selected columns
+        result.append(aggregated_columns)
+
+    # Convert result to a PyTorch tensor
+    result_tensor = torch.stack(result, dim=-1)
+    return result_tensor

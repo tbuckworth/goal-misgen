@@ -4,16 +4,12 @@ from torch import nn
 
 from common import orthogonal_init
 from common.env.procgen_wrappers import get_action_names
-from helper_local import norm_funcs, dist_funcs, plot_values_ascender
+from helper_local import norm_funcs, dist_funcs, plot_values_ascender, remove_duplicate_actions
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
 import torch.optim as optim
 import numpy as np
-
-
-def remove_duplicate_actions(dist, env):
-    get_action_names(env)
 
 
 class Canonicaliser(BaseAgent):
