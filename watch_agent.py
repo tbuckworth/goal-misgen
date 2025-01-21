@@ -3,9 +3,12 @@ import os
 
 import torch
 
+from common.env.procgen_wrappers import get_action_names
 from helper_local import initialize_policy, get_config, DictToArgs, latest_model_path, create_venv, create_venv_render
 from imitation_rl import decompose_policy
 
+def remove_duplicate_actions(dist, venv):
+    get_action_names(venv)
 
 def get_env_args(cfg):
     # manual implementation for now
@@ -31,9 +34,10 @@ def watch_agent(logdir, next_val_dir=None):
     if next_val_dir is not None:
         args_dict = get_config(next_val_dir,"args_dict.npy")
         logdir = args_dict.get("agent_dir")
-    args, cfg, device, model, policy, venv = load_policy(logdir)
+    args, cfg, device, model, policy, venv = load_policy(logdir, render=False)
 
-    shenv = create_venv_render(args, cfg, is_valid=True)
+    # env = create_venv(args, cfg, is_valid=False)
+    # shenv = create_venv_render(args, cfg, is_valid=True)
     # for i in range(20):
     #     shp = policy(torch.FloatTensor(shenv.obs(i)[:1,]).to(device), None, None)[0].probs.round(decimals=2)
     #     p = policy(torch.FloatTensor(venv.obs(i)[:1,]).to(device), None, None)[0].probs.round(decimals=2)
@@ -137,4 +141,5 @@ if __name__ == "__main__":
     next_val_dir = shifted_val_dir
 
     logdir = "logs/train/ascent/ascent/2024-11-12__13-52-38__seed_1080"
+    logdir = unshifted_agent_dir
     watch_agent(logdir=logdir, next_val_dir=None)

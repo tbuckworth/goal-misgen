@@ -10,8 +10,6 @@ import time
 from collections import deque
 import torch
 
-from helper_local import get_action_names, match
-
 # from imitation.data import rollout, types
 
 """
@@ -477,6 +475,34 @@ class EmbedderWrapper(VecEnvWrapper):
         # this is a dummy seed
         self._seed = seed
 
+def match(a, b):
+    a = a.tolist()
+    b = b.tolist()
+    return np.array([b.index(x) for x in a if x in b])
+
+
+def match(a, b, dtype=np.int32):
+    if len(a.shape) > 1:
+        return np.array([match(x, b) for x in a], dtype=dtype)
+    a = a.tolist()
+    b = b.tolist()
+    return np.array([b.index(x) for x in a if x in b], dtype=dtype)
+
+def get_combos(env):
+    if hasattr(env, "combos"):
+        return env.combos
+    if hasattr(env, "env"):
+        return get_combos(env.env)
+    raise NotImplementedError("No combos found in env")
+
+
+def get_action_names(env):
+    action_names = np.array(
+        [x[0] + "_" + x[1] if len(x) == 2 else (x[0] if len(x) == 1 else "") for x in get_combos(env)])
+    x = np.array(['D', 'A', 'W', 'S', 'Q', 'E'])
+    y = np.array(['RIGHT', 'LEFT', 'UP', 'DOWN', 'LEFT_UP', 'RIGHT_UP'])
+    action_names[match(x, action_names)] = y[match(action_names, x)]
+    return action_names
 
 class ActionWrapper(VecEnvWrapper):
     '''

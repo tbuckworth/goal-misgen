@@ -3,7 +3,8 @@ import wandb
 from torch import nn
 
 from common import orthogonal_init
-from helper_local import norm_funcs, dist_funcs, plot_values_ascender, get_action_names
+from common.env.procgen_wrappers import get_action_names
+from helper_local import norm_funcs, dist_funcs, plot_values_ascender
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr
 import torch
@@ -67,6 +68,7 @@ class Canonicaliser(BaseAgent):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.remove_duplicate_actions = True
         self.n_actions = self.env.action_space.n
         self.meg = meg
         self.load_value_models = load_value_models
@@ -554,7 +556,7 @@ class Canonicaliser(BaseAgent):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
-            dist = remove_duplicate_actions(dist)
+            dist = remove_duplicate_actions(dist, self.env)
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
