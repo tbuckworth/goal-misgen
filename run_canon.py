@@ -2,6 +2,7 @@ import re
 
 from helper_local import get_model_with_largest_checkpoint
 from hyperparameter_optimization import run_next_hyperparameters
+from load_wandb_table import load_summary
 
 local_unique_ascent_dirs = [
     "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033",
@@ -109,7 +110,7 @@ def get_seed(model_file):
         print("seed not found, using 42")
         return 42
 
-def hp_run(model_file):
+def hp_run(model_file, tag):
     seed = get_seed(model_file)
     hparams = {
         # "model_file": model_file,
@@ -130,7 +131,7 @@ def hp_run(model_file):
         "env_name": "get",
         "exp_name": "canon",
         "param_name": "ascent-canon",
-        "wandb_tags": ["canon coinrun hard grouped actions"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
@@ -155,10 +156,11 @@ def hp_run(model_file):
 
 
 if __name__ == '__main__':
+    tag = "canon maze hard grouped actions"
     ignore_errors = False
-    for model_file in coinrun_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
+    for model_file in maze_dirs + new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
-            hp_run(model_file)
+            hp_run(model_file, tag=tag)
         else:
             try:
                 hp_run(model_file)
@@ -166,7 +168,7 @@ if __name__ == '__main__':
                 print(e)
                 try:
                     import wandb
-
                     wandb.finish()
                 except Exception as e:
                     pass
+    load_summary(env=tag, exclude_crafted=True, tag=tag)

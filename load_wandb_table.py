@@ -199,48 +199,48 @@ def load_all():
     print(final)
 
 
-def load_summary(exclude_crafted=True):
-    env = "coinrun hard grouped"
+def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, tag="canon maze hard grouped actions"):
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
     min_train_reward = 9
-    if env == "ascent":
-        # Original:
-        tag = "canon misgen3"
-        train_dist_metric = "Loss/l2_normalized_l2_distance_Training"
-        val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
-    elif env == "maze":
-        env_name = "maze_aisc"
-        tag = "canon maze new1"
-    elif env == "coinrun":
-        tag = "canon coinrun1"
-    elif env == "ascent-new":
-        tag = "canon ascent1"
-    elif env == "ascent-new2":
-        tag = "canon ascent new1"
-    elif env == "ascent-soft":
-        tag = "canon ascent soft2"
-    elif env == "ascent-hard":
-        tag = "canon ascent hard"
-    elif env == "ascent-hard_meg":
-        tag = "canon ascent hard+meg3"
-        meg_adj = True
-    elif env == "ascent-hard_no_meg":
-        tag = "canon ascent hard+meg3"
-        meg_adj = False
-    elif env == "ascent-soft_no_meg":
-        tag = "canon ascent soft+meg"
-    elif env == "ascent-soft_meg":
-        tag = "canon ascent soft+meg"
-        meg_adj = True
-    elif env == "canon maze hard":
-        tag = "canon maze hard"
-        meg_adj = False
-    elif env == "coinrun hard grouped":
-        tag = "canon coinrun hard grouped actions"
-        meg_adj = False
+    if tag is not None:
+        if env == "ascent":
+            # Original:
+            tag = "canon misgen3"
+            train_dist_metric = "Loss/l2_normalized_l2_distance_Training"
+            val_dist_metric = "Loss/l2_normalized_l2_distance_Validation"
+        elif env == "maze":
+            env_name = "maze_aisc"
+            tag = "canon maze new1"
+        elif env == "coinrun":
+            tag = "canon coinrun1"
+        elif env == "ascent-new":
+            tag = "canon ascent1"
+        elif env == "ascent-new2":
+            tag = "canon ascent new1"
+        elif env == "ascent-soft":
+            tag = "canon ascent soft2"
+        elif env == "ascent-hard":
+            tag = "canon ascent hard"
+        elif env == "ascent-hard_meg":
+            tag = "canon ascent hard+meg3"
+            meg_adj = True
+        elif env == "ascent-hard_no_meg":
+            tag = "canon ascent hard+meg3"
+            meg_adj = False
+        elif env == "ascent-soft_no_meg":
+            tag = "canon ascent soft+meg"
+        elif env == "ascent-soft_meg":
+            tag = "canon ascent soft+meg"
+            meg_adj = True
+        elif env == "canon maze hard":
+            tag = "canon maze hard"
+            meg_adj = False
+        elif env == "coinrun hard grouped":
+            tag = "canon coinrun hard grouped actions"
+            meg_adj = False
 
 
     # Fetch runs from a project
