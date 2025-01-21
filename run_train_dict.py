@@ -16,7 +16,7 @@ if __name__ == '__main__':
         "n_val_envs": 128,
         "n_envs": 256 + 128,
         "n_pos_states": 10,
-        #TODO: have less hidden dims?
+        #TODO: have fewer hidden dims?
         "hidden_dims": [256, 256, 256, 256],
         "save_pics_ascender": False,
     }
