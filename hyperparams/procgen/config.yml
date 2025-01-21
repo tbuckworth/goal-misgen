@@ -167,6 +167,7 @@ trusted-value:
     val_epoch: 1000
     n_val_envs: 64
     save_pics_ascender: False
+    td_lmbda: True
 
 
 ascent-crafted:

@@ -155,7 +155,8 @@ def train(args):
             hidden_dims = value_cfg.get("hidden_dims", [32])
         else:
             hidden_dims = hyperparameters.get("hidden_dims", [32])
-        model_constructor, value_model, value_model_val = construct_value_models(device, hyperparameters, observation_shape, hidden_dims)
+        model_constructor, value_model, value_model_val = construct_value_models(device, hyperparameters,
+                                                                                 observation_shape, hidden_dims)
         if hyperparameters.get("soft_canonicalisation", False):
             value_model_logp = model_constructor(1)
             value_model_logp_val = model_constructor(1)
@@ -170,11 +171,6 @@ def train(args):
             q_model_val.to(device)
         else:
             q_model = q_model_val = None
-
-
-
-
-
 
         trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if trusted_policy_name == "uniform":

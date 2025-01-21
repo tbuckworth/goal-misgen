@@ -37,11 +37,13 @@ class TrustedValue(BaseAgent):
                  trusted_policy=None,
                  n_val_envs=0,
                  save_pics_ascender=False,
+                 td_lmbda=True,
                  **kwargs):
 
         super(TrustedValue, self).__init__(env, policy, logger, storage, device,
                                            n_checkpoints, env_valid, storage_valid)
 
+        self.td_lmbda = td_lmbda
         self.save_pics_ascender = save_pics_ascender
         if n_val_envs >= n_envs:
             raise IndexError(f"n_val_envs:{n_val_envs} must be less than n_envs:{n_envs}")
@@ -169,6 +171,11 @@ class TrustedValue(BaseAgent):
         min_val_loss = np.inf
         e = 0
         while True:
+            e+=1
+            if self.td_lmbda:
+                if e>1:
+                    storage.store_values(value_model,mini_batch_size=self.mini_batch_size)
+                storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=False,
                                                       valid_envs=self.n_val_envs,
@@ -183,20 +190,26 @@ class TrustedValue(BaseAgent):
             val_losses_valid = []
 
             for sample in generator:
-                obs_batch, nobs_batch, _, done_batch, _, _, _, _, rew_batch, _ = sample
+                obs_batch, nobs_batch, _, done_batch, _, _, return_batch, _, rew_batch, _ = sample
                 value_batch = value_model(obs_batch).squeeze()
-                next_value_batch = value_model(nobs_batch).squeeze()
-                target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
+                if self.td_lmbda:
+                    target = return_batch
+                else:
+                    next_value_batch = value_model(nobs_batch).squeeze()
+                    target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
                 value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
 
             for sample in generator_valid:
-                obs_batch_val, nobs_batch_val, _, done_batch_val, _, _, _, _, rew_batch_val, _ = sample
+                obs_batch_val, nobs_batch_val, _, done_batch_val, _, _, return_batch_val, _, rew_batch_val, _ = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
-                    next_value_batch_val = value_model(nobs_batch_val).squeeze()
-                    target = rew_batch_val + self.gamma * next_value_batch_val * (1 - done_batch_val)
+                    if self.td_lmbda:
+                        target = return_batch_val
+                    else:
+                        next_value_batch_val = value_model(nobs_batch_val).squeeze()
+                        target = rew_batch_val + self.gamma * next_value_batch_val * (1 - done_batch_val)
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
                 val_losses_valid.append(value_loss_val.item())
             value_optimizer.step()

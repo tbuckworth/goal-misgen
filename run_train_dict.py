@@ -11,11 +11,12 @@ if __name__ == '__main__':
         "param_name": "trusted-value",
         "wandb_tags": ["trusted value"],
         "use_wandb": True,
-        "val_epoch": 2000,
+        "val_epoch": 200,
         "mini_batch_size": 2048,
         "n_val_envs": 128,
         "n_envs": 256 + 128,
         "n_pos_states": 10,
+        #TODO: have less hidden dims?
         "hidden_dims": [256, 256, 256, 256],
         "save_pics_ascender": False,
     }
