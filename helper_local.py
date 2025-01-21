@@ -276,7 +276,7 @@ def group_by(tensor, acts, group_labels, venv):
     # Step 1: Create a mapping of group labels to indices
     unique_groups, group_indices = np.unique(group_labels, return_inverse=True)
 
-    new_acts = match(unique_groups, group_labels, dtype=venv.action_space.dtype)[acts]
+    new_acts = torch.tensor(group_indices).to(acts.device)[acts]
 
     # Step 2: Aggregate by group
     result = []

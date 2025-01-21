@@ -200,7 +200,7 @@ def load_all():
 
 
 def load_summary(exclude_crafted=True):
-    env = "canon maze hard"
+    env = "coinrun hard grouped"
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
@@ -237,6 +237,9 @@ def load_summary(exclude_crafted=True):
         meg_adj = True
     elif env == "canon maze hard":
         tag = "canon maze hard"
+        meg_adj = False
+    elif env == "coinrun hard grouped":
+        tag = "canon coinrun hard grouped actions"
         meg_adj = False
 
 
