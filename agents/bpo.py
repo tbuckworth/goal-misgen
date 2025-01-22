@@ -33,11 +33,13 @@ class BPO(BaseAgent):
                  l1_coef=0.,
                  anneal_lr=True,
                  uniform_value=False,
+                 store_hard_adv=True,
                  **kwargs):
 
         super(BPO, self).__init__(env, policy, logger, storage, device,
                                   n_checkpoints, env_valid, storage_valid)
 
+        self.store_hard_adv = store_hard_adv
         self.uniform_value = uniform_value
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
@@ -66,6 +68,8 @@ class BPO(BaseAgent):
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
             act = dist.sample()
             log_prob_act = dist.log_prob(act)
+            if self.store_hard_adv:
+                log_prob_act = log_prob_act - dist.probs.log().mean(dim=-1)
 
         return act.cpu().numpy(), log_prob_act.cpu().numpy(), value.cpu().numpy(), hidden_state.cpu().numpy()
 
@@ -144,6 +148,8 @@ class BPO(BaseAgent):
         return summary
 
     def ppo_loss(self, sample):
+        if self.store_hard_adv:
+            raise Exception("store_hard_adv=True incompatible with ppo. set num_bpo_timesteps to None or > num_timesteps")
         obs_batch, hidden_state_batch, act_batch, done_batch, \
             old_log_prob_act_batch, old_value_batch, return_batch, adv_batch = sample
         mask_batch = (1 - done_batch)
@@ -163,15 +169,19 @@ class BPO(BaseAgent):
         return entropy_loss, l1_reg, loss, pi_loss, value_loss
 
     def clipped_bellman_error(self, old_value_batch, return_batch, value_batch):
-        clipped_value_batch = old_value_batch + (value_batch - old_value_batch).clamp(-self.eps_clip, self.eps_clip)
-        v_surr1 = (value_batch - return_batch).pow(2)
-        v_surr2 = (clipped_value_batch - return_batch).pow(2)
-        value_loss = 0.5 * torch.max(v_surr1, v_surr2).mean()
-        return value_loss
+        value_loss = self.clipped_error(return_batch, value_batch, old_value_batch)
+        return value_loss * 0.5
+
+    def clipped_error(self, target, estimate, old_estimate):
+        clipped = old_estimate + (estimate - old_estimate).clamp(-self.eps_clip, self.eps_clip)
+        surr1 = (estimate - target).pow(2)
+        surr2 = (clipped - target).pow(2)
+        loss = torch.max(surr1, surr2).mean()
+        return loss
 
     def bpo_loss(self, sample):
         obs_batch, hidden_state_batch, act_batch, done_batch, \
-            old_log_prob_act_batch, old_value_batch, return_batch, adv_batch = sample
+            old_hard_adv_batch, old_value_batch, return_batch, adv_batch = sample
         mask_batch = (1 - done_batch)
         dist_batch, value_batch, _ = self.policy(obs_batch, hidden_state_batch, mask_batch)
         log_prob_act_batch = dist_batch.log_prob(act_batch)
@@ -184,7 +194,8 @@ class BPO(BaseAgent):
 
         # Hard Boltzman Loss
         hard_adv_hat = log_prob_act_batch - dist_batch.probs.log().mean(dim=-1)
-        pi_loss = (hard_adv_hat - adv_batch).pow(2).mean()
+        pi_loss = self.clipped_error(adv_batch, hard_adv_hat, old_hard_adv_batch)
+
 
         l1_reg = sum([param.abs().sum() for param in self.policy.parameters()])
 
