@@ -264,12 +264,9 @@ def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, see
 
 def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     hidden_state_dim = model.output_dim
-    if algo == 'ppo':
-        storage_cons = Storage
-    elif algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited']:
+    storage_cons = Storage
+    if algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited']:
         storage_cons = LirlStorage
-    else:
-        raise NotImplementedError(f"{algo} not implemented")
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
@@ -290,6 +287,8 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
         from agents.trusted_value import TrustedValue as AGENT
     elif algo == 'trusted-value-unlimited':
         from agents.trusted_value_unlimited import TrustedValue as AGENT
+    elif algo == 'bpo':
+        from agents.bpo import BPO as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,
