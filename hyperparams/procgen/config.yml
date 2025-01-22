@@ -237,6 +237,7 @@ hard-500-bpo:
     use_gae: True
     architecture: impala
     recurrent: False
+    bpo_clip: 1.0
 
 hard-500-low-mem:
     algo: ppo
