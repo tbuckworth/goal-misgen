@@ -128,8 +128,8 @@ class BPO(BaseAgent):
                     self.optimizer.step()
                     self.optimizer.zero_grad()
                 grad_accumulation_cnt += 1
-                pi_loss_list.append(-pi_loss.item())
-                value_loss_list.append(-value_loss.item())
+                pi_loss_list.append(pi_loss.item())
+                value_loss_list.append(value_loss.item())
                 entropy_loss_list.append(entropy_loss.item())
                 l1_reg_list.append(l1_reg.item())
                 total_loss_list.append(loss.item())
