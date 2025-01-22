@@ -11,6 +11,7 @@ if __name__ == '__main__':
         "param_name": "trusted-value",
         "wandb_tags": ["trusted value"],
         "algo": "trusted-value-unlimited",
+        "num_timesteps": int(1e7),
         "use_wandb": True,
         "val_epoch": 200,
         "mini_batch_size": 2048,
@@ -18,7 +19,7 @@ if __name__ == '__main__':
         "n_envs": 256 + 16,
         "n_steps": 256,
         "n_pos_states": 10,
-        "td_lmbda": True,
+        "td_lmbda": False,
         #TODO: have fewer hidden dims?
         "hidden_dims": [256, 256, 256, 256],
         "save_pics_ascender": False,
