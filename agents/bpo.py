@@ -257,7 +257,7 @@ class BPO(BaseAgent):
 
             # Optimize policy & valueq
             loss_fn = self.bpo_loss if self.t < num_bpo_timesteps else self.ppo_loss
-            summary = self.optimizer(loss_fn)
+            summary = self.optimize(loss_fn)
             # Log the training-procedure
             self.t += self.n_steps * self.n_envs
             rew_batch, done_batch = self.storage.fetch_log_data()
