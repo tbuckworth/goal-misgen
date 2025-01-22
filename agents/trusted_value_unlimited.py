@@ -125,20 +125,23 @@ class TrustedValue(BaseAgent):
         return act.detach().cpu().numpy(), log_prob_act, value, obs
 
     def train(self, num_timesteps):
-        # Collect supervised data for unshifted env
-        obs = self.env.reset()
-        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
-        done = np.zeros(self.n_envs)
-        self.collect_rollouts(done, hidden_state, obs, self.storage, self.env, self.trusted_policy)
+        min_loss = min_loss_val = np.inf
+        e = e_val = t = 0
+        while t < num_timesteps:
+            # Collect supervised data for unshifted env
+            obs = self.env.reset()
+            hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+            done = np.zeros(self.n_envs)
+            t += self.collect_rollouts(done, hidden_state, obs, self.storage, self.env, self.trusted_policy, self.value_model)
 
-        # Collect supervised data for shifted env
-        obs_v = self.env_valid.reset()
-        hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
-        done_v = np.zeros(self.n_envs)
-        self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_valid, self.env_valid, self.trusted_policy)
+            # Collect supervised data for shifted env
+            obs_v = self.env_valid.reset()
+            hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
+            done_v = np.zeros(self.n_envs)
+            self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_valid, self.env_valid, self.trusted_policy, self.value_model_val)
 
-        self.optimize_value(self.storage, self.value_model, self.value_optimizer, "Training")
-        self.optimize_value(self.storage_valid, self.value_model_val, self.value_optimizer_val, "Validation")
+            min_loss, e = self.optimize_value(self.storage, self.value_model, self.value_optimizer, "Training", min_loss, e)
+            min_loss_val, e_val = self.optimize_value(self.storage_valid, self.value_model_val, self.value_optimizer_val, "Validation", min_loss_val, e_val)
 
         self.env.close()
         if self.env_valid is not None:
@@ -160,7 +163,7 @@ class TrustedValue(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
         return self.n_steps * env.num_envs
 
-    def optimize_value(self, storage, value_model, value_optimizer, env_type, min_val_loss=np.inf):
+    def optimize_value(self, storage, value_model, value_optimizer, env_type, min_val_loss=np.inf, epochs=0):
         filepath = f'{self.logger.logdir}/{env_type}'
         if not os.path.exists(filepath):
             os.mkdir(filepath)
@@ -169,15 +172,11 @@ class TrustedValue(BaseAgent):
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
         grad_accumulation_cnt = 1
-
+        # if self.td_lmbda:
+        #     storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
         value_model.train()
-        e = 0
-        while True:
-            e += 1
-            if self.td_lmbda:
-                if e > 1:
-                    storage.store_values(value_model, self.device, mini_batch_size=self.mini_batch_size // 4)
-                storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
+        for e in range(self.val_epoch):
+
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=False,
                                                       valid_envs=self.n_val_envs,
@@ -220,7 +219,7 @@ class TrustedValue(BaseAgent):
 
             mean_val_loss = np.mean(val_losses_valid)
             wandb.log({
-                f'Loss/value_epoch': e,
+                f'Loss/value_epoch': e + epochs,
                 f'Loss/value_loss_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{env_type}': mean_val_loss,
             })
@@ -234,8 +233,7 @@ class TrustedValue(BaseAgent):
                 min_val_loss = mean_val_loss
             else:
                 if e >= self.val_epoch - 1:
-                    return min_val_loss
+                    return min_val_loss, e
             if self.save_pics_ascender and e % 100 == 0:
                 plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
-            e += 1
-        return min_val_loss
+        return min_val_loss, e

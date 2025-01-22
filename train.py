@@ -148,7 +148,7 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
-    if algo in ['canon', 'trusted-value']:
+    if algo in ['canon', 'trusted-value', 'trusted-value-unlimited']:
         if hyperparameters.get("load_value_models", False):
             valdir = hyperparameters.get("value_dir", None)
             value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training", valdir)
@@ -266,7 +266,7 @@ def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     hidden_state_dim = model.output_dim
     if algo == 'ppo':
         storage_cons = Storage
-    elif algo in ['ppo-lirl', 'canon', 'trusted-value']:
+    elif algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited']:
         storage_cons = LirlStorage
     else:
         raise NotImplementedError(f"{algo} not implemented")
@@ -288,6 +288,8 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
         from agents.canonicalise import Canonicaliser as AGENT
     elif algo == 'trusted-value':
         from agents.trusted_value import TrustedValue as AGENT
+    elif algo == 'trusted-value-unlimited':
+        from agents.trusted_value_unlimited import TrustedValue as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,

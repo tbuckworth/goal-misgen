@@ -157,14 +157,14 @@ def hp_run(model_file, tag):
 
 
 if __name__ == '__main__':
-    tag = "canon maze hard grouped actions"
+    tag = "canon maze hard grouped actions tdlmbda"
     ignore_errors = False
     for model_file in maze_dirs + new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
         if not ignore_errors:
             hp_run(model_file, tag=tag)
         else:
             try:
-                hp_run(model_file)
+                hp_run(model_file, tag)
             except Exception as e:
                 print(e)
                 try:
