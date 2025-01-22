@@ -150,8 +150,9 @@ def train(args):
         hyperparameters.update(ppo_lirl_params)
     if algo in ['canon', 'trusted-value']:
         if hyperparameters.get("load_value_models", False):
-            value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training")
-            value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation")
+            valdir = hyperparameters.get("value_dir", None)
+            value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training", valdir)
+            value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation", valdir)
             hidden_dims = value_cfg.get("hidden_dims", [32])
         else:
             hidden_dims = hyperparameters.get("hidden_dims", [32])

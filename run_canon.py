@@ -145,6 +145,7 @@ def hp_run(model_file, tag):
         "hidden_dims": [256, 256, 256],
 
         "load_value_models": True,
+        "value_dir": "logs/train/maze_aisc/value/2025-01-21__17-27-15__seed_1080",
         "soft_canonicalisation": False,
         "meg": False,
         # "use_unique_obs": True,

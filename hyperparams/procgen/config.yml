@@ -144,6 +144,7 @@ ascent-canon:
     load_value_models: False
     soft_canonicalisation: False
     meg: False
+    value_dir: None
 
 trusted-value:
     algo: trusted-value
