@@ -158,13 +158,12 @@ def train(args):
             hidden_dims = hyperparameters.get("hidden_dims", [32])
         model_constructor, value_model, value_model_val = construct_value_models(device, hyperparameters,
                                                                                  observation_shape, hidden_dims)
-        if hyperparameters.get("soft_canonicalisation", False):
-            value_model_logp = model_constructor(1)
-            value_model_logp_val = model_constructor(1)
-            value_model_logp.to(device)
-            value_model_logp_val.to(device)
-        else:
-            value_model_logp = value_model_logp_val = None
+        # if hyperparameters.get("soft_canonicalisation", False):
+        value_model_logp = model_constructor(1)
+        value_model_logp_val = model_constructor(1)
+        value_model_logp.to(device)
+        value_model_logp_val.to(device)
+
         if hyperparameters.get("meg", False):
             q_model = model_constructor(2)
             q_model_val = model_constructor(2)
