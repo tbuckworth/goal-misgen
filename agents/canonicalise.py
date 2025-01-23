@@ -133,7 +133,8 @@ class Canonicaliser(BaseAgent):
             logp_eval_policy = dist.log_prob(act)
             if not self.soft_adv:
                 # converting log pi to implied hard advantage func:
-                return (logp_eval_policy - dist.probs.log().mean(dim=-1)).cpu().numpy()
+                logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
+                return (logp_eval_policy - logp_exp).cpu().numpy()
         return logp_eval_policy.cpu().numpy()
 
     def predict(self, obs, hidden_state, done, policy=None):
@@ -570,7 +571,8 @@ class Canonicaliser(BaseAgent):
             adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
         else:
             # make it hard advantage func:
-            logp_batch -= dist.probs.log().mean(dim=-1)
+            logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
+            logp_batch -= logp_exp
             # N.B. Rew is function of next states in our storage
             adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
             # N.B. Rew is function of next states in our storage

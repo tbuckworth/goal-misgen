@@ -104,6 +104,8 @@ ascent_misgeneralising_but_low_valid_distance = [
 ]
 
 maze_value_networks = {
+    "Maze Value Original": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080",
+    "Maze Value Dodgy": "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080",
     "Maze Value TD_Lambda": "logs/train/maze_aisc/value/2025-01-22__10-09-39__seed_1080",
     "Maze Unlimited TD_0 10 Epochs": "logs/train/maze_aisc/value/2025-01-22__17-40-33__seed_1080",
     "Maze Unlimited TD_0 200 Epochs": "logs/train/maze_aisc/value/2025-01-22__10-18-06__seed_1080",
@@ -119,7 +121,7 @@ def get_seed(model_file):
         print("seed not found, using 42")
         return 42
 
-def hp_run(model_file, tag):
+def hp_run(model_file, tag_dict, tag):
     seed = get_seed(model_file)
     hparams = {
         # "model_file": model_file,
@@ -154,7 +156,7 @@ def hp_run(model_file, tag):
         "hidden_dims": [256, 256, 256],
 
         "load_value_models": True,
-        "value_dir": maze_value_networks[tag],
+        "value_dir": tag_dict[tag],
         "soft_canonicalisation": False,
         "meg": False,
         # "use_unique_obs": True,
@@ -169,10 +171,10 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
     for tag in tag_dict.keys():
         for model_file in model_files:
             if not ignore_errors:
-                hp_run(model_file, tag=tag)
+                hp_run(model_file, tag_dict, tag)
             else:
                 try:
-                    hp_run(model_file, tag)
+                    hp_run(model_file, tag_dict, tag)
                 except Exception as e:
                     print(e)
                     try:
@@ -188,7 +190,8 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
 
 if __name__ == '__main__':
     # tag = "canon maze hard grouped actions tdlmbda"
-    model_files = maze_dirs + new_maze_dirs
+    # model_files = maze_dirs + new_maze_dirs
+    # run_tags_for_files({"Maze_new_fixed":None}, model_files, ignore_errors=True)
 
     model_files = unique_ascent_dirs
     run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
