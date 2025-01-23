@@ -105,7 +105,7 @@ ascent_misgeneralising_but_low_valid_distance = [
 
 maze_value_networks = {
     "Maze Value Original": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080",
-    "Maze Value Dodgy": "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080",
+    # "Maze Value Dodgy": "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080",
     "Maze Value TD_Lambda": "logs/train/maze_aisc/value/2025-01-22__10-09-39__seed_1080",
     "Maze Unlimited TD_0 10 Epochs": "logs/train/maze_aisc/value/2025-01-22__17-40-33__seed_1080",
     "Maze Unlimited TD_0 200 Epochs": "logs/train/maze_aisc/value/2025-01-22__10-18-06__seed_1080",
@@ -190,8 +190,8 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
 
 if __name__ == '__main__':
     # tag = "canon maze hard grouped actions tdlmbda"
-    # model_files = maze_dirs + new_maze_dirs
-    # run_tags_for_files({"Maze_new_fixed":None}, model_files, ignore_errors=True)
+    model_files = maze_dirs + new_maze_dirs
+    run_tags_for_files(maze_value_networks, model_files, ignore_errors=True)
 
-    model_files = unique_ascent_dirs
-    run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
+    # model_files = unique_ascent_dirs
+    # run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
