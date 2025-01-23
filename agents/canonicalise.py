@@ -60,11 +60,12 @@ class Canonicaliser(BaseAgent):
                  soft_canonicalisation=True,
                  load_value_models=False,
                  meg=False,
+                 remove_duplicate_actions=True,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
-        self.remove_duplicate_actions = True
+        self.remove_duplicate_actions = remove_duplicate_actions
         self.n_actions = self.env.action_space.n
         self.meg = meg
         self.load_value_models = load_value_models
@@ -553,7 +554,10 @@ class Canonicaliser(BaseAgent):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
-            dist, act_batch = remove_duplicate_actions(dist, act_batch.to(torch.int32), self.env)
+            try:
+                dist, act_batch = remove_duplicate_actions(dist, act_batch.to(torch.int32), self.env)
+            except Exception as e:
+                pass
 
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()

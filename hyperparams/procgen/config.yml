@@ -145,6 +145,7 @@ ascent-canon:
     soft_canonicalisation: False
     meg: False
     value_dir: None
+    remove_duplicate_actions: True
 
 trusted-value:
     algo: trusted-value
