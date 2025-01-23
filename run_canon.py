@@ -168,7 +168,6 @@ def hp_run(model_file, tag_dict, tag):
     run_next_hyperparameters(hparams)
 
 def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
-    ignore_errors = True
     for tag in tag_dict.keys():
         for model_file in model_files:
             if not ignore_errors:
