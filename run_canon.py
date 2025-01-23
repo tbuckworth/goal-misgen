@@ -163,12 +163,10 @@ def hp_run(model_file, tag):
     }
     run_next_hyperparameters(hparams)
 
-
-if __name__ == '__main__':
-    # tag = "canon maze hard grouped actions tdlmbda"
+def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
     ignore_errors = True
-    for tag in maze_value_networks.keys():
-        for model_file in maze_dirs + new_maze_dirs:
+    for tag in tag_dict.keys():
+        for model_file in model_files:
             if not ignore_errors:
                 hp_run(model_file, tag=tag)
             else:
@@ -186,3 +184,10 @@ if __name__ == '__main__':
         except Exception as e:
             print(e)
             pass
+
+if __name__ == '__main__':
+    # tag = "canon maze hard grouped actions tdlmbda"
+    model_files = maze_dirs + new_maze_dirs
+
+    model_files = unique_ascent_dirs
+    run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files)
