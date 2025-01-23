@@ -563,6 +563,7 @@ class Canonicaliser(BaseAgent):
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
 
+
         if self.soft_adv:
             val_batch_logp = value_model_logp(obs_batch).squeeze()
             next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
