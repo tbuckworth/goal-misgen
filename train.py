@@ -289,6 +289,8 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
         from agents.trusted_value_unlimited import TrustedValue as AGENT
     elif algo == 'bpo':
         from agents.bpo import BPO as AGENT
+    elif algo == 'ppo-uniform':
+        from agents.ppo_uniform import PPO_Uniform as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,
