@@ -195,4 +195,4 @@ if __name__ == '__main__':
     # run_tags_for_files(maze_value_networks, model_files, ignore_errors=True)
 
     model_files = unique_ascent_dirs
-    run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
+    run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=False)
