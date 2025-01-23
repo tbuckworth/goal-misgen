@@ -101,11 +101,9 @@ class Canonicaliser(BaseAgent):
             self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer = optim.Adam(self.value_model.parameters(), lr=learning_rate, eps=1e-5)
         self.value_optimizer_val = optim.Adam(self.value_model_val.parameters(), lr=learning_rate, eps=1e-5)
-        if self.soft_adv:
-            self.value_optimizer_logp = optim.Adam(self.value_model_logp.parameters(), lr=learning_rate, eps=1e-5)
-            self.value_optimizer_logp_val = optim.Adam(self.value_model_logp_val.parameters(), lr=learning_rate, eps=1e-5)
-        else:
-            self.value_optimizer_logp = self.value_optimizer_logp_val = None
+        self.value_optimizer_logp = optim.Adam(self.value_model_logp.parameters(), lr=learning_rate, eps=1e-5)
+        self.value_optimizer_logp_val = optim.Adam(self.value_model_logp_val.parameters(), lr=learning_rate, eps=1e-5)
+
         if self.meg:
             self.q_optimizer = optim.Adam(self.q_model.parameters(), lr=learning_rate, eps=1e-5)
             self.q_optimizer_val = optim.Adam(self.q_model_val.parameters(), lr=learning_rate, eps=1e-5)
@@ -244,9 +242,8 @@ class Canonicaliser(BaseAgent):
         if not self.load_value_models:
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
-        if self.soft_adv:
-            self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
-            self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
+        self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
+        self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
 
         if self.meg:
             meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")
@@ -530,11 +527,9 @@ class Canonicaliser(BaseAgent):
         logp = torch.concat(list(logp_batch))
         rew = torch.concat(list(rew_batch))
         adj = torch.concat(list(adj_batch))
-        if self.soft_adv:
-            adj_logp = torch.concat(list(adj_batch_logp))
-            canon_logp = logp + adj_logp
-        else:
-            canon_logp = logp
+        adj_logp = torch.concat(list(adj_batch_logp))
+        canon_logp = logp + adj_logp
+
         canon_true_r = rew + adj
 
         # This is useful to see why there is a gap (in ascender at least).
@@ -563,25 +558,20 @@ class Canonicaliser(BaseAgent):
         next_val_batch = value_model(nobs_batch).squeeze()
         logp_batch = dist.log_prob(act_batch)
 
+        val_batch_logp = value_model_logp(obs_batch).squeeze()
+        next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
+        # N.B. This is for uniform policy, but probably makes sense for any policy.
+        # term_value = (1 / (1 - self.gamma)) * np.log(dist.logits.shape[-1])
+        term_value = 0
+        next_val_batch[done_batch.bool()] = term_value
+        adjustment = self.gamma * next_val_batch - val_batch
+        next_val_batch_logp[done_batch.bool()] = term_value
+        adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
 
-        if self.soft_adv:
-            val_batch_logp = value_model_logp(obs_batch).squeeze()
-            next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
-            # N.B. This is for uniform policy, but probably makes sense for any policy.
-            # term_value = (1 / (1 - self.gamma)) * np.log(dist.logits.shape[-1])
-            term_value = 0
-            next_val_batch[done_batch.bool()] = term_value
-            adjustment = self.gamma * next_val_batch - val_batch
-            next_val_batch_logp[done_batch.bool()] = term_value
-            adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
-        else:
+        if not self.soft_adv:
             # make it hard advantage func:
             logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
             logp_batch -= logp_exp
-            # N.B. Rew is function of next states in our storage
-            adjustment = self.gamma * next_val_batch * (1-done_batch) - val_batch
-            # N.B. Rew is function of next states in our storage
-            adjustment_logp = 0
-        
+
         return logp_batch, rew_batch, adjustment, adjustment_logp
 
