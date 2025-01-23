@@ -230,14 +230,14 @@ hard-500-bpo:
     learning_rate: 0.0005
     grad_clip_norm: 0.5
     eps_clip: 0.2
-    value_coef: 0.5
-    entropy_coef: 0.01
+    value_coef: 10.
+    entropy_coef: 0.
     normalize_adv: True
     normalize_rew: True
     use_gae: True
     architecture: impala
     recurrent: False
-    bpo_clip: 1.0
+    bpo_clip: 0.5
 
 hard-500-low-mem:
     algo: ppo
