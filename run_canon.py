@@ -102,6 +102,14 @@ ascent_misgeneralising_but_low_valid_distance = [
     "logs/train/ascent/Ascent/2024-11-19__12-55-04__seed_42"
 ]
 
+maze_value_networks = {
+    "Maze Value TD_Lambda": "logs/train/maze_aisc/value/2025-01-22__10-09-39__seed_1080",
+    "Maze Unlimited TD_0 10 Epochs": "logs/train/maze_aisc/value/2025-01-22__17-40-33__seed_1080",
+    "Maze Unlimited TD_0 200 Epochs": "logs/train/maze_aisc/value/2025-01-22__10-18-06__seed_1080",
+}
+
+
+
 
 def get_seed(model_file):
     try:
@@ -145,7 +153,7 @@ def hp_run(model_file, tag):
         "hidden_dims": [256, 256, 256],
 
         "load_value_models": True,
-        "value_dir": "logs/train/maze_aisc/value/2025-01-21__17-27-15__seed_1080",
+        "value_dir": maze_value_networks[tag],
         "soft_canonicalisation": False,
         "meg": False,
         # "use_unique_obs": True,
@@ -154,22 +162,23 @@ def hp_run(model_file, tag):
         # "learning_rate": 1e-3,
     }
     run_next_hyperparameters(hparams)
+    load_summary(env=tag, exclude_crafted=True, tag=tag)
 
 
 if __name__ == '__main__':
-    tag = "canon maze hard grouped actions tdlmbda"
-    ignore_errors = False
-    for model_file in maze_dirs + new_maze_dirs:#local_unique_ascent_dirs[len(local_unique_ascent_dirs) // 2:]:
-        if not ignore_errors:
-            hp_run(model_file, tag=tag)
-        else:
-            try:
-                hp_run(model_file, tag)
-            except Exception as e:
-                print(e)
+    # tag = "canon maze hard grouped actions tdlmbda"
+    ignore_errors = True
+    for tag in maze_value_networks.keys():
+        for model_file in maze_dirs + new_maze_dirs:
+            if not ignore_errors:
+                hp_run(model_file, tag=tag)
+            else:
                 try:
-                    import wandb
-                    wandb.finish()
+                    hp_run(model_file, tag)
                 except Exception as e:
-                    pass
-    load_summary(env=tag, exclude_crafted=True, tag=tag)
+                    print(e)
+                    try:
+                        import wandb
+                        wandb.finish()
+                    except Exception as e:
+                        pass

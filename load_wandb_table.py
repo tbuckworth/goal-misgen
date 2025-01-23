@@ -199,7 +199,7 @@ def load_all():
     print(final)
 
 
-def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, tag="canon maze hard grouped actions"):
+def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, tag=None):
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
