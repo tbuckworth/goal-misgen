@@ -17,7 +17,7 @@ class PPO_Uniform(PPO):
             hidden_state = torch.FloatTensor(hidden_state).to(device=self.device)
             mask = torch.FloatTensor(1-done).to(device=self.device)
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
-            p = (torch.ones_like(dist.probs, dtype=torch.float32, device=self.device)/dist.probs.shape(-1))
+            p = (torch.ones_like(dist.probs, dtype=torch.float32, device=self.device)/dist.probs.shape[-1])
             dist = Categorical(probs=p)
             act = dist.sample()
             log_prob_act = dist.log_prob(act)
