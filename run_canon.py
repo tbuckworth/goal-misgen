@@ -162,7 +162,6 @@ def hp_run(model_file, tag):
         # "learning_rate": 1e-3,
     }
     run_next_hyperparameters(hparams)
-    load_summary(env=tag, exclude_crafted=True, tag=tag)
 
 
 if __name__ == '__main__':
@@ -182,3 +181,8 @@ if __name__ == '__main__':
                         wandb.finish()
                     except Exception as e:
                         pass
+        try:
+            load_summary(env=tag, exclude_crafted=True, tag=tag)
+        except Exception as e:
+            print(e)
+            pass
