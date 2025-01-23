@@ -193,5 +193,5 @@ if __name__ == '__main__':
     model_files = maze_dirs + new_maze_dirs
     run_tags_for_files({"Maze Value Original - fixed": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"}, model_files, ignore_errors=True)
 
-    # model_files = unique_ascent_dirs
-    # run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=False)
+    model_files = unique_ascent_dirs
+    run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=False)
