@@ -5,10 +5,10 @@ from .ppo import PPO
 
 
 class PPO_Uniform(PPO):
-    def __init__(self,
-                 *args,
-                 **kwargs):
-        super(PPO_Uniform, self).__init__(args, kwargs)
+    # def __init__(self,
+    #              *args,
+    #              **kwargs):
+    #     super(PPO_Uniform, self).__init__(args, kwargs)
 
 
     def predict(self, obs, hidden_state, done):
