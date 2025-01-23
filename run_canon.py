@@ -190,4 +190,4 @@ if __name__ == '__main__':
     model_files = maze_dirs + new_maze_dirs
 
     model_files = unique_ascent_dirs
-    run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files)
+    run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
