@@ -159,7 +159,7 @@ def hp_run(model_file, tag_dict, tag):
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": False,
         "meg": False,
-        "remove_duplicate_actions": False,
+        "remove_duplicate_actions": True,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
         # "misgen": model_file,
@@ -191,8 +191,8 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
 
 if __name__ == '__main__':
     # tag = "canon maze hard grouped actions tdlmbda"
-    model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files(maze_value_networks, model_files, ignore_errors=True)
+    # model_files = maze_dirs + new_maze_dirs
+    # run_tags_for_files(maze_value_networks, model_files, ignore_errors=True)
 
-    # model_files = unique_ascent_dirs
-    # run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
+    model_files = unique_ascent_dirs
+    run_tags_for_files({"Ascent_Hard_No_Canon_redo":None}, model_files, ignore_errors=False)
