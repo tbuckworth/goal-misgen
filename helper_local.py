@@ -49,8 +49,9 @@ def create_shifted_venv(args, hyperparameters):
     return create_venv(args, hyperparameters, True)
 
 def create_venv(args, hyperparameters, is_valid=False):
+    n_envs = hyperparameters.get('n_envs', 256)
     if args.env_name == "ascent":
-        return AscentEnv(num_envs=hyperparameters.get('n_envs', 256),
+        return AscentEnv(num_envs=n_envs,
                          shifted=is_valid,
                          num_positive_states=hyperparameters.get('n_pos_states', 20),
                          dense_rewards=hyperparameters.get('dense_rewards', False),
@@ -60,16 +61,27 @@ def create_venv(args, hyperparameters, is_valid=False):
     # TODO: give this proper seed:
     #  also check if reset uses the same initial levels
     start_level_val = random.randint(0, 9999)
-    venv = ProcgenEnv(num_envs=hyperparameters.get('n_envs', 256),
-                      env_name=val_env_name if is_valid else args.env_name,
-                      num_levels=0 if is_valid else args.num_levels,
-                      start_level=start_level_val if is_valid else args.start_level,
-                      distribution_mode=args.distribution_mode,
-                      num_threads=args.num_threads,
-                      random_percent=args.random_percent,
-                      step_penalty=args.step_penalty,
-                      key_penalty=args.key_penalty,
-                      rand_region=args.rand_region)
+    try:
+        venv = ProcgenEnv(num_envs=n_envs,
+                          env_name=val_env_name if is_valid else args.env_name,
+                          num_levels=0 if is_valid else args.num_levels,
+                          start_level=start_level_val if is_valid else args.start_level,
+                          distribution_mode=args.distribution_mode,
+                          num_threads=args.num_threads,
+                          random_percent=args.random_percent,
+                          step_penalty=args.step_penalty,
+                          key_penalty=args.key_penalty,
+                          rand_region=args.rand_region)
+    except TypeError as e:
+        print("Using Real Procgen")
+        venv = ProcgenEnv(num_envs=n_envs,
+                          env_name=val_env_name if is_valid else args.env_name,
+                          num_levels=0 if is_valid else args.num_levels,
+                          start_level=start_level_val if is_valid else args.start_level,
+                          paint_vel_info=hyperparameters.get("paint_vel_info", True),
+                          distribution_mode=args.distribution_mode,
+                          num_threads=args.num_threads,
+                          )
     venv = VecExtractDictObs(venv, "rgb")
     normalize_rew = hyperparameters.get('normalize_rew', True)
     if normalize_rew:
