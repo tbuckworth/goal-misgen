@@ -61,10 +61,12 @@ class Canonicaliser(BaseAgent):
                  load_value_models=False,
                  meg=False,
                  remove_duplicate_actions=True,
+                 centered_logprobs=False,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.centered_logprobs = centered_logprobs
         self.remove_duplicate_actions = remove_duplicate_actions
         self.n_actions = self.env.action_space.n
         self.meg = meg
@@ -131,6 +133,8 @@ class Canonicaliser(BaseAgent):
             dist, value, hidden_state = self.policy(obs, hidden_state, mask)
             logp_eval_policy = dist.log_prob(act)
             if not self.soft_adv:
+                if self.centered_logprobs:
+                    return (logp_eval_policy - dist.probs.log().mean(dim=-1)).cpu().numpy()
                 # converting log pi to implied hard advantage func:
                 logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
                 return (logp_eval_policy - logp_exp).cpu().numpy()
@@ -569,9 +573,12 @@ class Canonicaliser(BaseAgent):
         adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
 
         if not self.soft_adv:
-            # make it hard advantage func:
-            logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
-            logp_batch -= logp_exp
+            if self.centered_logprobs:
+                logp_batch -= dist.probs.log().mean(dim=-1)
+            else:
+                # make it hard advantage func:
+                logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
+                logp_batch -= logp_exp
 
         return logp_batch, rew_batch, adjustment, adjustment_logp
 

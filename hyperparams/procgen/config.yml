@@ -146,6 +146,7 @@ ascent-canon:
     meg: False
     value_dir: None
     remove_duplicate_actions: True
+    centered_logprobs: False
 
 trusted-value:
     algo: trusted-value
