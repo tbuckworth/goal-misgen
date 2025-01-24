@@ -189,10 +189,11 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
             pass
 
 if __name__ == '__main__':
-    # tag = "canon maze hard grouped actions tdlmbda"
-    model_files = maze_dirs + new_maze_dirs
+    # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze Value Original - fixed1": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"},
     #                    model_files, ignore_errors=False)
 
-    model_files = unique_ascent_dirs
-    run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=False)
+    # model_files = local_unique_ascent_dirs
+    # run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=True)
+
+    run_tags_for_files({"Coinrun_Hard_Canon_corrected": None}, coinrun_dirs, ignore_errors=True)
