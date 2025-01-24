@@ -386,4 +386,6 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
 
 
 if __name__ == "__main__":
-    load_summary()
+    tag = "Maze Value Original - fixed1"
+    tag = "Coinrun_Hard_Canon_corrected"
+    load_summary(env=tag, tag=tag)
