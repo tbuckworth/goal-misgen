@@ -357,8 +357,8 @@ class Canonicaliser(BaseAgent):
             value_optimizer.step()
             value_optimizer.zero_grad()
             # grad_accumulation_cnt += 1
-            if e == self.val_epoch - 1:
-                plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
+            # if e == self.val_epoch - 1:
+            #     plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
 
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,

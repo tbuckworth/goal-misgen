@@ -146,7 +146,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 300,
+        "val_epoch": 100,
         "mini_batch_size": 2048,
         "n_val_envs": 32,
         "n_envs": int(256 + 32),
@@ -191,7 +191,8 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # tag = "canon maze hard grouped actions tdlmbda"
     model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze Value Original - fixed": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"}, model_files, ignore_errors=True)
+    run_tags_for_files({"Maze Value Original - fixed1": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"},
+                       model_files, ignore_errors=False)
 
-    model_files = unique_ascent_dirs
-    run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=False)
+    # model_files = unique_ascent_dirs
+    # run_tags_for_files({"Ascent_Hard_Canon_corrected":None}, model_files, ignore_errors=False)
