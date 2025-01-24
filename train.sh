@@ -12,4 +12,4 @@ TERM=vt100
 export CUDA_DIR=/vol/cuda/12.2.0/:${CUDAPATH}
 export XLA_FLAGS=--xla_gpu_cuda_data_dir=/vol/cuda/12.2.0/
 #python3.8 /vol/bitbucket/${USER}/goal-misgen/train.py --exp_name coinrun --env_name coinrun --num_levels 1000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 6033 --use_wandb
-python3.8 /vol/bitbucket/${USER}/goal-misgen/train.py --exp_name maze1 --env_name maze_aisc --num_levels 1000 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 42 --use_wandb
+python3.8 /vol/bitbucket/${USER}/goal-misgen/train.py --exp_name maze1 --env_name maze_aisc --num_levels 500 --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed 42 --use_wandb
