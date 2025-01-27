@@ -148,7 +148,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 300,
+        "val_epoch": 150,
         "mini_batch_size": 2048,
         "n_val_envs": 32,
         "n_envs": int(256 + 32),
@@ -159,7 +159,7 @@ def hp_run(model_file, tag_dict, tag):
 
         "load_value_models": True,
         "value_dir": tag_dict[tag],
-        "soft_canonicalisation": False,
+        "soft_canonicalisation": True,
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
@@ -193,7 +193,7 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
 
 if __name__ == '__main__':
     model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_PPO_Value_fixed": "ppo"}, model_files, ignore_errors=False)
+    run_tags_for_files({"Maze_VOrig_soft": None}, model_files, ignore_errors=False)
 
     # run_tags_for_files({"Ascent_Centred_Canon_Test":None}, local_unique_ascent_dirs, ignore_errors=False)
 
