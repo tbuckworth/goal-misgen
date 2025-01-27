@@ -118,7 +118,7 @@ class TabularMDPs:
         self.T = (torch.rand((self.N, self.n_states, self.n_actions, self.n_states),device=self.device)*100).softmax(dim=-1)
         self.reward_vector = (torch.rand((self.N, self.n_states), device=self.device)*1000).softmax(dim=-1)*10
         self.gamma = torch.rand((self.N,), device=self.device)/10 + 0.9
-        self.belmann_policy = self.q_value_iteration()
+        self.belmann_policy = self.q_value_iteration(100000)
         self.policies = {"Belmann": self.belmann_policy}
         self.normalize = lambda x: x if (x == 0).all() else x / x.pow(2).mean(dim=(-1,-2), keepdim=True).sqrt()
         self.distance = lambda x, y: (x - y).pow(2).mean(dim=(-1,-2)).sqrt()
@@ -127,7 +127,7 @@ class TabularMDPs:
 
     def calc_pircs(self, verbose=True):
         self.canon = self.canonicalise(self.reward_vector)
-        hard_style = ["Centred no C"]
+        hard_style = ["Centred no C", "Centred"]
         for pirc_type in hard_style + ["Soft", "Hard"]:
             self.pirc(pirc_type)
         p = self.pircs
@@ -946,7 +946,7 @@ def try_hard_adv_train():
     envs[name].policies[policy].soft_canon.print()
 
 def vMDP():
-    envs = TabularMDPs(10)
+    envs = TabularMDPs(50)
 
 if __name__ == "__main__":
     vMDP()
