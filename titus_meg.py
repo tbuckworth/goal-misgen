@@ -275,15 +275,15 @@ class TabularMDP:
 
     def calc_pirc(self, policy, pirc_type, own_policy=False):
         trusted_pi = policy.pi if own_policy else None
-        if pirc_type in ["Hard", "Hard no C"]:
+        if pirc_type in ["Centred", "Centred no C"]:
             adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
-            if pirc_type == "Hard":
-                policy.hard_canon = self.canonicalise(adv, trusted_pi)
-                ca = policy.hard_canon.C
-            elif pirc_type == "Hard no C":
+            if pirc_type == "Centred":
+                policy.centred_canon = self.canonicalise(adv, trusted_pi)
+                ca = policy.centred_canon.C
+            elif pirc_type == "Centred no C":
                 v = torch.zeros((adv.shape[0], 1))
                 z = torch.zeros_like(adv)
-                policy.hard_no_canon = RewardFunc(adv, v, z, z)
+                policy.centred_no_canon = RewardFunc(adv, v, z, z)
                 ca = adv
             else:
                 raise NotImplementedError
@@ -291,6 +291,10 @@ class TabularMDP:
             adv = policy.log_pi
             policy.soft_canon = self.canonicalise(adv, trusted_pi)
             ca = policy.soft_canon.C
+        elif pirc_type == "Hard":
+            adv = policy.log_pi - (policy.pi * policy.log_pi).sum(dim=-1).unsqueeze(dim=-1)
+            policy.hard_canon = self.canonicalise(adv, trusted_pi)
+            ca = policy.hard_canon.C
         else:
             raise NotImplementedError(f"pirc_type must be one of 'Hard','Hard no C','Soft'. Not {pirc_type}.")
 
@@ -332,7 +336,7 @@ class TabularMDP:
         for name, policy in self.policies.items():
             pirc = self.calc_new_pirc(policy, is_hard)
             pircs[name] = pirc
-        type_name = "Hard" if is_hard else "Soft"
+        type_name = "Centred" if is_hard else "Soft"
         self.new_pircs[type_name] = pircs
 
     def calc_megs(self, verbose=False):
@@ -346,10 +350,10 @@ class TabularMDP:
 
     def calc_pircs(self, verbose=False, own_policy=False):
         self.canon = self.canonicalise(self.reward_vector)
-        hard_style = ["Hard no C"]
+        hard_style = ["Centred no C"]
         if own_policy:
-            hard_style = ["Hard"]
-        for pirc_type in hard_style + ["Soft"]:
+            hard_style = ["Centred"]
+        for pirc_type in hard_style + ["Soft", "Hard"]:
             self.pirc(pirc_type, own_policy)
         p = self.own_pircs if own_policy else self.pircs
         df = pd.DataFrame(p).round(decimals=2)
@@ -373,7 +377,7 @@ class TabularMDP:
         returns = {}
         for name, policy in self.policies.items():
             returns[name] = self.evaluate_policy(policy)
-        self.returns["Hard"] = returns
+        self.returns["Centred"] = returns
         df = pd.DataFrame(self.returns).round(decimals=2)
         if verbose:
             print(f"{self.name} Environment")
@@ -729,7 +733,7 @@ meg_funcs = {
 
 
 def main():
-    envs = [MattGridworld(), OneStep(), AscenderLong(n_states=6), ]
+    envs = [AscenderLong(n_states=6), MattGridworld(), OneStep(), ]
     envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
@@ -743,6 +747,7 @@ def main():
     envs[name].canon.print()
     envs[name].policies[policy].soft_canon.print()
     envs[name].policies[policy].hard_canon.print()
+
 
     for _, env in envs.items():
         for _, policy in env.policies.items():
@@ -772,5 +777,5 @@ def try_hard_adv_train():
 
 
 if __name__ == "__main__":
-    # main()
-    try_hard_adv_train()
+    main()
+    # try_hard_adv_train()
