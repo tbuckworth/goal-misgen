@@ -90,11 +90,11 @@ new_maze_dirs = [
 ]
 
 coinrun_dirs = [
-    "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth", # random_percent = 0
-    "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth", # random_percent = 10
-    "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
-    # "logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033", # rp = 0, levels = 1000 (still running, so uncomment)
-    # "logs/train/coinrun/coinrun/2025-01-24__15-30-53__seed_6033", # rp = 0, levels = 2000 (still running, uncomment)
+    # "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth", # random_percent = 0
+    # "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth", # random_percent = 10
+    # "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
+    "logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033", # rp = 0, levels = 1000 (still running, so uncomment)
+    "logs/train/coinrun/coinrun/2025-01-24__15-30-53__seed_6033", # rp = 0, levels = 2000 (still running, uncomment)
 ]
 
 # generalising_ascender = [
@@ -192,10 +192,10 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
             pass
 
 if __name__ == '__main__':
-    model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Centred": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"},
-                       model_files, ignore_errors=False)
+    # model_files = maze_dirs + new_maze_dirs
+    # run_tags_for_files({"Maze_VOrig_Centred": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"},
+    #                    model_files, ignore_errors=False)
 
     # run_tags_for_files({"Ascent_Centred_Canon_Test":None}, local_unique_ascent_dirs, ignore_errors=False)
 
-    # run_tags_for_files({"Coinrun_Hard_Canon_corrected": None}, coinrun_dirs, ignore_errors=True)
+    run_tags_for_files({"Coinrun_Hard_Canon_corrected": None}, coinrun_dirs, ignore_errors=True)
