@@ -3,7 +3,7 @@ import re
 from common.env.procgen_wrappers import *
 from common.logger import Logger
 from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu, ImpalaValueModel
-from common.policy import UniformPolicy, CraftedTorchPolicy
+from common.policy import UniformPolicy, CraftedTorchPolicy, ValuePolicyWrapper
 from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
@@ -12,13 +12,24 @@ import random
 import torch
 
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
-    create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv
+    create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv, get_model_with_largest_checkpoint
 
 try:
     import wandb
     from private_login import wandb_login
 except ImportError:
     pass
+
+
+def load_ppo_value_models(env_name, env, observation_shape, device, val_type):
+    if env_name == "maze" or env_name == "maze_aisc":
+        logdir = "logs/train/maze_aisc/value/2025-01-23__custom__seed_42"
+    else:
+        raise NotImplementedError("ppo value models only trained for maze so far")
+    value_dir = os.path.join(logdir, val_type)
+    cfg = get_config(value_dir)
+    _, policy = initialize_policy(device, cfg, env, observation_shape)
+    return policy, get_model_with_largest_checkpoint(value_dir)
 
 
 def train(args):
@@ -101,18 +112,6 @@ def train(args):
     hyperparameters["logdir"] = logdir
     print(f'Logging to {logdir}')
 
-    cfg = vars(args)
-    cfg.update(hyperparameters)
-    np.save(os.path.join(logdir, "config.npy"), cfg)
-
-    if args.use_wandb:
-        wandb_login()
-        cfg = vars(args)
-        cfg.update(hyperparameters)
-        wb_resume = "allow"  # if args.model_file is None else "must"
-        wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
-    logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
-
     ###########
     ## MODEL ##
     ###########
@@ -128,6 +127,11 @@ def train(args):
     print('INITIALIZING STORAGE...')
     storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps,
                                                                                       observation_shape, algo)
+
+    ppo_value = True if hyperparameters.get("value_dir", None) == "ppo" else False
+    if ppo_value:
+        value_model, value_dir = load_ppo_value_models(env_name, env, observation_shape, device, "Training")
+        value_model_val, value_dir_valid = load_ppo_value_models(env_name, env, observation_shape, device, "Validation")
 
     if algo == 'ppo-lirl':
         hidden_dims = hyperparameters.get("hidden_dims", [64, 64])
@@ -148,12 +152,14 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
-    if algo in ['canon', 'trusted-value', 'trusted-value-unlimited']:
+    if algo in ['canon', 'trusted-value', 'trusted-value-unlimited'] and not ppo_value:
         if hyperparameters.get("load_value_models", False):
             valdir = hyperparameters.get("value_dir", None)
             value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training", valdir)
             value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation", valdir)
             hidden_dims = value_cfg.get("hidden_dims", [32])
+            if valdir is None:
+                hyperparameters["value_dir"] = value_dir
         else:
             hidden_dims = hyperparameters.get("hidden_dims", [32])
         model_constructor, value_model, value_model_val = construct_value_models(device, hyperparameters,
@@ -197,6 +203,18 @@ def train(args):
         )
         hyperparameters.update(canon_params)
 
+    cfg = vars(args)
+    cfg.update(hyperparameters)
+    np.save(os.path.join(logdir, "config.npy"), cfg)
+
+    if args.use_wandb:
+        wandb_login()
+        cfg = vars(args)
+        cfg.update(hyperparameters)
+        wb_resume = "allow"  # if args.model_file is None else "must"
+        wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
+    logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
+
     ###########
     ## AGENT ##
     ###########
@@ -216,7 +234,9 @@ def train(args):
         checkpoint = torch.load(value_dir_valid)
         agent.value_model_val.load_state_dict(checkpoint["model_state_dict"])
         agent.value_optimizer_val.load_state_dict(checkpoint["optimizer_state_dict"])
-
+        if ppo_value:
+            agent.value_model = ValuePolicyWrapper(agent.value_model)
+            agent.value_model_val = ValuePolicyWrapper(agent.value_model_val)
     ##############
     ## TRAINING ##
     ##############

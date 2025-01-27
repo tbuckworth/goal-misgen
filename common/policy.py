@@ -54,6 +54,14 @@ class CategoricalPolicy(nn.Module):
         v = self.fc_value(hidden).reshape(-1)
         return p, v, hidden
 
+class ValuePolicyWrapper(nn.Module):
+    def __init__(self, policy):
+        super(ValuePolicyWrapper, self).__init__()
+        self.policy = policy
+
+    def forward(self, x):
+        return self.policy.value(x)
+
 class UniformPolicy(nn.Module):
     def __init__(self, action_size, device, input_dims=1):
         """

@@ -35,6 +35,9 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None):
             # raise NotImplementedError("Need to train value for maze")
         else:
             raise NotImplementedError(f"{env_name} is not a recognised environment")
+    elif logdir == "ppo":
+        if env_name == "maze" or env_name == "maze_aisc":
+            logdir = "logs/train/maze_aisc/value/2025-01-23__custom__seed_42"
     cfg = get_config(logdir)
     return cfg, os.path.join(logdir, env_type, "model_min_val_loss.pth")
 
