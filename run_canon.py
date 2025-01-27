@@ -90,9 +90,9 @@ new_maze_dirs = [
 ]
 
 coinrun_dirs = [
-    # "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth", # random_percent = 0
-    # "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth", # random_percent = 10
-    # "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
+    "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth", # random_percent = 0
+    "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth", # random_percent = 10
+    "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
     "logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033", # rp = 0, levels = 1000 (still running, so uncomment)
     "logs/train/coinrun/coinrun/2025-01-24__15-30-53__seed_6033", # rp = 0, levels = 2000 (still running, uncomment)
 ]
