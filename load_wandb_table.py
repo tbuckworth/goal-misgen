@@ -205,7 +205,7 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
     min_train_reward = 9
-    if tag is not None:
+    if tag is None:
         if env == "ascent":
             # Original:
             tag = "canon misgen3"
@@ -221,16 +221,21 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
         elif env == "ascent-new2":
             tag = "canon ascent new1"
         elif env == "ascent-soft":
+            # This was incorrectly using infinite terminal state for canonicalising.
             tag = "canon ascent soft2"
         elif env == "ascent-hard":
+            # This one was learning value func on soft adv and then canonicalising logpi - mean logpi with that
+            # So wrong, basically
             tag = "canon ascent hard"
         elif env == "ascent-hard_meg":
             tag = "canon ascent hard+meg3"
             meg_adj = True
         elif env == "ascent-hard_no_meg":
+            # This one was canonicalising log pi - mean log pi and is best results, bizarrely.
             tag = "canon ascent hard+meg3"
             meg_adj = False
         elif env == "ascent-soft_no_meg":
+            # This one was legit
             tag = "canon ascent soft+meg"
         elif env == "ascent-soft_meg":
             tag = "canon ascent soft+meg"
@@ -388,4 +393,4 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
 if __name__ == "__main__":
     tag = "Maze Value Original - fixed1"
     tag = "Coinrun_Hard_Canon_corrected"
-    load_summary(env=tag, tag=tag)
+    load_summary(env="coinrun hard grouped", tag=None)

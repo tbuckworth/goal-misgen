@@ -162,7 +162,7 @@ def hp_run(model_file, tag_dict, tag):
         "soft_canonicalisation": False,
         "meg": False,
         "remove_duplicate_actions": True,
-        "centered_logprobs": True
+        "centered_logprobs": False,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
         # "misgen": model_file,
