@@ -192,9 +192,9 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
             pass
 
 if __name__ == '__main__':
-    model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_soft": None}, model_files, ignore_errors=False)
+    # model_files = maze_dirs + new_maze_dirs
+    # run_tags_for_files({"Maze_VOrig_soft": None}, model_files, ignore_errors=False)
 
     # run_tags_for_files({"Ascent_Centred_Canon_Test":None}, local_unique_ascent_dirs, ignore_errors=False)
 
-    # run_tags_for_files({"Coinrun_Hard_Canon_corrected": None}, coinrun_dirs, ignore_errors=True)
+    run_tags_for_files({"Coinrun_Soft_Canon": None}, coinrun_dirs, ignore_errors=True)
