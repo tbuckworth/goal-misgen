@@ -30,7 +30,7 @@ To create the virtual environment:
 ```
 virtualenv -p python3.8 path_to_your_venv
 source path_to_your_venv/bin/activate
-pip install gym gym3 matplotlib numpy pandas Pillow PyYAML seaborn torch torchvision tqdm imitation
+pip install gym gym3 matplotlib numpy pandas Pillow PyYAML seaborn torch torchvision tqdm imitation wandb
 ```
 
 Installing the modified ProcGen:
