@@ -6,9 +6,9 @@ import numpy as np
 import einops
 
 from meg.meg_colab import unknown_utility_meg, state_action_occupancy
+from matplotlib import pyplot as plt
 
 
-# from helper_local import norm_funcs, dist_funcs
 
 def cosine_similarity_loss(vec1, vec2):
     return 1 - F.cosine_similarity(vec1.reshape(-1), vec2.reshape(-1), dim=-1).mean()
@@ -27,6 +27,41 @@ dist_funcs = {
 
 GAMMA = 0.9
 
+
+def plot_canonicalised_rewards(canon, hard_canon):
+    # 1. Compute the L2 norm of the 'Canonicalised Reward' column for each DataFrame
+    canon_l2_norm = np.linalg.norm(canon['Canonicalised Reward'])
+    hard_canon_l2_norm = np.linalg.norm(hard_canon['Canonicalised Reward'])
+
+    # 2. Create normalized columns (or Series)
+    canon['Normalized Canonicalised Reward'] = canon['Canonicalised Reward'] / canon_l2_norm
+    hard_canon['Normalized Canonicalised Reward'] = hard_canon['Canonicalised Reward'] / hard_canon_l2_norm
+
+    # 3. Create a figure and subplots
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    # Subplot 1: Reward
+    axes[0].scatter(hard_canon['Reward'], canon['Reward'], alpha=0.6)
+    axes[0].set_xlabel('hard_canon: Reward')
+    axes[0].set_ylabel('canon: Reward')
+    axes[0].set_title('Reward Comparison')
+
+    # Subplot 2: Canonicalised Reward
+    axes[1].scatter(hard_canon['Canonicalised Reward'], canon['Canonicalised Reward'], alpha=0.6, color='orange')
+    axes[1].set_xlabel('hard_canon: Canonicalised Reward')
+    axes[1].set_ylabel('canon: Canonicalised Reward')
+    axes[1].set_title('Canonicalised Reward Comparison')
+
+    # Subplot 3: Normalized Canonicalised Reward
+    axes[2].scatter(hard_canon['Normalized Canonicalised Reward'],
+                    canon['Normalized Canonicalised Reward'],
+                    alpha=0.6, color='green')
+    axes[2].set_xlabel('hard_canon: Normalized Canonicalised Reward')
+    axes[2].set_ylabel('canon: Normalized Canonicalised Reward')
+    axes[2].set_title('Normalized Canonicalised Reward Comparison')
+
+    plt.tight_layout()
+    plt.show()
 
 class TabularPolicy:
     def __init__(self, name, pi, Q=None, V=None):
@@ -53,8 +88,8 @@ class RewardFunc:
         self.v = v
         self.next_v = next_v
         self.C = R + adjustment
-        self.n_actions = self.R.shape[1]
-        self.n_states = self.R.shape[0]
+        self.n_actions = self.R.shape[-1]
+        self.n_states = self.R.shape[-2]
         self.state = torch.arange(self.n_states).unsqueeze(-1).tile(self.n_actions)
         self.action = torch.arange(self.n_actions).unsqueeze(0).tile(self.n_states, 1)
         self.data = {
@@ -72,6 +107,136 @@ class RewardFunc:
 
     def print(self):
         print(self.df.round(decimals=2))
+
+class TabularMDPs:
+    def __init__(self, n_mdps):
+        self.pircs = {}
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.N = n_mdps
+        self.n_states = 15
+        self.n_actions = 5
+        self.T = (torch.rand((self.N, self.n_states, self.n_actions, self.n_states),device=self.device)*100).softmax(dim=-1)
+        self.reward_vector = (torch.rand((self.N, self.n_states), device=self.device)*1000).softmax(dim=-1)*10
+        self.gamma = torch.rand((self.N,), device=self.device)/10 + 0.9
+        self.belmann_policy = self.q_value_iteration()
+        self.policies = {"Belmann": self.belmann_policy}
+        self.normalize = lambda x: x if (x == 0).all() else x / x.pow(2).mean(dim=(-1,-2), keepdim=True).sqrt()
+        self.distance = lambda x, y: (x - y).pow(2).mean(dim=(-1,-2)).sqrt()
+        self.uniform = torch.ones((self.N, self.n_states, self.n_actions), device=self.device).softmax(dim=-1)
+        self.calc_pircs()
+
+    def calc_pircs(self, verbose=True):
+        self.canon = self.canonicalise(self.reward_vector)
+        hard_style = ["Centred no C"]
+        for pirc_type in hard_style + ["Soft", "Hard"]:
+            self.pirc(pirc_type)
+        p = self.pircs
+        df = pd.DataFrame(p).round(decimals=2)
+        if verbose:
+            print(df)
+        return df
+
+    def q_value_iteration(self, n_iterations=10000, print_message=True, argmax=False):
+        T = self.T
+        R = self.reward_vector.unsqueeze(-1)
+        gamma = self.gamma.unsqueeze(-1)
+        n_states = self.n_states
+        n_actions = self.n_actions
+        Q = torch.zeros((self.N, n_states, n_actions), device=self.device)
+
+        for i in range(n_iterations):
+            old_Q = Q
+            V = Q.max(dim=-1).values
+            Q = einops.einsum(T, gamma * V, 'N states actions next_states, N next_states -> N states actions') + R
+
+            if (Q - old_Q).abs().max() < 1e-5:
+                if print_message:
+                    print(f'Q-value iteration converged in {i} iterations')
+                if argmax:
+                    # NOT SURE THIS WOULD WORK:
+                    pi = torch.nn.functional.one_hot(Q.argmax(dim=-2), num_classes=n_actions).float()
+                    policy_name = "Hard Argmax"
+                else:
+                    policy_name = "Hard Smax"
+                    pi = (Q * 1000).softmax(dim=-1)
+                return TabularPolicy(policy_name, pi, Q, V)
+
+        print(f"Q-value iteration did not converge in {i} iterations")
+        return None
+
+    def pirc(self, pirc_type, own_policy=False):
+        pircs = {}
+        assert len(self.policies)==1, "Need to change below to pircs, rather than pirc"
+        for name, policy in self.policies.items():
+            pirc = self.calc_pirc(policy, pirc_type)
+            pircs[name] = pirc
+        self.pircs[pirc_type] = pirc
+
+    def calc_pirc(self, policy, pirc_type):
+        trusted_pi = None
+        if pirc_type in ["Centred", "Centred no C"]:
+            adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
+            if pirc_type == "Centred":
+                ca = self.canonicalise(adv, trusted_pi)
+            elif pirc_type == "Centred no C":
+                ca = adv
+            else:
+                raise NotImplementedError
+        elif pirc_type == "Soft":
+            adv = policy.log_pi
+            ca = self.canonicalise(adv, trusted_pi)
+        elif pirc_type == "Hard":
+            adv = policy.log_pi - (policy.pi * policy.log_pi).sum(dim=-1).unsqueeze(dim=-1)
+            ca = self.canonicalise(adv, trusted_pi)
+        else:
+            raise NotImplementedError(f"pirc_type must be one of 'Hard','Hard no C','Soft'. Not {pirc_type}.")
+
+        comp_canon = self.canon
+
+        nca = self.normalize(ca)
+        ncr = self.normalize(comp_canon)
+
+        return self.distance(nca, ncr).tolist()
+
+    def canonicalise(self, R, trusted_pi=None):
+        if trusted_pi is None:
+            trusted_pi = self.uniform
+
+        R3 = torch.zeros_like(self.T, device=self.device)
+
+        if R.ndim == 2:
+            # N, State reward becomes N, state, action, next state
+            R3 = R.unsqueeze(-2).unsqueeze(-2).tile([1] + list(self.T.shape[-3:-1]) + [1])
+        elif R.ndim == 3:
+            # N, State, action reward becomes N, state, action, next state
+            R3 = R.unsqueeze(-1).tile(self.T.shape[-1])
+        elif R.ndim == 4:
+            R3 = R
+        else:
+            raise Exception(f"R.ndim must be 2, 3, or 4, not {R.ndim}.")
+
+        v = self.value_iteration(trusted_pi, R3)
+
+        R2 = (R3 * self.T).sum(dim=-1)
+
+        next_v = (self.T * v.unsqueeze(-2).unsqueeze(-2)).sum(dim=-1)
+        adjustment = self.gamma.unsqueeze(-1).unsqueeze(-1) * next_v - v.unsqueeze(-1)
+
+        return R2 + adjustment
+
+    def value_iteration(self, pi, R, n_iterations: int = 10000):
+        T = self.T
+        n_states = self.n_states
+        V = torch.zeros((self.N, n_states), device=self.device)
+        gamma = self.gamma.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        for _ in range(n_iterations):
+            old_V = V
+            Q = einops.einsum(T, (R + gamma * V.unsqueeze(-2).unsqueeze(-2)), "N s a ns, N s a ns -> N s a")
+            V = einops.einsum(pi, Q, "N s a, N s a -> N s")
+            if (V - old_V).abs().max() < 1e-5:
+                return V
+        print(f"Value Iteration did not converge after {n_iterations} iterations.")
+        return None
 
 
 class TabularMDP:
@@ -743,11 +908,17 @@ def main():
     return
 
     name = "Ascender: 2 Pos States"
+    name = "Matt Gridworld"
     policy = "Hard Smax"
     envs[name].canon.print()
     envs[name].policies[policy].soft_canon.print()
     envs[name].policies[policy].hard_canon.print()
 
+    p = envs[name].policies[policy]
+    plot_canonicalised_rewards(envs[name].canon.df, p.hard_canon.df)
+
+    for _, env in envs.items():
+        print(env.policies[policy].hard_canon.adjustment.unique())
 
     for _, env in envs.items():
         for _, policy in env.policies.items():
@@ -774,8 +945,10 @@ def try_hard_adv_train():
     envs[name].policies[policy].new_soft_canon.print()
     envs[name].policies[policy].soft_canon.print()
 
-
+def vMDP():
+    envs = TabularMDPs(10)
 
 if __name__ == "__main__":
-    main()
+    vMDP()
+    # main()
     # try_hard_adv_train()
