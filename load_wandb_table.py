@@ -199,12 +199,12 @@ def load_all():
     print(final)
 
 
-def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, tag=None):
+def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, tag=None, use_ratio=False):
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
-    min_train_reward = 0
+    min_train_reward = 9
     if tag is None:
         if env == "ascent":
             # Original:
@@ -247,66 +247,8 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
             tag = "canon coinrun hard grouped actions"
             meg_adj = False
 
-
-    # Fetch runs from a project
-    api = wandb.Api()
-    project_name = "goal-misgen"
-    runs = api.runs(f"ic-ai-safety/{project_name}",
-                    filters={"$and": [{"tags": tag, "state": "finished"}]}
-                    )
-    train_rewards = "Mean Training Episode Rewards"
-    val_rewards = "Mean Evaluation Episode Rewards"
-    train_distance = "Training Distance"
-    val_distance = "Evaluation Distance"
-    ratio = "Distance Ratio"
-    diff = "Distance Difference"
-    train_len = "Mean Training Episode Length"
-    val_len = "Mean Evaluation Episode Length"
-    train_rpl = "Mean Training Reward/Timestep"
-    val_rpl = "Mean Evaluation Reward/Timestep"
-    train_meg = "Meg Train"
-    val_meg = "Meg Valid"
-    train_dist_meg = "Distance * Meg - Train"
-    val_dist_meg = "Distance * Meg - Valid"
-
-    # Collect and filter data
-    all_data = []
-    for run in runs:
-        row = {}
-        if "mean_episode_rewards" not in run.summary.keys():
-            continue
-        if run.summary.mean_episode_rewards < min_train_reward:
-            continue
-        if train_dist_metric not in run.summary.keys():
-            continue
-        row[train_rewards] = run.summary.mean_episode_rewards
-        row[val_rewards] = run.summary.val_mean_episode_rewards
-        row[train_distance] = run.summary[train_dist_metric]
-        row[val_distance] = run.summary[val_dist_metric]
-        row["run"] = run.name
-        row["logdir"] = run.config["logdir"]
-        row[train_len] = run.summary.mean_episode_len
-        row[val_len] = run.summary.val_mean_episode_len
-        row["architecture"] = run.config["architecture"]
-        if meg_adj:
-            try:
-                row[train_meg] = run.summary["Meg_Train"]
-                row[val_meg] = run.summary["Meg_Valid"]
-            except Exception as e:
-                print("No meg data")
-                pass
-        all_data.append(row)
-
-    df = pd.DataFrame(all_data)
-    if exclude_crafted:
-        df = df[df["architecture"]!="crafted-policy"]
-    df[ratio] = df[val_distance] / df[train_distance]
-    df[diff] = df[val_distance] - df[train_distance]
-    df[train_rpl] = df[train_rewards] / df[train_len]
-    df[val_rpl] = df[val_rewards] / df[val_len]
-    if meg_adj:
-        df[train_dist_meg] = df[train_distance]*df[train_meg]
-        df[val_dist_meg] = df[val_distance]*df[val_meg]
+    df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
+        exclude_crafted, meg_adj, min_train_reward, [tag], train_dist_metric, val_dist_metric)
 
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
@@ -340,8 +282,8 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
     # plt.show()
 
     # Alternative
-    x_metric = val_rewards #val_rpl also interesting
-    y_train = train_distance
+    x_metric = val_rewards  # val_rpl also interesting
+    y_train = train_distance  # if not use_ratio else ratio
     y_valid = val_distance
     if meg_adj:
         y_train = train_dist_meg
@@ -349,7 +291,7 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
     ax1 = df.plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=y_train)
     df.plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=y_valid)
 
-    for y_metric, color, linestyle in zip([y_train, y_valid], ['b', 'r'], [':','--']):
+    for y_metric, color, linestyle in zip([y_train, y_valid], ['b', 'r'], [':', '--']):
         # PLOT:
         # df.plot.scatter(x=x_metric, y=y_metric, ax=ax1, alpha=0.7, color=color)
         z = np.polyfit(df[x_metric], df[y_metric], 1)  # Linear fit (degree=1)
@@ -375,13 +317,17 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
     plt.show()
 
     print(df)
+
+    ax1 = df.plot.scatter(x=x_metric, y=ratio, alpha=0.7, color='b', label=y_train)
+    plt.show()
+
     return
     ax = df.plot.scatter(x=x_metric, y=train_meg, alpha=0.7, color='b', label=train_meg)
     df.plot.scatter(x=x_metric, y=val_meg, alpha=0.7, color='r', ax=ax, label=val_meg)
     plt.show()
 
     goal_misgen_dists = df[df[val_rewards] < -6][val_distance]
-    misgen_dists = df[np.bitwise_and(df[val_rewards] > -6,df[val_rewards] < 7.5)][val_distance]
+    misgen_dists = df[np.bitwise_and(df[val_rewards] > -6, df[val_rewards] < 7.5)][val_distance]
     gen_dists = df[df[val_rewards] > 7.5][val_distance]
 
     t_statistic, p_value = stats.ttest_ind(goal_misgen_dists, misgen_dists)
@@ -390,7 +336,105 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
     plt.show()
 
 
-if __name__ == "__main__":
+def pull_data_for_tags(exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric):
+    # Fetch runs from a project
+    api = wandb.Api()
+    project_name = "goal-misgen"
+    filters = {
+        "$and": [
+            {"state": "finished"},
+            {"$or": [{"tags": t} for t in tags]}
+        ]
+    }
+    runs = api.runs(f"ic-ai-safety/{project_name}", filters=filters)
+    train_rewards = "Mean Training Episode Rewards"
+    val_rewards = "Mean Evaluation Episode Rewards"
+    train_distance = "Training Distance"
+    val_distance = "Evaluation Distance"
+    ratio = "Distance Ratio"
+    diff = "Distance Difference"
+    train_len = "Mean Training Episode Length"
+    val_len = "Mean Evaluation Episode Length"
+    train_rpl = "Mean Training Reward/Timestep"
+    val_rpl = "Mean Evaluation Reward/Timestep"
+    train_meg = "Meg Train"
+    val_meg = "Meg Valid"
+    train_dist_meg = "Distance * Meg - Train"
+    val_dist_meg = "Distance * Meg - Valid"
+    # Collect and filter data
+    all_data = []
+    for run in runs:
+        row = {}
+        if "mean_episode_rewards" not in run.summary.keys():
+            continue
+        if run.summary.mean_episode_rewards < min_train_reward:
+            continue
+        if train_dist_metric not in run.summary.keys():
+            continue
+        row[train_rewards] = run.summary.mean_episode_rewards
+        row[val_rewards] = run.summary.val_mean_episode_rewards
+        row[train_distance] = run.summary[train_dist_metric]
+        row[val_distance] = run.summary[val_dist_metric]
+        row["run"] = run.name
+        row["logdir"] = run.config["logdir"]
+        row[train_len] = run.summary.mean_episode_len
+        row[val_len] = run.summary.val_mean_episode_len
+        row["architecture"] = run.config["architecture"]
+        row["tags"] = run.config["wandb_tags"][0]
+        if meg_adj:
+            try:
+                row[train_meg] = run.summary["Meg_Train"]
+                row[val_meg] = run.summary["Meg_Valid"]
+            except Exception as e:
+                print("No meg data")
+                pass
+        all_data.append(row)
+    df = pd.DataFrame(all_data)
+    if exclude_crafted:
+        df = df[df["architecture"] != "crafted-policy"]
+    df[ratio] = df[val_distance] / df[train_distance]
+    df[diff] = df[val_distance] - df[train_distance]
+    df[train_rpl] = df[train_rewards] / df[train_len]
+    df[val_rpl] = df[val_rewards] / df[val_len]
+    if meg_adj:
+        df[train_dist_meg] = df[train_distance] * df[train_meg]
+        df[val_dist_meg] = df[val_distance] * df[val_meg]
+    return df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards
+
+
+def create_ratio_graphs(tags, filename):
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+    meg_adj = False
+    min_train_reward = 9
+    exclude_crafted = True
+    df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
+        exclude_crafted, meg_adj, min_train_reward, tags.keys(), train_dist_metric, val_dist_metric)
+
+    x_metric = val_rewards
+
+    plt.figure(figsize=(8, 6))
+    for category, group in df.groupby('tags'):
+        plt.scatter(group[x_metric], group[ratio], label=tags[category])
+
+    plt.xlabel('Mean Evaluation Episode Rewards')
+    plt.ylabel('Distance Ratio - Eval to Train')
+    # plt.title('')
+    plt.legend(title='Tag')
+    plt.show()
+
+    print("done")
+    return
+
+
+def get_summary():
     tag = "Maze Value Original - fixed1"
-    tag = "Coinrun_Soft_Canon"
+    # tag = "Maze Hard Canonicalisation"
     load_summary(env=tag, tag=tag)
+
+
+if __name__ == "__main__":
+    tags = {"Maze Value Original - fixed1": "Maze Hard",
+            "Ascent_Hard_Canon_corrected": "Ascent Hard",
+            }
+    create_ratio_graphs(tags, "test")
