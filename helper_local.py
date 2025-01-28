@@ -219,6 +219,7 @@ def add_training_args(parser):
     parser.add_argument('--num_checkpoints', type=int, default=int(1), help='number of checkpoints to store')
     parser.add_argument('--model_file', type=str)
     parser.add_argument('--use_wandb', action="store_true")
+    parser.add_argument('--render', action="store_true", default=False)
     parser.add_argument('--wandb_tags', type=str, nargs='+')
     parser.add_argument('--random_percent', type=int, default=0,
                         help='COINRUN: percent of environments in which coin is randomized (only for coinrun)')

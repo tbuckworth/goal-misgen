@@ -4,7 +4,7 @@ from gymnasium import spaces
 
 from discrete_env.cartpole_pre_vec import CartPoleVecEnv
 # from cartpole.cartpole_pre_vec import CartPoleVecEnv
-from helper_local import DictToArgs
+from discrete_env.helper_pre_vec import DictToArgs
 
 def create_mujoco(env_name):
     def mujoco_cons(args, hyperparameters, is_valid=False):

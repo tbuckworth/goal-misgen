@@ -14,9 +14,7 @@ from gymnasium import spaces, Env
 from gymnasium.error import DependencyNotInstalled
 from gymnasium.utils import seeding
 
-from discrete_env.helper_pre_vec import assign_env_vars
-from helper_local import DictToArgs
-
+from discrete_env.helper_pre_vec import assign_env_vars, DictToArgs
 
 class PreVecEnv(Env):
     """

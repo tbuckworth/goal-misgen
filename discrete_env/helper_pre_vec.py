@@ -60,3 +60,8 @@ def assign_env_vars(hyperparameters, is_valid, defaults):
     extras = {k:v for k,v in hyperparameters.items() if k not in env_args and not k.endswith("_v")}
     env_args.update(extras)
     return env_args
+
+class DictToArgs:
+    def __init__(self, input_dict):
+        for key in input_dict.keys():
+            setattr(self, key, input_dict[key])
