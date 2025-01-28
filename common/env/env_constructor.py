@@ -11,11 +11,8 @@ from discrete_env.pre_vec_wrappers import DeVecEnvWrapper, PetsWrapper
 
 
 def get_env_constructor(env_name):
-    # create_venv = create_procgen_env_maybe_render
-    if env_name == "boxworld":
-        raise NotImplementedError("Haven't included boxworld")
-        # create_venv = create_bw_env
-    elif env_name == "cartpole":
+    create_venv = None
+    if env_name == "cartpole":
         create_venv = create_cartpole
     elif env_name == "cartpole_continuous":
         create_venv = create_cartpole_continuous
@@ -29,8 +26,6 @@ def get_env_constructor(env_name):
         raise NotImplementedError
     elif re.search("-v", env_name):
         create_venv = create_mujoco(env_name)
-    else:
-        raise NotImplementedError
     return create_venv
 
 

@@ -12,6 +12,7 @@ from procgen import ProcgenGym3Env, ProcgenEnv
 from torch.distributions import Categorical
 
 from common.ascent_env import AscentEnv
+from common.env.env_constructor import get_env_constructor
 from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, TransposeFrame, ScaledFloatFrame, \
     DummyTerminalObsWrapper, get_action_names
 from common.model import NatureModel, ImpalaModel, MlpModel
@@ -51,10 +52,14 @@ def create_shifted_venv(args, hyperparameters):
     args.rand_region = 10
     args.random_percent = 10
     if args.env_name == "coinrun":
+        #This shouldn't be true in training?
         args.val_env_name = "coinrun_aisc"
     return create_venv(args, hyperparameters, True)
 
 def create_venv(args, hyperparameters, is_valid=False):
+    constructor = get_env_constructor(args.env_name)
+    if constructor is not None:
+        return constructor(args, hyperparameters, is_valid)
     n_envs = hyperparameters.get('n_envs', 256)
     if args.env_name == "ascent":
         return AscentEnv(num_envs=n_envs,
