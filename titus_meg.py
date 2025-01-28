@@ -8,7 +8,8 @@ import einops
 from meg.meg_colab import unknown_utility_meg, state_action_occupancy
 from matplotlib import pyplot as plt
 
-
+def hard_adv_from_belmann(log_pi):
+    return log_pi - (log_pi.exp() * log_pi).sum(dim=-1).unsqueeze(-1)
 
 def cosine_similarity_loss(vec1, vec2):
     return 1 - F.cosine_similarity(vec1.reshape(-1), vec2.reshape(-1), dim=-1).mean()
@@ -63,6 +64,7 @@ def plot_canonicalised_rewards(canon, hard_canon):
     plt.tight_layout()
     plt.show()
 
+
 class TabularPolicy:
     def __init__(self, name, pi, Q=None, V=None):
         self.name = name
@@ -108,6 +110,7 @@ class RewardFunc:
     def print(self):
         print(self.df.round(decimals=2))
 
+
 class TabularMDPs:
     def __init__(self, n_mdps):
         self.pircs = {}
@@ -115,30 +118,63 @@ class TabularMDPs:
         self.N = n_mdps
         self.n_states = 15
         self.n_actions = 5
-        self.T = (torch.rand((self.N, self.n_states, self.n_actions, self.n_states),device=self.device)*100).softmax(dim=-1)
-        self.reward_vector = (torch.rand((self.N, self.n_states), device=self.device)*1000).softmax(dim=-1)*10
-        self.gamma = torch.rand((self.N,), device=self.device)/10 + 0.9
-        self.belmann_policy = self.q_value_iteration(100000)
-        self.policies = {"Belmann": self.belmann_policy}
-        self.normalize = lambda x: x if (x == 0).all() else x / x.pow(2).mean(dim=(-1,-2), keepdim=True).sqrt()
-        self.distance = lambda x, y: (x - y).pow(2).mean(dim=(-1,-2)).sqrt()
+        self.T = (torch.rand((self.N, self.n_states, self.n_actions, self.n_states), device=self.device) * 100).softmax(
+            dim=-1)
+        self.reward_vector = (torch.rand((self.N, self.n_states), device=self.device) * 1000).softmax(dim=-1) * 10
+        self.alt_reward_vector = (torch.rand((self.N, self.n_states), device=self.device) * 1000).softmax(dim=-1) * 10
+
+        self.gamma = torch.rand((self.N,), device=self.device) / 10 + 0.9
+        belmann_hightemp, belmann_lowtemp = self.q_value_iteration(100000, inv_temp=[1, 1000])
+        anti_high, anti_low = self.q_value_iteration(100000, inv_temp=[1, 1000], override_reward=self.alt_reward_vector)
+        self.policies = {
+            "BelmannHighTemp": belmann_hightemp,
+            "BelmannLowTemp": belmann_lowtemp,
+            "AlternaHighTemp": anti_high,
+            "AlternaLowTemp": anti_low,
+        }
+        self.norm_funcs = {
+            "L2": lambda x: x if (x == 0).all() else x / x.pow(2).mean(dim=(-1, -2), keepdim=True).sqrt(),
+            "L1": lambda x: x if (x == 0).all() else x / x.abs().amax(dim=(-1, -2), keepdim=True),
+        }
+        self.distance = lambda x, y: (x - y).pow(2).mean(dim=(-1, -2)).sqrt()
         self.uniform = torch.ones((self.N, self.n_states, self.n_actions), device=self.device).softmax(dim=-1)
         self.calc_pircs()
 
     def calc_pircs(self, verbose=True):
         self.canon = self.canonicalise(self.reward_vector)
         hard_style = ["Centred no C", "Centred"]
+        hard_style = []
         for pirc_type in hard_style + ["Soft", "Hard"]:
             self.pirc(pirc_type)
         p = self.pircs
+
+        # all_data = [{f"{k}:{policy}": d[policy] for k, d in p.items()} for policy in self.policies.keys()]
+        # new_dict = {}
+        # [new_dict.update(x) for x in all_data]
+
         df = pd.DataFrame(p).round(decimals=2)
+        df = df.reindex(sorted(df.columns), axis=1)
+
+        df.mean()
+        lt = self.policies['BelmannLowTemp']
+        ht = self.policies['BelmannHighTemp']
+        ladv = lt.log_pi - (lt.log_pi.exp() * lt.log_pi).sum(dim=-1).unsqueeze(-1)
+        hadv = ht.log_pi - (ht.log_pi.exp() * ht.log_pi).sum(dim=-1).unsqueeze(-1)
+        # These should have a ratio of 'temp' but they don't.
+
+        # df.drop(df.filter(regex='Centred').columns, axis=1).mean()
         if verbose:
             print(df)
         return df
 
-    def q_value_iteration(self, n_iterations=10000, print_message=True, argmax=False):
+    def q_value_iteration(self, n_iterations=10000, print_message=True, argmax=False, inv_temp=1000, invert_reward=False,
+                          override_reward=None):
         T = self.T
         R = self.reward_vector.unsqueeze(-1)
+        if invert_reward:
+            R *= -1
+        if override_reward is not None:
+            R = override_reward.unsqueeze(-1)
         gamma = self.gamma.unsqueeze(-1)
         n_states = self.n_states
         n_actions = self.n_actions
@@ -158,21 +194,25 @@ class TabularMDPs:
                     policy_name = "Hard Argmax"
                 else:
                     policy_name = "Hard Smax"
-                    pi = (Q * 1000).softmax(dim=-1)
+                    if type(inv_temp) == list:
+                        # hadv = hard_adv_from_belmann((Q[0] * 1).log_softmax(dim=-1))
+                        # ladv = hard_adv_from_belmann((Q[0] * 10).log_softmax(dim=-1))
+                        # ratio = ladv/hadv
+                        # print(f"mean:{ratio.mean():.2f}\tstd:{ratio.std():.2f}")
+                        return [TabularPolicy(policy_name, (Q * t).softmax(dim=-1), Q, V) for t in inv_temp]
+                    pi = (Q * inv_temp).softmax(dim=-1)
                 return TabularPolicy(policy_name, pi, Q, V)
 
         print(f"Q-value iteration did not converge in {i} iterations")
         return None
 
     def pirc(self, pirc_type, own_policy=False):
-        pircs = {}
-        assert len(self.policies)==1, "Need to change below to pircs, rather than pirc"
+        # assert len(self.policies)==1, "Need to change below to pircs, rather than pirc"
         for name, policy in self.policies.items():
-            pirc = self.calc_pirc(policy, pirc_type)
-            pircs[name] = pirc
-        self.pircs[pirc_type] = pirc
+            pirc = self.calc_pirc(policy, pirc_type, name)
+            self.pircs.update(pirc)
 
-    def calc_pirc(self, policy, pirc_type):
+    def calc_pirc(self, policy, pirc_type, name):
         trusted_pi = None
         if pirc_type in ["Centred", "Centred no C"]:
             adv = policy.log_pi - policy.log_pi.mean(dim=-1).unsqueeze(-1)
@@ -188,15 +228,18 @@ class TabularMDPs:
         elif pirc_type == "Hard":
             adv = policy.log_pi - (policy.pi * policy.log_pi).sum(dim=-1).unsqueeze(dim=-1)
             ca = self.canonicalise(adv, trusted_pi)
+            policy.hard_ca = ca
         else:
             raise NotImplementedError(f"pirc_type must be one of 'Hard','Hard no C','Soft'. Not {pirc_type}.")
 
         comp_canon = self.canon
 
-        nca = self.normalize(ca)
-        ncr = self.normalize(comp_canon)
-
-        return self.distance(nca, ncr).tolist()
+        outputs = {}
+        for norm, normalize in self.norm_funcs.items():
+            nca = normalize(ca)
+            ncr = normalize(comp_canon)
+            outputs[f"{pirc_type}:{norm}:{name}"] = self.distance(nca, ncr).tolist()
+        return outputs
 
     def canonicalise(self, R, trusted_pi=None):
         if trusted_pi is None:
@@ -215,7 +258,7 @@ class TabularMDPs:
         else:
             raise Exception(f"R.ndim must be 2, 3, or 4, not {R.ndim}.")
 
-        v = self.value_iteration(trusted_pi, R3)
+        v = self.value_iteration(trusted_pi, R3, n_iterations=100000)
 
         R2 = (R3 * self.T).sum(dim=-1)
 
@@ -945,8 +988,10 @@ def try_hard_adv_train():
     envs[name].policies[policy].new_soft_canon.print()
     envs[name].policies[policy].soft_canon.print()
 
+
 def vMDP():
     envs = TabularMDPs(50)
+
 
 if __name__ == "__main__":
     vMDP()
