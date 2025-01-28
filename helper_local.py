@@ -50,6 +50,8 @@ def create_unshifted_venv(args, hyperparameters):
 def create_shifted_venv(args, hyperparameters):
     args.rand_region = 10
     args.random_percent = 10
+    if args.env_name == "coinrun":
+        args.val_env_name = "coinrun_aisc"
     return create_venv(args, hyperparameters, True)
 
 def create_venv(args, hyperparameters, is_valid=False):

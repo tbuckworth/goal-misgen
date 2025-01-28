@@ -204,7 +204,7 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
-    min_train_reward = 9
+    min_train_reward = 0
     if tag is None:
         if env == "ascent":
             # Original:
@@ -392,5 +392,5 @@ def load_summary(env= "canon maze hard grouped actions", exclude_crafted=True, t
 
 if __name__ == "__main__":
     tag = "Maze Value Original - fixed1"
-    tag = "Coinrun_Hard_Canon_corrected"
-    load_summary(env="coinrun hard grouped", tag=None)
+    tag = "Coinrun_Soft_Canon"
+    load_summary(env=tag, tag=tag)
