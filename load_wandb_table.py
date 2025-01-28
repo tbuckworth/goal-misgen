@@ -412,15 +412,34 @@ def create_ratio_graphs(tags, filename):
         exclude_crafted, meg_adj, min_train_reward, tags.keys(), train_dist_metric, val_dist_metric)
 
     x_metric = val_rewards
-
+    y_metric = ratio
+    category = 'tags'
     plt.figure(figsize=(8, 6))
-    for category, group in df.groupby('tags'):
-        plt.scatter(group[x_metric], group[ratio], label=tags[category])
+    for category, group in df.groupby(category):
+        plt.scatter(group[x_metric], group[y_metric], label=tags[category])
+        coefficients = np.polyfit(group[x_metric], group[y_metric], deg=1)  # Linear fit (deg=1)
+        best_fit_line = np.poly1d(coefficients)  # Create a polynomial function
+        # Calculate R-squared
+        y_pred = best_fit_line(group[x_metric])
+        y_mean = np.mean(group[y_metric])
+        ss_total = np.sum((group[y_metric] - y_mean) ** 2)
+        ss_residual = np.sum((group[y_metric] - y_pred) ** 2)
+        r_squared = 1 - (ss_residual / ss_total)
+
+        # Plot dashed line with larger gaps and R^2 in the label
+        plt.plot(
+            group[x_metric],
+            best_fit_line(group[x_metric]),
+            '--',
+            dashes=(10, 10),  # Increase dash length and gap
+            label=f'R² = {r_squared:.2f}'  # Label with R-squared
+        )
+
 
     plt.xlabel('Mean Evaluation Episode Rewards')
     plt.ylabel('Distance Ratio - Eval to Train')
     # plt.title('')
-    plt.legend(title='Tag')
+    plt.legend(title='Environment')
     plt.show()
 
     print("done")
@@ -434,7 +453,7 @@ def get_summary():
 
 
 if __name__ == "__main__":
-    tags = {"Maze Value Original - fixed1": "Maze Hard",
-            "Ascent_Hard_Canon_corrected": "Ascent Hard",
+    tags = {"Maze Value Original - fixed1": "Maze",
+            "Ascent_Hard_Canon_corrected": "Ascent",
             }
     create_ratio_graphs(tags, "test")
