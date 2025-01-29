@@ -96,6 +96,7 @@ class Logger(object):
 
         if self.use_wandb:
             wandb.log({k: v for k, v in zip(self.log.columns, log)})
+        return episode_statistics['Rewards/mean_episodes']
 
     def _get_episode_statistics(self):
         episode_statistics = {}
