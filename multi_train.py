@@ -26,7 +26,7 @@ def main():
 
     with multiprocessing.Pool(processes=n) as pool:
         # Distribute the same venv_python path to each parallel worker
-        pool.map(run_script, range(n))
+        pool.map(run_script)
 
 
 if __name__ == "__main__":
