@@ -80,7 +80,8 @@ maze_dict = {
 }
 
 maze_dirs = [
-    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",#problem Unshifted rand.region = 0
+    "logs/train/maze_aisc/maze1/2024-11-08__15-54-16__seed_1080/model_200015872.pth",
+    # problem Unshifted rand.region = 0
     "logs/train/maze_aisc/maze1/2024-11-11__20-51-51__seed_1080/model_200015872.pth",
 ]
 
@@ -90,8 +91,8 @@ new_maze_dirs = [
 ]
 
 coinrun_dirs = [
-    "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth", # random_percent = 0
-    "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth", # random_percent = 10
+    "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",  # random_percent = 0
+    "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",  # random_percent = 10
     # "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
     # "logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033", # rp = 0, levels = 1000 (still running, so uncomment)
     # "logs/train/coinrun/coinrun/2025-01-24__15-30-53__seed_6033", # rp = 0, levels = 2000 (still running, uncomment)
@@ -113,7 +114,15 @@ maze_value_networks = {
     "Maze Unlimited TD_0 200 Epochs": "logs/train/maze_aisc/value/2025-01-22__10-18-06__seed_1080",
 }
 
+cartpole_dirs = [
+    "logs/train/cartpole/cartpole/2025-01-29__09-44-44__seed_6033",
+    # "logs/train/cartpole/cartpole/2025-01-29__11-12-26__seed_6033",
 
+]
+
+cartpole_value_networks = {
+    "Cartpole 400": "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080",
+}
 
 
 def get_seed(model_file):
@@ -122,6 +131,7 @@ def get_seed(model_file):
     except Exception as e:
         print("seed not found, using 42")
         return 42
+
 
 def hp_run(model_file, tag_dict, tag):
     seed = get_seed(model_file)
@@ -143,23 +153,23 @@ def hp_run(model_file, tag_dict, tag):
         "algo": "canon",
         "env_name": "get",
         "exp_name": "canon",
-        "param_name": "ascent-canon",
+        "param_name": "cartpole-canon",
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(65000),
-        "val_epoch": 150,
+        "val_epoch": 400,
         "mini_batch_size": 2048,
         "n_val_envs": 32,
         "n_envs": int(256 + 32),
         "num_levels": 10000,
         "distribution_mode": "hard",
         "seed": seed,
-        "hidden_dims": [256, 256, 256],
+        "hidden_dims": [256, 256, 256, 256],
 
         "load_value_models": True,
         "value_dir": tag_dict[tag],
-        "soft_canonicalisation": True,
+        "soft_canonicalisation": False,
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
@@ -169,6 +179,7 @@ def hp_run(model_file, tag_dict, tag):
         # "learning_rate": 1e-3,
     }
     run_next_hyperparameters(hparams)
+
 
 def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
     for tag in tag_dict.keys():
@@ -191,10 +202,13 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
             print(e)
             pass
 
+
 if __name__ == '__main__':
+    run_tags_for_files({"Cartpole_Hard_Test1": None}, cartpole_dirs, ignore_errors=True)
+
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_soft": None}, model_files, ignore_errors=False)
 
     # run_tags_for_files({"Ascent_Centred_Canon_Test":None}, local_unique_ascent_dirs, ignore_errors=False)
 
-    run_tags_for_files({"Coinrun_Hard_Canon_True_Shift": None}, coinrun_dirs, ignore_errors=True)
+    # run_tags_for_files({"Coinrun_Hard_Canon_True_Shift": None}, coinrun_dirs, ignore_errors=True)

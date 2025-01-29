@@ -35,6 +35,9 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None):
             # value original:
             logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
             # raise NotImplementedError("Need to train value for maze")
+        elif env_name == "cartpole":
+            # 400 epochs, converged to 0.5 loss, seems legit...
+            logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
         else:
             raise NotImplementedError(f"{env_name} is not a recognised environment")
     elif logdir == "ppo":

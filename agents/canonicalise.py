@@ -1,3 +1,6 @@
+import os
+import time
+
 import pandas as pd
 import wandb
 from torch import nn
@@ -123,6 +126,10 @@ class Canonicaliser(BaseAgent):
         self.storage_trusted_val = storage_trusted_val
         self.norm_funcs = norm_funcs
         self.dist_funcs = dist_funcs
+        self.logvaldir = os.path.join(self.logger.logdir, "val_models")
+        if not os.path.exists(self.logvaldir):
+            os.makedirs(self.logvaldir)
+
 
     def predict_temp(self, obs, act, hidden_state, done):
         with torch.no_grad():
@@ -297,6 +304,9 @@ class Canonicaliser(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
     def optimize_value(self, storage, value_model, value_optimizer, env_type, rew_type="reward"):
+        logdir = os.path.join(self.logvaldir,env_type,rew_type)
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -308,6 +318,8 @@ class Canonicaliser(BaseAgent):
 
         value_model.train()
         self.policy.eval()
+        checkpoint_cnt = 0
+        save_every = self.val_epoch // self.num_checkpoints
         for e in range(self.val_epoch):
             recurrent = self.policy.is_recurrent()
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
@@ -363,7 +375,12 @@ class Canonicaliser(BaseAgent):
             # grad_accumulation_cnt += 1
             # if e == self.val_epoch - 1:
             #     plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
-
+            if e > ((checkpoint_cnt+1) * save_every) or e == self.val_epoch-1:
+                print("Saving model.")
+                torch.save({'model_state_dict': self.policy.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict()},
+                             logdir + '/model_' + str(e) + '.pth')
+                checkpoint_cnt += 1
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/value_loss_{rew_type}_{env_type}': np.mean(val_losses),

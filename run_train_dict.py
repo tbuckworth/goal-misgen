@@ -13,7 +13,7 @@ if __name__ == '__main__':
         "algo": "trusted-value",
         "num_timesteps": int(65000),
         "use_wandb": True,
-        "val_epoch": 400,
+        "val_epoch": 1000,
         "mini_batch_size": 2048,
         "n_val_envs": 16,
         "n_envs": 1024 + 16,
