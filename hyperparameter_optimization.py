@@ -190,34 +190,34 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": 'ascent',
-        "exp_name": 'Ascent',
-        "param_name": 'ascent-mlp',
+        "env_name": 'cartpole',
+        "exp_name": 'cartpole',
+        "param_name": 'cartpole-mlp',
         "device": "gpu",
-        "num_timesteps": int(1e7),
+        "num_timesteps": int(2e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["misgen hp0"],
+        "wandb_tags": ["gen_misgen"],
         "use_wandb": True,
         "mirror_env": False,
-        "use_valid_env": True,
+        "use_valid_env": False,
         "anneal_temp": False,
-        "entropy_coef": [0, 0.02],
-        "l1_coef": [0, 0.1, 0.3, 0.5, 1.0, 10.0],
+        "entropy_coef": [0, 0.02, 0.1, 0.2],
+        "l1_coef": 0,
         "anneal_lr": False,
-        "hid_dims": [[3],[32,3],[32,32], [32]],
-        "rew_epoch": [1],#[100, 1000, 10000],
-        "rew_lr": 0.01,
-        "dense_rewards": False,
-        "num_rew_updates": 1,
-        "n_pos_states": [10],
-        "reset_rew_model_weights": False,
+        "reward_termination": 498,
+        "train_pct_ood": [0, 0, 0, 0, 0.01, 0.1, 0.25, 0.5],
+        # "hid_dims": [],
+        # "dense_rewards": False,
+        # "num_rew_updates": 1,
+        # "n_pos_states": [10],
+        # "reset_rew_model_weights": False,
         # "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
         # "rew_learns_from_trusted_rollouts": [False, True],
     }
     bounds = {}
     #     "rew_lr": [0.0001, 0.05],
     # }
-    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.Loss/rew_loss")
+    run_forever(bounds, fixed, run_next_hyperparameters)
 
 
 def canonicaliser():

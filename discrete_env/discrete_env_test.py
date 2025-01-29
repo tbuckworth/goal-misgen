@@ -7,6 +7,7 @@ from discrete_env.acrobot_pre_vec import AcrobotVecEnv, create_acrobot
 from discrete_env.cartpole_pre_vec import CartPoleVecEnv
 from discrete_env.mountain_car_pre_vec import MountainCarVecEnv, create_mountain_car
 from discrete_env.helper_pre_vec import DictToArgs
+from train import create_stacked_env
 
 
 class BaseDiscreteEnvTest(unittest.TestCase):
@@ -57,6 +58,20 @@ class TestCartpoleSwing(BaseDiscreteEnvTest):
     def setUp(cls) -> None:
         cls.env_name = "cartpole_swing"
         super(TestCartpoleSwing, cls).setUp()
+
+    def test_step(self):
+        self.run_step()
+
+
+class TestStackedCartpole(BaseDiscreteEnvTest):
+
+    def setUp(cls) -> None:
+        cls.env = create_stacked_env(
+            DictToArgs({"render": "human", "seed": 0, "env_name": "cartpole"}),
+            {"max_steps": 30, "drop_same": True},
+            pct_ood=0.5
+        )
+        cls.env.reset(seed=np.random.randint(0, 1000))
 
     def test_step(self):
         self.run_step()

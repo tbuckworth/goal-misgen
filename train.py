@@ -1,3 +1,4 @@
+import copy
 import re
 
 from common.env.procgen_wrappers import *
@@ -11,6 +12,7 @@ import os, time, argparse
 import random
 import torch
 
+from discrete_env.stacked_env import StackedEnv
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
     create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv, get_model_with_largest_checkpoint
 
@@ -90,11 +92,15 @@ def train(args):
     algo = hyperparameters.get('algo', 'ppo')
 
     if algo not in ["trusted-value", "canon"]:
-        env = create_venv(args, hyperparameters)
-        env_valid = create_venv(args, hyperparameters, is_valid=True)
+        pct_ood = hyperparameters.get("train_pct_ood", 0)
+        if pct_ood > 0:
+            env = create_stacked_env(args, hyperparameters, pct_ood)
+        else:
+            env = create_venv(args, hyperparameters)
+        env_valid = create_venv(args, hyperparameters, is_valid=True) if args.use_valid_env else None
     else:
         env = create_unshifted_venv(args, hyperparameters)
-        env_valid = create_shifted_venv(args, hyperparameters)
+        env_valid = create_shifted_venv(args, hyperparameters) if args.use_valid_env else None
 
     ############
     ## LOGGER ##
@@ -250,6 +256,20 @@ def train(args):
     agent.train(num_timesteps)
     if args.use_wandb:
         wandb.finish()
+
+
+def create_stacked_env(args, hyperparameters, pct_ood):
+    n_envs = hyperparameters.get("n_envs", 256)
+    n_ood_envs = int(round(pct_ood * n_envs, 0))
+    n_reg_envs = n_envs - n_ood_envs
+    ood_hp = copy.deepcopy(hyperparameters)
+    reg_hp = copy.deepcopy(hyperparameters)
+    ood_hp["n_envs"] = n_ood_envs
+    reg_hp["n_envs"] = n_reg_envs
+    reg_env = create_venv(args, reg_hp)
+    ood_env = create_venv(args, ood_hp, is_valid=True)
+    env = StackedEnv([reg_env, ood_env])
+    return env
 
 
 def construct_value_models(device, hyperparameters, observation_shape, hidden_dims):

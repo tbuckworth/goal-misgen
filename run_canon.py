@@ -127,7 +127,7 @@ cartpole_value_networks = {
 
 def get_seed(model_file):
     try:
-        return re.search(r"seed_(\d+)", model_file).group(1)
+        return int(re.search(r"seed_(\d+)", model_file).group(1))
     except Exception as e:
         print("seed not found, using 42")
         return 42

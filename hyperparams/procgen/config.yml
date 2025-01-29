@@ -133,6 +133,7 @@ cartpole-mlp:
     final_relu: False
     l1_coef: 0.
     anneal_lr: False
+    train_pct_ood: 0
 
 ascent-canon:
     algo: canon
