@@ -3,6 +3,7 @@ import re
 from helper_local import get_model_with_largest_checkpoint
 from hyperparameter_optimization import run_next_hyperparameters
 from load_wandb_table import load_summary
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 local_unique_ascent_dirs = [
     "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033",
@@ -201,6 +202,54 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
         except Exception as e:
             print(e)
             pass
+
+
+
+
+
+def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
+    def safe_hp_run(model_file, tag_dict, tag):
+        """
+        Wrapper that catches exceptions if ignore_errors is True.
+        """
+        try:
+            hp_run(model_file, tag_dict, tag)
+        except Exception as e:
+            print(f"Error running hp_run on {model_file} with tag {tag}: {e}")
+            # Attempt to finish wandb run if something goes wrong
+            try:
+                import wandb
+                wandb.finish()
+            except Exception:
+                pass
+
+    for tag in tag_dict.keys():
+        # Create a thread pool with 10 workers
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = []
+
+            # Submit one task per model_file
+            for model_file in model_files:
+                if not ignore_errors:
+                    # If we're NOT ignoring errors, no need for a wrapper
+                    futures.append(executor.submit(hp_run, model_file, tag_dict, tag))
+                else:
+                    # If we ARE ignoring errors, use safe_hp_run
+                    futures.append(executor.submit(safe_hp_run, model_file, tag_dict, tag))
+
+            # Optionally wait for all futures to complete and handle results
+            for future in as_completed(futures):
+                # If you do want to see raised exceptions in ignore_errors=False scenario:
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Unhandled exception: {e}")
+
+        # Once all model_files have been processed for this tag, load summary
+        try:
+            load_summary(env=tag, exclude_crafted=True, tag=tag)
+        except Exception as e:
+            print(f"Error in load_summary with tag {tag}: {e}")
 
 
 if __name__ == '__main__':
