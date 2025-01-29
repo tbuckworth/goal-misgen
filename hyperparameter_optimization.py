@@ -226,7 +226,7 @@ def canonicaliser():
         "env_name": 'ascent',
         "exp_name": 'Ascent',
         "param_name": 'ascent-canon',
-        "num_timesteps": int(1e7),
+        "num_timesteps": int(5e7),
         "device": "gpu",
         "seed": [6033, 0, 42, 50, 81],
         "wandb_tags": ["canon misgen2"],
