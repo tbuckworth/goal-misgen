@@ -112,7 +112,7 @@ ascent-mlp:
 
 cartpole-mlp:
     algo: ppo
-    n_envs: 2048
+    n_envs: 1024
     n_steps: 256
     epoch: 3
     mini_batch_per_epoch: 8
@@ -160,6 +160,42 @@ ascent-canon:
     num_rew_updates: 1
     n_pos_states: 20
     hidden_dims: [128, 128, 128]
+    rew_learns_from_trusted_rollouts: False
+    val_epoch: 10
+    n_val_envs: 64
+    use_unique_obs: False
+    misgen: False
+    load_value_models: False
+    soft_canonicalisation: False
+    meg: False
+    value_dir: None
+    remove_duplicate_actions: True
+    centered_logprobs: False
+
+cartpole-canon:
+    algo: canon
+    n_envs: 1024
+    n_steps: 256
+    epoch: 3
+    mini_batch_per_epoch: 8
+    mini_batch_size: 8192
+    gamma: 0.999
+    lmbda: 0.95
+    learning_rate: 0.0005
+    grad_clip_norm: 0.5
+    eps_clip: 0.2
+    value_coef: 0.5
+    entropy_coef: 0.01
+    normalize_adv: True
+    normalize_rew: True
+    use_gae: True
+    architecture: mlpmodel
+    recurrent: False
+    hid_dims: [256, 256, 256, 256]
+    final_relu: False
+    anneal_lr: False
+    dense_rewards: False
+    num_rew_updates: 1
     rew_learns_from_trusted_rollouts: False
     val_epoch: 10
     n_val_envs: 64
