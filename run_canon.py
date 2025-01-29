@@ -174,6 +174,7 @@ def hp_run(model_file, tag_dict, tag):
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
+        "use_valid_env": True,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
         # "misgen": model_file,

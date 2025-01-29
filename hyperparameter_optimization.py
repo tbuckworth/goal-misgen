@@ -194,7 +194,7 @@ def ppo():
         "exp_name": 'cartpole',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
-        "num_timesteps": int(2e7),
+        "num_timesteps": int(5e7),
         "seed": [6033, 0, 42, 50, 81],
         "wandb_tags": ["gen_misgen"],
         "use_wandb": True,
