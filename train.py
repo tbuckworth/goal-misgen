@@ -152,6 +152,7 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
+    canon_params = {}
     if algo in ['canon', 'trusted-value', 'trusted-value-unlimited']:
         if not ppo_value:
             if hyperparameters.get("load_value_models", False):
@@ -205,7 +206,6 @@ def train(args):
             q_model=q_model,
             q_model_val=q_model_val,
         )
-        hyperparameters.update(canon_params)
 
     cfg = vars(args)
     cfg.update(hyperparameters)
@@ -218,6 +218,8 @@ def train(args):
         wb_resume = "allow"  # if args.model_file is None else "must"
         wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
+
+    hyperparameters.update(canon_params)
 
     ###########
     ## AGENT ##

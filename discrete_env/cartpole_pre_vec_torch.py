@@ -202,7 +202,7 @@ class CartPoleVecEnv(PreVecEnv):
 
     def transition_model(self, action):
         x, x_dot, theta, theta_dot, gravity, pole_length, mass_cart, mass_pole, force_mag = self.state.T
-        force = torch.ones((self.n_envs))
+        force = torch.ones((self.num_envs))
         force[action == 0] = -1
         force *= force_mag
         costheta = torch.cos(theta)
@@ -303,24 +303,24 @@ class CartPoleVecEnv(PreVecEnv):
 
         world_width = self.x_threshold * 2
         scale = 64 / world_width
-        polewidth = np.full((self.n_envs,), 10.0 * .16)
+        polewidth = np.full((self.num_envs,), 10.0 * .16)
         polelen = scale * (2 * pole_length)
-        cartwidth = np.full((self.n_envs,), 50.0 * .16)
-        cartheight = np.full((self.n_envs,), 30.0 * .16)
-        self.surf = np.full((self.n_envs, 64, 64, 3), 255)
+        cartwidth = np.full((self.num_envs,), 50.0 * .16)
+        cartheight = np.full((self.num_envs,), 30.0 * .16)
+        self.surf = np.full((self.num_envs, 64, 64, 3), 255)
         # self.surf.fill((255, 255, 255))
         l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
         axleoffset = cartheight / 4.0
         cartx = x[:, 0] * scale + 64 / 2.0  # MIDDLE OF CART
-        carty = np.full((self.n_envs,), 100 * .16)  # TOP OF CART
+        carty = np.full((self.num_envs,), 100 * .16)  # TOP OF CART
 
-        l = np.tile(l, (self.n_envs, 64, 64))
+        l = np.tile(l, (self.num_envs, 64, 64))
         r = np.tile(r, (1, 64, 64))
         t = np.tile(t, (1, 64, 64))
         b = np.tile(b, (1, 64, 64))
 
         raw_index = np.arange(64)
-        col_index = np.tile(raw_index, (self.n_envs, 64, 1))
+        col_index = np.tile(raw_index, (self.num_envs, 64, 1))
         row_index = col_index.transpose((0, 2, 1))
 
         row_index >= l

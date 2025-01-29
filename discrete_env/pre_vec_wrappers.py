@@ -36,7 +36,7 @@ class PetsWrapper(gym.Env):
 class DeVecEnvWrapper(gym.Env):
     def __init__(self, env):
         self.env = env
-        self.n_envs = self.env.n_envs
+        self.n_envs = self.env.num_envs
         self.observation_space = env.observation_space
         self.action_space = env.action_space
 

@@ -38,7 +38,7 @@ class PreVecEnv(Env):
         self.env_name = env_name
         if n_envs < 2:
             raise Exception("n_envs must be greater than or equal to 2")
-        self.n_envs = n_envs
+        self.num_envs = n_envs
         self.max_steps = max_steps
         self.n_actions = n_actions
         self.np_random_seed = None
@@ -53,9 +53,9 @@ class PreVecEnv(Env):
         self.clock = None
         self.isopen = True
         self.n_inputs = len(self.high) + self.input_adjust
-        self.terminated = np.full(self.n_envs, True)
-        self.state = np.zeros((self.n_envs, self.n_inputs))
-        self.n_steps = np.zeros((self.n_envs))
+        self.terminated = np.full(self.num_envs, True)
+        self.state = np.zeros((self.num_envs, self.n_inputs))
+        self.n_steps = np.zeros((self.num_envs))
         self.reset(seed=seed)
 
     metadata = {
@@ -65,8 +65,8 @@ class PreVecEnv(Env):
 
     def check_actions(self, action):
         if isinstance(self.action_space, spaces.Box):
-            h = self.action_space.high.repeat(self.n_envs)
-            l = self.action_space.low.repeat(self.n_envs)
+            h = self.action_space.high.repeat(self.num_envs)
+            l = self.action_space.low.repeat(self.num_envs)
             action[action < l] = l[action < l]
             action[action > h] = h[action > h]
             return action
@@ -75,7 +75,7 @@ class PreVecEnv(Env):
 
     def step(self, action):
         action = np.array(action)
-        assert action.size == self.n_envs, f"number of actions ({action.size}) must match n_envs ({self.n_envs})"
+        assert action.size == self.num_envs, f"number of actions ({action.size}) must match n_envs ({self.num_envs})"
         action = self.check_actions(action)
         self.transition_model(action)
 
@@ -99,8 +99,8 @@ class PreVecEnv(Env):
             seed: Optional[int] = None,
             options: Optional[dict] = None,
     ):
-        self.terminated = np.full(self.n_envs, True)
-        self.n_steps = np.zeros((self.n_envs))
+        self.terminated = np.full(self.num_envs, True)
+        self.n_steps = np.zeros((self.num_envs))
         return self.set(seed=seed)
 
     def set(self,
@@ -108,7 +108,7 @@ class PreVecEnv(Env):
             seed: Optional[int] = None,
             ):
         self.seed(seed)
-        state = self.start_space.sample(self.n_envs)
+        state = self.start_space.sample(self.num_envs)
         self.state[self.terminated] = state[self.terminated]
         self.n_steps[self.terminated] = 0
 

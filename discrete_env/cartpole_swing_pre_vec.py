@@ -194,7 +194,7 @@ class CartPoleSwingVecEnv(PreVecEnv):
         ]
     def transition_model(self, action):
         x, x_dot, theta, theta_dot, gravity, pole_length, mass_cart, mass_pole, force_mag = self.state.T
-        force = np.ones((self.n_envs))
+        force = np.ones((self.num_envs))
         force[action == 0] = -1
         force *= force_mag
         costheta = np.cos(theta)
