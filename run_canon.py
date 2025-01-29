@@ -115,8 +115,8 @@ maze_value_networks = {
 }
 
 cartpole_dirs = [
-    "logs/train/cartpole/cartpole/2025-01-29__09-44-44__seed_6033",
-    # "logs/train/cartpole/cartpole/2025-01-29__11-12-26__seed_6033",
+    # "logs/train/cartpole/cartpole/2025-01-29__09-44-44__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__11-12-26__seed_6033",
 
 ]
 
