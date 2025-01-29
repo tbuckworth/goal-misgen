@@ -217,7 +217,7 @@ def ppo():
     bounds = {}
     #     "rew_lr": [0.0001, 0.05],
     # }
-    run_forever(bounds, fixed, run_next_hyperparameters)
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric = "summary.mean_episode_rewards")
 
 
 def canonicaliser():
@@ -251,4 +251,4 @@ def canonicaliser():
 
 
 if __name__ == "__main__":
-    canonicaliser()
+    ppo()

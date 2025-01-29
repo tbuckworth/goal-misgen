@@ -37,7 +37,10 @@ class StackedEnv(Env):
         return np.concatenate([e.terminated for e in self.envs], axis=0)
 
     def info(self):
-        return np.concatenate([e.info for e in self.envs], axis=0)
+        infos = []
+        for e in self.envs:
+            infos += e.info
+        return infos
 
 
     def get_params(self, suffix=""):

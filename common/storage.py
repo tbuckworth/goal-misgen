@@ -138,6 +138,8 @@ class Storage():
         yield obs_batch, hidden_state_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch
 
     def fetch_log_data(self):
+        return self.rew_batch.numpy(), self.done_batch.numpy()
+        # Don't know why we were bothering with this?
         if 'env_reward' in self.info_batch[0][0]:
             rew_batch = []
             for step in range(self.num_steps):
@@ -146,6 +148,7 @@ class Storage():
             rew_batch = np.array(rew_batch)
         else:
             rew_batch = self.rew_batch.numpy()
+
         if 'env_done' in self.info_batch[0][0]:
             done_batch = []
             for step in range(self.num_steps):
