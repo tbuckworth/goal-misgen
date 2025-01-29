@@ -65,10 +65,12 @@ class Canonicaliser(BaseAgent):
                  meg=False,
                  remove_duplicate_actions=True,
                  centered_logprobs=False,
+                 adjust_logprob_mean=False,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.adjust_logprob_mean = adjust_logprob_mean
         self.centered_logprobs = centered_logprobs
         self.remove_duplicate_actions = remove_duplicate_actions
         self.n_actions = self.env.action_space.n
@@ -131,13 +133,13 @@ class Canonicaliser(BaseAgent):
             os.makedirs(self.logvaldir)
 
 
-    def predict_temp(self, obs, act, hidden_state, done):
+    def predict_subject_adv(self, obs, act, hidden_state, done, subject_policy):
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(device=self.device)
             act = torch.FloatTensor(act).to(device=self.device)
             hidden_state = torch.FloatTensor(hidden_state).to(device=self.device)
             mask = torch.FloatTensor(1 - done).to(device=self.device)
-            dist, value, hidden_state = self.policy(obs, hidden_state, mask)
+            dist, value, hidden_state = subject_policy(obs, hidden_state, mask)
             logp_eval_policy = dist.log_prob(act)
             if not self.soft_adv:
                 if self.centered_logprobs:
@@ -250,6 +252,10 @@ class Canonicaliser(BaseAgent):
                            self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
 
+        if self.adjust_logprob_mean:
+            self.storage_trusted.translate_logp_mean_to_reward_mean()
+            self.storage_trusted_val.translate_logp_mean_to_reward_mean()
+
         if not self.load_value_models:
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
@@ -287,12 +293,12 @@ class Canonicaliser(BaseAgent):
         if self.env_valid is not None:
             self.env_valid.close()
 
-    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None, save_extra=False):
+    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None, subject_policy=None):
         logp_eval_policy = None
         for _ in range(self.n_steps):
             act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done, policy)
-            if save_extra:
-                logp_eval_policy = self.predict_temp(obs, act, hidden_state, done)
+            if subject_policy is not None:
+                logp_eval_policy = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
             storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy)
             obs = next_obs
@@ -567,7 +573,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
             try:
@@ -577,7 +583,7 @@ class Canonicaliser(BaseAgent):
 
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
-        logp_batch = dist.log_prob(act_batch)
+        # logp_batch = dist.log_prob(act_batch)
 
         val_batch_logp = value_model_logp(obs_batch).squeeze()
         next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
@@ -589,13 +595,19 @@ class Canonicaliser(BaseAgent):
         next_val_batch_logp[done_batch.bool()] = term_value
         adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
 
-        if not self.soft_adv:
-            if self.centered_logprobs:
-                logp_batch -= dist.probs.log().mean(dim=-1)
-            else:
-                # make it hard advantage func:
-                logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
-                logp_batch -= logp_exp
-
+        # if not self.soft_adv:
+        #     if self.centered_logprobs:
+        #         logp_batch -= dist.probs.log().mean(dim=-1)
+        #     else:
+        #         # make it hard advantage func:
+        #         logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
+        #         logp_batch -= logp_exp
+        # normalize = self.norm_funcs["l2_norm"]
+        # distance = self.dist_funcs["l2_dist"]
+        # print(distance(normalize(logp_batch+adjustment_logp), normalize(rew_batch+adjustment)).item())
         return logp_batch, rew_batch, adjustment, adjustment_logp
-
+        # For cartpole - plots angle against val models
+        import matplotlib.pyplot as plt
+        plt.scatter(obs_batch[:,2].cpu().numpy(),(val_batch).cpu().numpy())
+        plt.scatter(obs_batch[:,2].cpu().numpy(),(val_batch_logp).cpu().numpy())
+        plt.show()

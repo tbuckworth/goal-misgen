@@ -209,6 +209,7 @@ cartpole-canon:
     value_dir: None
     remove_duplicate_actions: True
     centered_logprobs: False
+    adjust_logprob_mean: False
 
 trusted-value:
     algo: trusted-value

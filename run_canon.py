@@ -117,8 +117,16 @@ maze_value_networks = {
 
 cartpole_dirs = [
     # "logs/train/cartpole/cartpole/2025-01-29__09-44-44__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__20-10-36__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__19-28-37__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-29__18-47-15__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-29__18-17-15__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__18-15-47__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__17-35-24__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-29__16-19-28__seed_42",
+    "logs/train/cartpole/cartpole/2025-01-29__15-59-42__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-29__15-59-04__seed_50",
     "logs/train/cartpole/cartpole/2025-01-29__11-12-26__seed_6033",
-
 ]
 
 cartpole_value_networks = {
@@ -158,11 +166,11 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(65000),
-        "val_epoch": 400,
+        "num_timesteps": int(67584),
+        "val_epoch": 1000,
         "mini_batch_size": 2048,
-        "n_val_envs": 32,
-        "n_envs": int(256 + 32),
+        "n_val_envs": 2,
+        "n_envs": int(64 + 2),
         "num_levels": 10000,
         "distribution_mode": "hard",
         "seed": seed,
@@ -174,6 +182,7 @@ def hp_run(model_file, tag_dict, tag):
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
+        "adjust_logprob_mean": True,
         "use_valid_env": True,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
@@ -254,7 +263,7 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 
 
 if __name__ == '__main__':
-    run_tags_for_files({"Cartpole_Hard_Test1": None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files_threaded({"Cartpole_Hard_Mean_Adjusted": None}, cartpole_dirs, ignore_errors=True)
 
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_soft": None}, model_files, ignore_errors=False)

@@ -47,6 +47,11 @@ class Storage():
         self.hidden_states_batch[-1] = torch.from_numpy(last_hidden_state.copy())
         self.value_batch[-1] = torch.from_numpy(last_value.copy())
 
+    def translate_logp_mean_to_reward_mean(self):
+        mu_logp = self.log_prob_eval_policy.mean()
+        mu_r = self.rew_batch.mean()
+        self.log_prob_eval_policy += mu_r - mu_logp
+
     def compute_estimates(self, gamma=0.99, lmbda=0.95, use_gae=True, normalize_adv=True):
         rew_batch = self.rew_batch
         if use_gae:

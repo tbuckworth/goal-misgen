@@ -38,7 +38,16 @@ def main(logp, rew, canon_logp, canon_true_r):
     scatter(normalize(canon_logp), normalize(canon_true_r),straight=True,
             title=f'{env_name} Canonicalised, Normalized, Evaluation environment')
 
+    scatter(logp, canon_true_r, straight=True,
+            title=f'{env_name} Canonicalised, Evaluation environment')
+
+
+
     ((normalize(canon_logp)-normalize(canon_true_r))**2).mean().sqrt()
+
+
+    ((normalize(logp)-normalize(canon_true_r))**2).mean().sqrt()
+
 
     torch.corrcoef(torch.stack((logp, rew)))[0,1]
     torch.corrcoef(torch.stack((canon_logp, canon_true_r)))[0,1]
@@ -48,5 +57,10 @@ def main(logp, rew, canon_logp, canon_true_r):
     torch.corrcoef(torch.stack((logp[flt], rew[flt])))[0,1]
     torch.corrcoef(torch.stack((canon_logp[flt], canon_true_r[flt])))[0,1]
     torch.corrcoef(torch.stack((normalize(canon_logp[flt]), normalize(canon_true_r[flt]))))[0,1]
+
+    [distance(normalize(r+a), normalize(l+al)) for (l,r,a,al) in tuples]
+
+    logp_batch, rew_batch, adjustment, adjustment_logp
+    torch.corrcoef(torch.stack((val_batch, val_batch_logp)))[0,1]
 
 
