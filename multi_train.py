@@ -21,6 +21,8 @@ def run_canon(_, model_files, tag):
     Run hyperparameter_optimization.py using the Python interpreter
     from the specified virtual environment.
     """
+    base_dir = "/vol/bitbucket/tfb115/goal-misgen/"
+    model_files = [base_dir + m for m in model_files]
     subprocess.run(["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", f"multi_canon.py --model_files {' '.join(model_files)} --tag {tag}"])
 
 
