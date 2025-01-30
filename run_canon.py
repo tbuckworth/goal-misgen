@@ -222,12 +222,12 @@ def hp_run(model_file, tag_dict, tag):
 
         "load_value_models": True,
         "value_dir": tag_dict[tag],
-        "soft_canonicalisation": True,
-        "infinite_value": True,
+        "soft_canonicalisation": False,
+        "infinite_value": False,
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
-        "adjust_logprob_mean": False,
+        "adjust_logprob_mean": True,
         "use_valid_env": True,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
@@ -310,9 +310,9 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Soft_Inf": None}, cartpole_dirs, ignore_errors=True)
 
-    model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Soft_Mean_Adjusted": None}, model_files[1:], ignore_errors=True)
+    # model_files = maze_dirs + new_maze_dirs
+    # run_tags_for_files({"Maze_VOrig_Soft_Mean_Adjusted": None}, model_files[1:], ignore_errors=True)
 
-    # run_tags_for_files({"Ascent_Soft_Mean_Adjusted":None}, local_unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"Ascent_Hard_Mean_Adjusted":None}, local_unique_ascent_dirs, ignore_errors=True)
     #
     # run_tags_for_files({"Coinrun_Soft_Mean_Adjusted": None}, coinrun_dirs, ignore_errors=True)
