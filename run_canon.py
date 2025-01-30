@@ -269,6 +269,6 @@ if __name__ == '__main__':
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Mean_Adjusted": None}, model_files, ignore_errors=False)
 
-    run_tags_for_files({"Ascent_Soft_Inf2":None}, local_unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"Ascent_Soft_Inf2":None}, reversed(local_unique_ascent_dirs[12:]), ignore_errors=True)
     #
     # run_tags_for_files({"Coinrun_Soft_Mean_Adjusted": None}, coinrun_dirs, ignore_errors=True)
