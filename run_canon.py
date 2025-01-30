@@ -263,7 +263,7 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 
 
 if __name__ == '__main__':
-    run_tags_for_files_threaded({"Cartpole_Hard_Mean_Adjusted": None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"Cartpole_Hard_Mean_Adjusted": None}, cartpole_dirs, ignore_errors=True)
 
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_soft": None}, model_files, ignore_errors=False)
