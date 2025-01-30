@@ -24,7 +24,12 @@ def run_canon(_, model_files, tag):
     base_dir = "/vol/bitbucket/tfb115/goal-misgen/"
     model_files = [base_dir + m for m in model_files]
     # subprocess.run(["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", f"multi_canon.py --model_files {' '.join(model_files)} --tag {tag}"])
-    cmd = ["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", "multi_canon.py", "--model_files", ' '.join(model_files), "--tag", tag]
+    cmd = ["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8",
+           "multi_canon.py",
+           "--model_files",
+           *model_files,
+           "--tag",
+           tag]
     subprocess.run(cmd)
 
 def main():
