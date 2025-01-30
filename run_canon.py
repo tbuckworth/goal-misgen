@@ -236,7 +236,7 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 
     for tag in tag_dict.keys():
         # Create a thread pool with 10 workers
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             futures = []
 
             # Submit one task per model_file
@@ -269,6 +269,6 @@ if __name__ == '__main__':
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Mean_Adjusted": None}, model_files, ignore_errors=False)
 
-    run_tags_for_files({"Ascent_Soft_Inf":None}, local_unique_ascent_dirs, ignore_errors=False)
+    run_tags_for_files_threaded({"Ascent_Soft_Inf":None}, local_unique_ascent_dirs, ignore_errors=True)
     #
     # run_tags_for_files({"Coinrun_Soft_Mean_Adjusted": None}, coinrun_dirs, ignore_errors=True)
