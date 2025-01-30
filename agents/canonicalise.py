@@ -66,10 +66,12 @@ class Canonicaliser(BaseAgent):
                  remove_duplicate_actions=True,
                  centered_logprobs=False,
                  adjust_logprob_mean=False,
+                 infinite_value=True,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.infinite_value = infinite_value
         self.adjust_logprob_mean = adjust_logprob_mean
         self.centered_logprobs = centered_logprobs
         self.remove_duplicate_actions = remove_duplicate_actions
@@ -231,7 +233,8 @@ class Canonicaliser(BaseAgent):
                 self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_valid, self.env_valid)
 
             # Optimize policy & valueq
-            summary = self.optimize()
+            # summary = self.optimize()
+            summary = self.dummy_optimize()
             # Log the training-procedure
             self.t += self.n_steps * self.n_envs
             rew_batch, done_batch = self.storage.fetch_log_data()
@@ -349,11 +352,13 @@ class Canonicaliser(BaseAgent):
                 next_value_batch = value_model(nobs_batch).squeeze()
                 if rew_type == "reward":
                     R = rew_batch
+                    term_value = 0
                 elif rew_type == "logits":
                     R = logp_eval_policy_batch
+                    term_value = self.inf_term_value() if self.infinite_value else 0
                 else:
                     raise NotImplementedError
-                target = R + self.gamma * next_value_batch * (1 - done_batch)
+                target = R + self.gamma * (next_value_batch * (1 - done_batch) + term_value * done_batch)
                 value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
@@ -367,11 +372,13 @@ class Canonicaliser(BaseAgent):
                     next_value_batch_val = value_model(nobs_batch_val).squeeze()
                     if rew_type == "reward":
                         R = rew_batch_val
+                        term_value = 0
                     elif rew_type == "logits":
                         R = logp_eval_policy_batch_val
+                        term_value = self.inf_term_value() if self.infinite_value else 0
                     else:
                         raise NotImplementedError
-                    target = R + self.gamma * next_value_batch_val * (1 - done_batch_val)
+                    target = R + self.gamma * (next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
 
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
@@ -589,8 +596,8 @@ class Canonicaliser(BaseAgent):
         next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
         # N.B. This is for uniform policy, but probably makes sense for any policy.
         # term_value = (1 / (1 - self.gamma)) * np.log(dist.logits.shape[-1])
-        term_value = 0
-        next_val_batch[done_batch.bool()] = term_value
+        term_value = self.inf_term_value() if self.infinite_value else 0
+        next_val_batch[done_batch.bool()] = 0
         adjustment = self.gamma * next_val_batch - val_batch
         next_val_batch_logp[done_batch.bool()] = term_value
         adjustment_logp = self.gamma * next_val_batch_logp - val_batch_logp
@@ -611,3 +618,15 @@ class Canonicaliser(BaseAgent):
         plt.scatter(obs_batch[:,2].cpu().numpy(),(val_batch).cpu().numpy())
         plt.scatter(obs_batch[:,2].cpu().numpy(),(val_batch_logp).cpu().numpy())
         plt.show()
+
+    def dummy_optimize(self):
+        return {
+            'Loss/total': np.nan,
+            'Loss/pi': np.nan,
+            'Loss/v': np.nan,
+            'Loss/entropy': np.nan,
+            'Loss/l1_reg': np.nan,
+        }
+
+    def inf_term_value(self):
+        return (1 / (1 - self.gamma)) * np.log(self.n_actions)
