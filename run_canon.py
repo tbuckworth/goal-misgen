@@ -116,8 +116,52 @@ maze_value_networks = {
 }
 
 cartpole_dirs = [
-    # "logs/train/cartpole/cartpole/2025-01-29__09-44-44__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__12-19-17__seed_42",
+    "logs/train/cartpole/cartpole/2025-01-30__12-15-05__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__11-41-35__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__09-33-34__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__09-00-27__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__08-58-21__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__08-38-19__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__08-29-54__seed_50",
+    "logs/train/cartpole/cartpole/2025-01-30__08-28-16__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__08-07-36__seed_50",
+    "logs/train/cartpole/cartpole/2025-01-30__08-01-11__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__07-19-57__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__07-05-24__seed_42",
+    "logs/train/cartpole/cartpole/2025-01-30__06-54-50__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__06-36-55__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__05-49-26__seed_50",
+    "logs/train/cartpole/cartpole/2025-01-30__05-30-11__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__04-56-24__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-30__04-48-34__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-30__04-29-50__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__04-17-35__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-30__04-15-10__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__04-03-05__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__03-26-46__seed_42",
+    "logs/train/cartpole/cartpole/2025-01-30__03-20-35__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-30__03-11-18__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50",
+    "logs/train/cartpole/cartpole/2025-01-30__02-45-39__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__02-44-18__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__01-58-59__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__01-50-33__seed_81",
+    "logs/train/cartpole/cartpole/2025-01-30__01-07-57__seed_50",
+    "logs/train/cartpole/cartpole/2025-01-30__01-07-24__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-30__00-37-31__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-30__00-04-35__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__23-44-01__seed_42",
+    "logs/train/cartpole/cartpole/2025-01-29__23-01-55__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__22-30-38__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-29__22-19-22__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-29__20-51-44__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__20-38-01__seed_0",
+    "logs/train/cartpole/cartpole/2025-01-29__20-35-19__seed_42",
+    "logs/train/cartpole/cartpole/2025-01-29__20-34-19__seed_50",
+    "logs/train/cartpole/cartpole/2025-01-29__20-32-57__seed_0",
     "logs/train/cartpole/cartpole/2025-01-29__20-10-36__seed_6033",
+    "logs/train/cartpole/cartpole/2025-01-29__19-48-55__seed_42",
     "logs/train/cartpole/cartpole/2025-01-29__19-28-37__seed_0",
     "logs/train/cartpole/cartpole/2025-01-29__18-47-15__seed_81",
     "logs/train/cartpole/cartpole/2025-01-29__18-17-15__seed_6033",
@@ -264,11 +308,11 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 
 
 if __name__ == '__main__':
-    # run_tags_for_files({"Cartpole_Soft_Mean_Adjusted": None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"Cartpole_Soft_Inf": None}, cartpole_dirs, ignore_errors=True)
 
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Mean_Adjusted": None}, model_files, ignore_errors=False)
 
-    run_tags_for_files({"Ascent_Soft_Inf2":None}, reversed(local_unique_ascent_dirs[12:]), ignore_errors=True)
+    # run_tags_for_files({"Ascent_Soft_Inf2":None}, reversed(local_unique_ascent_dirs[12:]), ignore_errors=True)
     #
     # run_tags_for_files({"Coinrun_Soft_Mean_Adjusted": None}, coinrun_dirs, ignore_errors=True)

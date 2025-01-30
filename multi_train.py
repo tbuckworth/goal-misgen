@@ -4,6 +4,10 @@ import sys
 import subprocess
 import multiprocessing
 
+import numpy as np
+
+from run_canon import coinrun_dirs, cartpole_dirs
+
 
 def run_script(_):
     """
@@ -11,6 +15,13 @@ def run_script(_):
     from the specified virtual environment.
     """
     subprocess.run(["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", "hyperparameter_optimization.py"])
+
+def run_canon(_, model_files, tag):
+    """
+    Run hyperparameter_optimization.py using the Python interpreter
+    from the specified virtual environment.
+    """
+    subprocess.run(["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", f"multi_canon.py --model_files {model_files} --tag {tag}"])
 
 
 def main():
@@ -21,12 +32,14 @@ def main():
 
     n = int(sys.argv[1])  # Number of parallel processes
 
-
+    tag = "Cartpole_Soft_Inf"
+    model_files = [x.tolist() for x in np.array_split(cartpole_dirs, n)]
+    args = [(i, model_files[i], tag) for i in range(n)]
     # Verify that the venv's python exists
 
     with multiprocessing.Pool(processes=n) as pool:
         # Distribute the same venv_python path to each parallel worker
-        pool.map(run_script, range(n))
+        pool.starmap(run_canon, args)
 
 
 if __name__ == "__main__":
