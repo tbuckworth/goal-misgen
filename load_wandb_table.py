@@ -448,12 +448,14 @@ def create_ratio_graphs(tags, filename):
 
 def get_summary():
     tag = "Maze Value Original - fixed1"
+    tag = "Cartpole_Soft_Mean_Adjusted"
     # tag = "Maze Hard Canonicalisation"
     load_summary(env=tag, tag=tag)
 
 
 if __name__ == "__main__":
-    tags = {"Maze Value Original - fixed1": "Maze",
-            "Ascent_Hard_Canon_corrected": "Ascent",
-            }
-    create_ratio_graphs(tags, "test")
+    get_summary()
+    # tags = {"Maze Value Original - fixed1": "Maze",
+    #         "Ascent_Hard_Canon_corrected": "Ascent",
+    #         }
+    # create_ratio_graphs(tags, "test")
