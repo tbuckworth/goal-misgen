@@ -310,11 +310,11 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # run_tags_for_files({"Test": None}, cartpole_dirs, ignore_errors=False)
 
-    run_tags_for_files({"Cartpole_Hard_Mean_Adjusted2": None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"Cartpole_Hard_Mean_Adjusted2": None}, cartpole_dirs, ignore_errors=True)
 
     # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_Hard_Mean_Adjusted": None}, new_maze_dirs, ignore_errors=True)
 
-    # run_tags_for_files({"Ascent_Hard_Mean_Adjusted":None}, local_unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"Ascent_Hard_Mean_Adjusted2":None}, local_unique_ascent_dirs, ignore_errors=True)
     #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)
