@@ -448,8 +448,8 @@ def create_ratio_graphs(tags, filename):
 
 def get_summary():
     tag = "Maze Value Original - fixed1"
-    tag = "Cartpole_Soft_Mean_Adjusted"
-    tag = "Coinrun_Soft_Inf"
+    tag = "Cartpole_Soft_Mean_Adjusted2"
+    # tag = "Coinrun_Soft_Inf"
     # tag = "Maze Hard Canonicalisation"
     load_summary(env=tag, tag=tag)
 
