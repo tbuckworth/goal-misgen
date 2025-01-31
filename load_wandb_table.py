@@ -204,7 +204,7 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
-    min_train_reward = 9
+    min_train_reward = 8
     if tag is None:
         if env == "ascent":
             # Original:
@@ -449,6 +449,7 @@ def create_ratio_graphs(tags, filename):
 def get_summary():
     tag = "Maze Value Original - fixed1"
     tag = "Cartpole_Soft_Mean_Adjusted"
+    tag = "Coinrun_Soft_Inf"
     # tag = "Maze Hard Canonicalisation"
     load_summary(env=tag, tag=tag)
 
