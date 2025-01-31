@@ -213,8 +213,8 @@ def hp_run(model_file, tag_dict, tag):
         "num_timesteps": int(67584),
         "val_epoch": 100,
         "mini_batch_size": 2048,
-        "n_val_envs": 2,
-        "n_envs": int(64 + 2),
+        "n_val_envs": 16,
+        "n_envs": int(64 + 16),
         "num_levels": 10000,
         "distribution_mode": "hard",
         "seed": seed,
@@ -222,12 +222,12 @@ def hp_run(model_file, tag_dict, tag):
 
         "load_value_models": True,
         "value_dir": tag_dict[tag],
-        "soft_canonicalisation": False,
-        "infinite_value": False,
+        "soft_canonicalisation": True,
+        "infinite_value": True,
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
-        "adjust_logprob_mean": True,
+        "adjust_logprob_mean": False,
         "use_valid_env": True,
         # "use_unique_obs": True,
         # "architecture": "crafted-policy",
@@ -313,7 +313,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Hard_Mean_Adjusted2": None}, cartpole_dirs, ignore_errors=True)
 
     # model_files = maze_dirs + new_maze_dirs
-    # run_tags_for_files({"Maze_Hard_Mean_Adjusted": None}, new_maze_dirs, ignore_errors=True)
+    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, new_maze_dirs[1:], ignore_errors=True)
 
     run_tags_for_files({"Ascent_Hard_Mean_Adjusted2":None}, local_unique_ascent_dirs, ignore_errors=True)
     #

@@ -204,7 +204,7 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
-    min_train_reward = 8
+    min_train_reward = 0
     if tag is None:
         if env == "ascent":
             # Original:
@@ -315,8 +315,17 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     plt.tight_layout()
     plt.savefig(f"data/{env_name}_distances_overlapping.png")
     plt.show()
-
+    from scipy.stats import pearsonr
+    corr, p_value = pearsonr(df[x_metric], df[y_valid])
+    print(tag)
+    print(corr)
+    print(p_value)
+    print(len(df))
+    return
     print(df)
+
+
+
 
     ax1 = df.plot.scatter(x=x_metric, y=ratio, alpha=0.7, color='b', label=y_train)
     plt.show()
@@ -449,9 +458,10 @@ def create_ratio_graphs(tags, filename):
 def get_summary():
     tag = "Maze Value Original - fixed1"
     tag = "Cartpole_Soft_Mean_Adjusted2"
-    # tag = "Coinrun_Soft_Inf"
-    # tag = "Maze Hard Canonicalisation"
-    load_summary(env=tag, tag=tag)
+    tag = "Maze_VOrig_Soft_Inf"
+    for tag in ["Maze_VOrig_Soft_Inf", "Cartpole_Soft_Inf_Mean_Adjusted", "Ascent_Soft_Inf2"]:
+        # tag = "Maze Hard Canonicalisation"
+        load_summary(env=tag, tag=tag)
 
 
 if __name__ == "__main__":
