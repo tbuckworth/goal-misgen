@@ -71,7 +71,7 @@ class BPO(BaseAgent):
             act = dist.sample()
             log_prob_act = dist.log_prob(act)
             if self.store_hard_adv:
-                log_prob_act = log_prob_act + dist.entropy()
+                log_prob_act = log_prob_act - dist.entropy()
 
         return act.cpu().numpy(), log_prob_act.cpu().numpy(), value.cpu().numpy(), hidden_state.cpu().numpy()
 
@@ -195,7 +195,7 @@ class BPO(BaseAgent):
             value_loss = self.clipped_bellman_error(old_value_batch, return_batch, value_batch)
 
         # Hard Boltzman Loss
-        hard_adv_hat = log_prob_act_batch + dist_batch.entropy()#dist_batch.probs.log().mean(dim=-1)
+        hard_adv_hat = log_prob_act_batch - dist_batch.entropy()#dist_batch.probs.log().mean(dim=-1)
         pi_loss = self.clipped_error(adv_batch, hard_adv_hat, old_hard_adv_batch, self.bpo_clip)
 
 
