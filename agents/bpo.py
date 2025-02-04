@@ -1,6 +1,7 @@
 from .base_agent import BaseAgent
 from common.misc_util import adjust_lr, get_n_params
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
@@ -40,6 +41,7 @@ class BPO(BaseAgent):
         super(BPO, self).__init__(env, policy, logger, storage, device,
                                   n_checkpoints, env_valid, storage_valid)
 
+        self.inv_temp = nn.Parameter(torch.tensor([1.],requires_grad=True,device=device))
         self.bpo_clip = bpo_clip
         self.store_hard_adv = store_hard_adv
         self.uniform_value = uniform_value
@@ -53,7 +55,7 @@ class BPO(BaseAgent):
         self.gamma = gamma
         self.lmbda = lmbda
         self.learning_rate = learning_rate
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate, eps=1e-5)
+        self.optimizer = optim.Adam([x for x in self.policy.parameters()] + [self.inv_temp], lr=learning_rate, eps=1e-5)
         self.grad_clip_norm = grad_clip_norm
         self.eps_clip = eps_clip
         self.value_coef = value_coef
@@ -71,7 +73,7 @@ class BPO(BaseAgent):
             act = dist.sample()
             log_prob_act = dist.log_prob(act)
             if self.store_hard_adv:
-                log_prob_act = log_prob_act - dist.entropy()
+                log_prob_act = log_prob_act + dist.entropy()
 
         return act.cpu().numpy(), log_prob_act.cpu().numpy(), value.cpu().numpy(), hidden_state.cpu().numpy()
 
@@ -195,9 +197,10 @@ class BPO(BaseAgent):
             value_loss = self.clipped_bellman_error(old_value_batch, return_batch, value_batch)
 
         # Hard Boltzman Loss
-        hard_adv_hat = log_prob_act_batch - dist_batch.entropy()#dist_batch.probs.log().mean(dim=-1)
+        hard_adv_hat = self.inv_temp * (log_prob_act_batch + dist_batch.entropy())#dist_batch.probs.log().mean(dim=-1)
         pi_loss = self.clipped_error(adv_batch, hard_adv_hat, old_hard_adv_batch, self.bpo_clip)
 
+        # enforce that hard_adv expectation is zero?
 
         l1_reg = sum([param.abs().sum() for param in self.policy.parameters()])
 
