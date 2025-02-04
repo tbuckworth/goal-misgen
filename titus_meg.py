@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import torch
 import torch.nn.functional as F
@@ -5,7 +7,7 @@ from torch import nn
 import numpy as np
 import einops
 
-from meg.meg_colab import unknown_utility_meg, state_action_occupancy
+from meg.meg_torch import unknown_utility_meg, state_action_occupancy
 from matplotlib import pyplot as plt
 
 def hard_adv_from_belmann(log_pi):
@@ -85,11 +87,11 @@ class TabularPolicy:
 
 class RewardFunc:
     def __init__(self, R, v, next_v, adjustment):
-        self.R = R
-        self.adjustment = adjustment
-        self.v = v
-        self.next_v = next_v
-        self.C = R + adjustment
+        self.R = R.detach().cpu()
+        self.adjustment = adjustment.detach().cpu()
+        self.v = v.detach().cpu()
+        self.next_v = next_v.detach().cpu()
+        self.C = self.R + self.adjustment
         self.n_actions = self.R.shape[-1]
         self.n_states = self.R.shape[-2]
         self.state = torch.arange(self.n_states).unsqueeze(-1).tile(self.n_actions)
@@ -285,12 +287,13 @@ class TabularMDPs:
 class TabularMDP:
     custom_policies = []
 
-    def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed"):
+    def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed", device=None):
+        self.device = device if device is not None else "cuda" if torch.cuda.is_available() else "cpu"
         self.own_pircs = {}
         self.new_pircs = {}
         self.canon = None
         assert (transition_prob.sum(dim=-1) - 1).abs().max() < 1e-5, "Transition Probabilities do not sum to 1"
-        self.mu = torch.ones(n_states) / n_states if mu is None else mu
+        self.mu = torch.ones(n_states, device=self.device) / n_states if mu is None else mu.to(device=self.device)
         self.megs = {}
         self.pircs = {}
         self.returns = {}
@@ -299,28 +302,29 @@ class TabularMDP:
         self.name = name
         self.n_states = n_states
         self.n_actions = n_actions
-        self.T = transition_prob  # Shape: (n_states, n_actions, n_states)
-        self.reward_vector = reward_vector  # Shape: (n_states,)
+        self.T = transition_prob.to(device=self.device)  # Shape: (n_states, n_actions, n_states)
+        self.reward_vector = reward_vector.to(device=self.device)  # Shape: (n_states,)
         self.gamma = gamma
+
         self.soft_opt = self.soft_q_value_iteration(print_message=False, n_iterations=10000)
         self.hard_opt = self.q_value_iteration(print_message=False, n_iterations=10000, argmax=True)
         self.hard_smax = self.q_value_iteration(print_message=False, n_iterations=10000, argmax=False)
 
-        q_uni = torch.zeros((n_states, n_actions))
+        q_uni = torch.zeros((n_states, n_actions), device=self.device)
         unipi = q_uni.softmax(dim=-1)
         self.uniform = TabularPolicy("Uniform", unipi, q_uni, q_uni.logsumexp(dim=-1))
-        self.hard_adv_cosine = self.hard_adv_learner(print_message=False,
-                                                     n_iterations=10000,
-                                                     criterion=cosine_similarity_loss,
-                                                     name="Hard Adv Cosine")
-        self.hard_adv = self.hard_adv_learner(print_message=False, n_iterations=10000)
+        # self.hard_adv_cosine = self.hard_adv_learner(print_message=False,
+        #                                              n_iterations=10000,
+        #                                              criterion=cosine_similarity_loss,
+        #                                              name="Hard Adv Cosine")
+        # self.hard_adv = self.hard_adv_learner(print_message=False, n_iterations=10000)
         # self.hard_adv_stepped = self.hard_adv_learner_stepped(print_message=False, n_iterations=10000)
         # self.hard_adv_cont = self.hard_adv_learner_continual(print_message=False, n_iterations=10000)
         policies = [self.soft_opt,
                     self.hard_opt,
                     self.hard_smax,
-                    self.hard_adv,
-                    self.hard_adv_cosine,
+                    # self.hard_adv,
+                    # self.hard_adv_cosine,
                     # self.hard_adv_stepped,
                     # self.hard_adv_cont,
                     self.uniform] + self.custom_policies
@@ -341,8 +345,7 @@ class TabularMDP:
         gamma = self.gamma
         n_states = self.n_states
         n_actions = self.n_actions
-        Q = torch.zeros(n_states, n_actions)
-        V = torch.zeros(n_states)
+        Q = torch.zeros(n_states, n_actions, device=self.device)
 
         for i in range(n_iterations):
             old_Q = Q
@@ -367,19 +370,18 @@ class TabularMDP:
     def hard_adv_learner(self, n_iterations=1000, lr=1e-1, print_message=True, criterion=nn.MSELoss(), name="Hard Adv"):
         T = self.T
         R = self.reward_vector
-        gamma = self.gamma
         n_states = self.n_states
         n_actions = self.n_actions
 
-        logits = torch.rand((n_states, n_actions), requires_grad=True)
+        logits = torch.rand((n_states, n_actions), requires_grad=True, device=self.device)
         optimizer = torch.optim.Adam([logits], lr=lr)
         with torch.no_grad():
-            cr = self.canonicalise(R).C
+            cr = self.canonicalise(R).C.to(device=self.device)
 
         for i in range(n_iterations):
             old_logits = logits.detach().clone()
             log_pi = logits.log_softmax(dim=-1)
-            g = log_pi - log_pi.mean(dim=-1).unsqueeze(-1)
+            g = log_pi - (log_pi.exp() * log_pi).sum(dim=-1).unsqueeze(-1)
             loss = criterion(g, cr)
 
             loss.backward()
@@ -465,7 +467,7 @@ class TabularMDP:
         n_states = self.n_states
         n_actions = self.n_actions
 
-        Q = torch.zeros(n_states, n_actions)
+        Q = torch.zeros(n_states, n_actions, device=self.device)
 
         for i in range(n_iterations):
             old_Q = Q
@@ -515,16 +517,18 @@ class TabularMDP:
 
         return self.distance(nca, ncr).item()
 
-    def meg(self, method="matt_meg", verbose=False):
+    def meg(self, method="matt_meg", time_it=False, verbose=False, atol=1e-5):
         meg_func = meg_funcs[method]
         if verbose:
             print(f"\n{self.name} Environment\t{method}:")
         megs = {}
         for name, policy in self.policies.items():
-            meg = meg_func(policy.pi, self.T, self.mu, suppress=True)
+            start = time.time()
+            meg = meg_func(policy.pi, self.T, self.mu, device=self.device, suppress=True, atol=atol)
+            elapsed = time.time() - start
             if verbose:
-                print(f"{name}\tMeg: {meg:.4f}")
-            megs[name] = meg
+                print(f"{name}\tMeg: {meg:.4f}\tElapsed: {elapsed:.4f}")
+            megs[name] = {"Meg": meg.item(),"Time": elapsed} if time_it else meg.item()
         self.megs[method] = megs
 
     def pirc(self, pirc_type, own_policy=False):
@@ -547,10 +551,16 @@ class TabularMDP:
         type_name = "Centred" if is_hard else "Soft"
         self.new_pircs[type_name] = pircs
 
-    def calc_megs(self, verbose=False):
+    def calc_megs(self, verbose=False, time_it=False, atol=1e-5):
         for mf in meg_funcs.keys():
-            self.meg(mf)
-        df = pd.DataFrame(self.megs).round(decimals=2)
+            self.meg(mf, time_it=time_it, atol=atol)
+        if time_it:
+            df = pd.concat(
+                {person: pd.DataFrame(methods).T for person, methods in self.megs.items()},
+                axis=1
+            ).round(decimals=2)
+        else:
+            df = pd.DataFrame(self.megs).round(decimals=2)
         if verbose:
             print(f"{self.name} Environment")
             print(df)
@@ -643,7 +653,7 @@ class TabularMDP:
     def value_iteration(self, pi, R, n_iterations: int = 10000):
         T = self.T
         n_states = self.n_states
-        V = torch.zeros((n_states))
+        V = torch.zeros((n_states), device=self.device)
 
         for _ in range(n_iterations):
             old_V = V
@@ -706,43 +716,43 @@ class TabularMDP:
         return self.distance(nca, ncr).item()
 
 
-def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
-    # TODO: do Matt's new version
-    n_states, n_actions, _ = T.shape
-    q = torch.randn(n_states, n_actions, requires_grad=True)
-    log_pi = pi.log()
-    log_pi.requires_grad = False
-    T.requires_grad = False
+# def matt_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+#     # TODO: do Matt's new version
+#     n_states, n_actions, _ = T.shape
+#     q = torch.randn(n_states, n_actions, requires_grad=True)
+#     log_pi = pi.log()
+#     log_pi.requires_grad = False
+#     T.requires_grad = False
+#
+#     optimizer = torch.optim.Adam([q], lr=lr)
+#     for i in range(n_iterations):
+#         old_q = q.detach().clone()
+#         g = einops.einsum(q, T, "s a, s a ns -> ns")
+#         v = q.logsumexp(dim=-1).unsqueeze(-1)
+#
+#         target = einops.einsum(v + log_pi, T, 's a, s a ns -> ns')
+#         loss = ((target - g) ** 2).mean()
+#
+#         loss.backward()
+#         optimizer.step()
+#         optimizer.zero_grad()
+#         if print_losses and i % 10 == 0:
+#             print(f"Loss:{loss:.4f}")
+#         if (q - old_q).abs().max() < 1e-5:
+#             meg = calculate_meg(pi, q, T, GAMMA, mu)
+#             if not suppress:
+#                 print(f'Matt Meg converged in {i} iterations. Meg:{meg:.4f}')
+#             return meg
+#     print(f'Matt Meg did not converge in {i} iterations')
+#     return None
 
-    optimizer = torch.optim.Adam([q], lr=lr)
-    for i in range(n_iterations):
-        old_q = q.detach().clone()
-        g = einops.einsum(q, T, "s a, s a ns -> ns")
-        v = q.logsumexp(dim=-1).unsqueeze(-1)
 
-        target = einops.einsum(v + log_pi, T, 's a, s a ns -> ns')
-        loss = ((target - g) ** 2).mean()
-
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        if print_losses and i % 10 == 0:
-            print(f"Loss:{loss:.4f}")
-        if (q - old_q).abs().max() < 1e-5:
-            meg = calculate_meg(pi, q, T, GAMMA, mu)
-            if not suppress:
-                print(f'Matt Meg converged in {i} iterations. Meg:{meg:.4f}')
-            return meg
-    print(f'Matt Meg did not converge in {i} iterations')
-    return None
-
-
-def calculate_meg(pi, q, T, gamma, mu):
+def calculate_meg(pi, q, T, gamma, mu, device):
     eps = 1e-9
     n_actions = pi.shape[1]
-    pi_soft = q.softmax(dim=-1).detach().cpu().numpy()
-    da = state_action_occupancy(pi.cpu().numpy(), T.cpu().numpy(), gamma, mu.cpu().numpy())
-    meg = einops.einsum(da, np.log(pi_soft + eps) - np.log(1 / n_actions),
+    pi_soft = q.softmax(dim=-1)
+    da = state_action_occupancy(pi, T, gamma, mu, device=device)
+    meg = einops.einsum(da, torch.log(pi_soft + eps) - np.log(1 / n_actions),
                         'states actions, states actions ->')
     return meg
     # Titus incorrect version:
@@ -751,9 +761,15 @@ def calculate_meg(pi, q, T, gamma, mu):
     return meg
 
 
-def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
+              state_based=True, soft=True):
     n_states, n_actions, _ = T.shape
-    g = torch.randn(n_states, requires_grad=True)
+    if state_based:
+        g_shape = (n_states,)
+    else:
+        g_shape = (n_states, n_actions)
+    g = torch.randn(g_shape, requires_grad=True, device=device)
+    pi = pi.to(device)
     log_pi = pi.log()
     log_pi.requires_grad = False
     T.requires_grad = False
@@ -761,20 +777,32 @@ def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, s
     optimizer = torch.optim.Adam([g], lr=lr)
     for i in range(n_iterations):
         old_g = g.detach().clone()
-        q = einops.einsum(T, g, "s a ns, ns -> s a")
-        v = q.logsumexp(dim=-1).unsqueeze(-1)
-        loss = ((log_pi + v - q) ** 2).mean()
+        if state_based:
+            q = einops.einsum(T, g, "s a ns, ns -> s a")
+        else:
+            q = g
+        if soft:
+            a = log_pi
+            v = q.logsumexp(dim=-1).unsqueeze(-1)
+        else:
+            a = log_pi - (pi*log_pi).sum(dim=-1).unsqueeze(-1)
+            v = (pi*q).sum(dim=-1).unsqueeze(-1)
+        loss = ((a + v - q) ** 2).mean()
 
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
             print(f"Loss:{loss:.4f}")
-        if (g - old_g).abs().max() < 1e-5:
-            meg = calculate_meg(pi, q, T, GAMMA, mu)
+        if (g - old_g).abs().max() < atol:
+            if state_based:
+                q = einops.einsum(T, g, "s a ns, ns -> s a")
+            else:
+                q = g
+            meg = calculate_meg(pi, q, T, GAMMA, mu, device)
             if not suppress:
                 print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
-            return meg
+            return meg.detach().cpu()
     print(f'Titus Meg did not converge in {i} iterations')
     return None
 
@@ -932,21 +960,23 @@ class MattGridworld(TabularMDP):
 
 
 meg_funcs = {
-    "Titus Meg": titus_meg,
-    # "non_tabular_titus_meg": non_tabular_titus_meg,
-    # "matt_meg": matt_meg,
-    "Real Meg": lambda pi, T, mu, suppress: unknown_utility_meg(pi.cpu().numpy(), T.cpu().numpy(), gamma=GAMMA,
-                                                                mu=mu.cpu().numpy()),
+    "Titus Meg Soft S": titus_meg,
+    "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
+    "Titus Meg Hard S": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=True, suppress=suppress),
+    "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
+    # "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device, atol=0.01),
 }
 
 
 def main():
     envs = [AscenderLong(n_states=6), MattGridworld(), OneStep(), ]
+    # envs = [MattGridworld()]
     envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
-        # env.calc_pircs(verbose=True)
-        print(f"\n{name}:\n{env.meg_pirc()}")
+        df = env.calc_megs(verbose=False, time_it=False, atol=1e-5)
+        print(df)
+        # print(f"\n{name}:\n{env.meg_pirc()}")
 
     return
 
@@ -994,6 +1024,6 @@ def vMDP():
 
 
 if __name__ == "__main__":
-    vMDP()
-    # main()
+    # vMDP()
+    main()
     # try_hard_adv_train()
