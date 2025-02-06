@@ -136,6 +136,34 @@ cartpole-mlp:
     train_pct_ood: 0
     reward_termination: None
 
+cartpole-mlp-tracked:
+    algo: ppo-tracked
+    n_envs: 1024
+    n_steps: 256
+    epoch: 3
+    mini_batch_per_epoch: 8
+    mini_batch_size: 8192
+    gamma: 0.999
+    lmbda: 0.95
+    learning_rate: 0.0005
+    grad_clip_norm: 0.5
+    eps_clip: 0.2
+    value_coef: 0.5
+    entropy_coef: 0.01
+    normalize_adv: True
+    normalize_rew: True
+    use_gae: True
+    architecture: mlpmodel
+    recurrent: False
+    hid_dims: [256, 256, 256]
+    final_relu: False
+    l1_coef: 0.
+    anneal_lr: False
+    train_pct_ood: 0
+    reward_termination: None
+    meg_coef: 0.
+    pirc_coef: 0.
+
 ascent-canon:
     algo: canon
     n_envs: 256

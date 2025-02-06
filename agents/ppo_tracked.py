@@ -34,11 +34,15 @@ class PPO_Tracked(BaseAgent):
                  l1_coef=0.,
                  anneal_lr=True,
                  reward_termination=None,
+                 meg_coef=0.,
+                 pirc_coef=0.,
                  **kwargs):
 
         super(PPO_Tracked, self).__init__(env, policy, logger, storage, device,
                                           n_checkpoints, env_valid, storage_valid)
 
+        self.pirc_coef = pirc_coef
+        self.meg_coef = meg_coef
         self.reward_termination = None if reward_termination == 'None' else reward_termination
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
@@ -151,19 +155,20 @@ class PPO_Tracked(BaseAgent):
 
                 with torch.no_grad():
                     _, next_value_batch, _ = self.policy(nobs_batch, None, None)
-                    cr = rew_batch + self.gamma * (1 - done_batch) * next_value_batch - value_batch
-                    cl = log_prob_act_batch + dist_batch.entropy()
-                    pirc = distance(normalize(cr), normalize(cl))
+                cr = rew_batch + self.gamma * (1 - done_batch) * next_value_batch - value_batch
+                cl = log_prob_act_batch + dist_batch.entropy()
+                pirc = distance(normalize(cr), normalize(cl))
 
-                    # logits are assumed to be log_softmax'd which is true in this implementation
-                    q = dist_batch.logits + dist_batch.entropy().unsqueeze(dim=-1) + value_batch.unsqueeze(-1)
-                    log_pi_boltz = q.log_softmax(dim=-1)
-                    max_ent = np.log(1 / dist_batch.logits.shape[-1])
-                    meg = ((dist_batch.probs * (log_pi_boltz - max_ent)).sum(dim=-1)).mean()
+                # logits are assumed to be log_softmax'd which is true in this implementation
+                q = dist_batch.logits + dist_batch.entropy().unsqueeze(dim=-1) + value_batch.unsqueeze(-1)
+                log_pi_boltz = q.log_softmax(dim=-1)
+                max_ent = np.log(1 / dist_batch.logits.shape[-1])
+                meg = ((dist_batch.probs * (log_pi_boltz - max_ent)).sum(dim=-1)).mean()
 
                 # Policy Entropy
                 entropy_loss = dist_batch.entropy().mean()
                 loss = pi_loss + self.value_coef * value_loss - self.entropy_coef * entropy_loss + l1_reg * self.l1_coef
+                loss += - meg * self.meg_coef + pirc * self.pirc_coef
                 loss.backward()
 
                 # Let model to handle the large batch-size with small gpu-memory
