@@ -313,7 +313,7 @@ def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, see
 def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
     hidden_state_dim = model.output_dim
     storage_cons = Storage
-    if algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited']:
+    if algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited', 'ppo-tracked']:
         storage_cons = LirlStorage
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
@@ -339,6 +339,8 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
         from agents.bpo import BPO as AGENT
     elif algo == 'ppo-uniform':
         from agents.ppo_uniform import PPO_Uniform as AGENT
+    elif algo == 'ppo-tracked':
+        from agents.ppo_tracked import PPO_Tracked as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,

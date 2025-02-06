@@ -26,17 +26,18 @@ if __name__ == '__main__':
     #     "save_pics_ascender": False,
     # }
     hparams = {
-        "exp_name": "coinrun",
-        "env_name": "coinrun",
-        "param_name": "hard-500-bpo",
-        "num_timesteps": 200000000,
-        "num_levels": 10000,
+        "algo": "ppo-tracked",
+        "exp_name": "cartpole",
+        "env_name": "cartpole",
+        "param_name": "cartpole-mlp",
+        "num_timesteps": 50000000,
+        # "num_levels": 10000,
         "num_checkpoints": 5,
-        "distribution_mode": "easy",
+        # "distribution_mode": "easy",
         "seed": 6033,
-        "random_percent": 0,
+        # "random_percent": 0,
         "use_wandb": True,
-        "entropy_coef": -1.,
+        # "entropy_coef": -1.,
         # "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-02-03__17-05-59__seed_6033"),
     }
     run_next_hyperparameters(hparams)
