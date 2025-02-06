@@ -37,7 +37,7 @@ if __name__ == '__main__':
         "seed": 6033,
         # "random_percent": 0,
         "use_wandb": True,
-        "meg_coef": 10.,
+        "meg_coef": .1,
         "pirc_coef": 0.,
         # "entropy_coef": -1.,
         # "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-02-03__17-05-59__seed_6033"),
