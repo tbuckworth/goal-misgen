@@ -50,7 +50,7 @@ class Logger(object):
         if len(self.log)>0:
             raise Warning("You are deleting the log by adding extra columns.")
         current = self.log.columns
-        self.log = pd.DataFrame(columns = current + extras)
+        self.log = pd.DataFrame(columns = current.tolist() + extras)
 
     def feed(self, rew_batch, done_batch, rew_batch_v=None, done_batch_v=None):
         steps = rew_batch.shape[0]
