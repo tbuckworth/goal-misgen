@@ -124,7 +124,7 @@ def train(args):
     print('INTIALIZING MODEL...')
     observation_space = env.observation_space
     observation_shape = observation_space.shape
-    act_shape = env.action_space.shape
+    act_shape = (env.action_space.n,)
 
     model, policy = initialize_policy(device, hyperparameters, env, observation_shape)
 

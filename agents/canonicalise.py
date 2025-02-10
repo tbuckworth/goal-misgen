@@ -471,28 +471,25 @@ class Canonicaliser(BaseAgent):
     def meg_v1(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, probs) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
         if not valid:
             # Forcing it to be function of next state
             q_value_batch = q_model(nobs_batch)
             value_batch = q_value_batch.logsumexp(dim=-1)
-            next_q = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
-            target = logp_eval_policy_batch + value_batch - next_q
+            q_selected = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
+            target = logp_eval_policy_batch + value_batch - q_selected
             loss = ((target * (1 - done_batch)) ** 2).mean()
             loss.backward()
             losses.append(loss.item())
             log_pi_soft_star = q_value_batch.log_softmax(dim=-1)
-            # TODO: Would be more efficient if we stored this earlier:
-            with torch.no_grad():
-                dist, _, _ = self.policy(obs_batch, None, None)
-            meg = ((dist.probs * log_pi_soft_star).sum(dim=-1) - max_ent).mean()
+            meg = (pi_subject * (log_pi_soft_star - max_ent)).sum(dim=-1).mean()
             return meg
         with torch.no_grad():
             q_value_batch_val = q_model(obs_batch)
             value_batch_val = q_value_batch_val.logsumexp(dim=-1)
-            next_q = q_value_batch_val[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
-            loss_val = ((logp_eval_policy_batch + value_batch_val - next_q) ** 2).mean()
-            losses.append(loss_val)
+            q_selected = q_value_batch_val[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
+            loss_val = ((logp_eval_policy_batch + value_batch_val - q_selected) ** 2).mean()
+            losses.append(loss_val.item())
             return None
 
     def meg_v2_direct(self, losses, max_ent, q_model, sample, valid=False):
@@ -501,7 +498,7 @@ class Canonicaliser(BaseAgent):
          adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
         if not valid:
             q_value_batch = q_model(obs_batch)
-            value_batch = q_value_batch.logsumexp(dim=-1)
+            value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
             meg = (pi_subject * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
             loss = -meg
             loss.backward()
@@ -509,9 +506,9 @@ class Canonicaliser(BaseAgent):
             return meg
         with torch.no_grad():
             q_value_batch = q_model(obs_batch)
-            value_batch = q_value_batch.logsumexp(dim=-1)
+            value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
             meg = (pi_subject * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
-            losses.append(-meg)
+            losses.append(-meg.item())
             return None
 
     def optimize(self):

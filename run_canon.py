@@ -5,6 +5,15 @@ from hyperparameter_optimization import run_next_hyperparameters
 from load_wandb_table import load_summary
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+ascent_represent = [
+    # misgen:
+    "logs/train/ascent/Ascent/2024-11-19__12-10-48__seed_81",
+    # goal misgen:
+    "logs/train/ascent/Ascent/2024-11-19__12-16-12__seed_42",
+    # gen:
+    "logs/train/ascent/Ascent/2024-11-19__12-37-50__seed_6033",
+]
+
 local_unique_ascent_dirs = [
     "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033",
     "logs/train/ascent/Ascent/2024-11-19__13-22-57__seed_50",
@@ -224,12 +233,12 @@ def hp_run(model_file, tag_dict, tag):
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
         "infinite_value": True,
-        "meg": False,
+        "meg": True,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
         "adjust_logprob_mean": False,
         "use_valid_env": True,
-        "meg_version": "direct",
+        "meg_version": "original",
         "pirc": False,
         "trusted_policy_name": "self",
     }
@@ -309,11 +318,11 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # run_tags_for_files({"Test": None}, cartpole_dirs, ignore_errors=False)
 
-    run_tags_for_files({"Cartpole_Meg": None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"Cartpole_Meg": None}, reversed(cartpole_dirs), ignore_errors=False)
 
     # # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, new_maze_dirs[1:], ignore_errors=True)
     #
-    # run_tags_for_files({"Ascent_Hard_Mean_Adjusted2":None}, local_unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"Ascent_Megv1":None}, ascent_represent, ignore_errors=False)
     # #
     # # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)
