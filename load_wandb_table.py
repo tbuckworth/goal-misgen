@@ -210,6 +210,8 @@ def load_meg(tags):
     runs = api.runs(f"ic-ai-safety/{project_name}", filters=filters)
     train_rewards = "Mean Training Episode Rewards"
     val_rewards = "Mean Evaluation Episode Rewards"
+    train_returns = "Mean Training Returns"
+    val_returns = "Mean Evaluation Returns"
     train_meg = "Meg Train"
     val_meg = "Meg Valid"
     # Collect and filter data
@@ -220,6 +222,8 @@ def load_meg(tags):
             continue
         row[train_rewards] = run.summary.mean_episode_rewards
         row[val_rewards] = run.summary.val_mean_episode_rewards
+        row[train_returns] = run.summary.mean_returns
+        row[val_returns] = run.summary.val_mean_returns
         row[train_meg] = run.summary['Loss/mean_meg_Training']
         row[val_meg] = run.summary['Loss/mean_meg_Validation']
         row["run"] = run.name
@@ -234,19 +238,20 @@ def load_meg(tags):
     plt.figure(figsize=(10, 6))
 
     # Scatter for training data
-    plt.scatter(df[train_rewards], df[train_meg],
+    plt.scatter(df[train_returns], df[train_meg],
                 color='blue', alpha=0.7, label='Training')
 
     # Scatter for validation data
-    plt.scatter(df[val_rewards], df[val_meg],
+    plt.scatter(df[val_returns], df[val_meg],
                 color='orange', alpha=0.7, label='Validation')
 
-    plt.xlabel("Mean Episode Rewards")
+    plt.xlabel("Mean Episode Returns")
     plt.ylabel("Meg")
-    plt.title("Scatter Plot: Mean Rewards vs. Meg (Training vs. Validation)")
+    plt.title("Scatter Plot: Mean Returns vs. Meg (Training vs. Validation)")
     plt.legend()
     plt.grid(True)
     plt.show()
+    print("done")
     # df.plot.scatter(x=x_metric, y=ratio, alpha=0.7, color='b', label=y_train)
     # plt.show()
 
@@ -488,7 +493,7 @@ def get_summary():
 
 
 if __name__ == "__main__":
-    load_meg(["Ascent_Megv1"])
+    load_meg(["Ascent_Meg_orig_4"])
     # get_summary()
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",
