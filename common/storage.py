@@ -167,6 +167,43 @@ class Storage():
             done_batch = self.done_batch.numpy()
         return rew_batch, done_batch
 
+    def get_returns(self, gamma=0.99):
+        """
+        Computes the discounted return for each complete episode (i.e. an episode that
+        both starts and ends within the stored trajectory).
+
+        Args:
+            gamma (float): Discount factor.
+
+        Returns:
+            np.ndarray: An array of discounted returns, one per complete episode.
+        """
+        returns = []
+        # Convert stored rewards and done flags to numpy arrays.
+        # Assuming self.rew_batch and self.done_batch have shape (num_steps, num_envs)
+        rewards = self.rew_batch.cpu().numpy()
+        dones = self.done_batch.cpu().numpy()
+        num_steps, num_envs = rewards.shape
+
+        # Loop over each environment.
+        for env in range(num_envs):
+            episode_return = 0.0
+            discount = 1.0
+            started = False
+            # Iterate over each time step in this environment.
+            for t in range(num_steps):
+                if started:
+                    episode_return += discount * rewards[t, env]
+                    discount *= gamma
+                if dones[t, env]:
+                    started = True
+                    # Episode finished; store the return.
+                    returns.append(episode_return)
+                    # Reset for the next episode.
+                    episode_return = 0.0
+                    discount = 1.0
+        return np.array(returns)
+
 
 class LirlStorage(Storage):
     def __init__(self, *args, **kwargs):

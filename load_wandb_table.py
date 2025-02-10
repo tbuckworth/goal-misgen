@@ -198,7 +198,7 @@ def load_all():
     final.to_csv("data/dist_metrics_full.csv", index=False)
     print(final)
 
-def load_meg(tags, min_train_reward):
+def load_meg(tags):
     api = wandb.Api()
     project_name = "goal-misgen"
     filters = {
@@ -220,8 +220,8 @@ def load_meg(tags, min_train_reward):
             continue
         row[train_rewards] = run.summary.mean_episode_rewards
         row[val_rewards] = run.summary.val_mean_episode_rewards
-        row[train_meg] = run.summary.mean_meg_Training
-        row[val_meg] = run.summary.mean_meg_Validation
+        row[train_meg] = run.summary['Loss/mean_meg_Training']
+        row[val_meg] = run.summary['Loss/mean_meg_Validation']
         row["run"] = run.name
         row["logdir"] = run.config["logdir"]
         row["architecture"] = run.config["architecture"]
@@ -230,7 +230,23 @@ def load_meg(tags, min_train_reward):
     df = pd.DataFrame(all_data)
 
     # x axis mean rewards, y axis meg, colour is whether it's training or validation
+    # Create the scatter plot
+    plt.figure(figsize=(10, 6))
 
+    # Scatter for training data
+    plt.scatter(df[train_rewards], df[train_meg],
+                color='blue', alpha=0.7, label='Training')
+
+    # Scatter for validation data
+    plt.scatter(df[val_rewards], df[val_meg],
+                color='orange', alpha=0.7, label='Validation')
+
+    plt.xlabel("Mean Episode Rewards")
+    plt.ylabel("Meg")
+    plt.title("Scatter Plot: Mean Rewards vs. Meg (Training vs. Validation)")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
     # df.plot.scatter(x=x_metric, y=ratio, alpha=0.7, color='b', label=y_train)
     # plt.show()
 
@@ -472,7 +488,8 @@ def get_summary():
 
 
 if __name__ == "__main__":
-    get_summary()
+    load_meg(["Ascent_Megv1"])
+    # get_summary()
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",
     #         }

@@ -286,6 +286,11 @@ class Canonicaliser(BaseAgent):
         else:
             meg_train = meg_valid = np.nan
 
+        wandb.log({
+            "mean_returns": np.mean(self.storage.get_returns(self.gamma)),
+            "val_mean_returns": np.mean(self.storage_valid.get_returns(self.gamma)),
+        })
+
         if self.pirc:
             with torch.no_grad():
                 if self.print_ascent_rewards:
