@@ -504,7 +504,7 @@ class Canonicaliser(BaseAgent):
          adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
         if self.meg_ground_next:
             obs = nobs_batch
-            flt = 1 - done_batch
+            flt = (1 - done_batch).unsqueeze(dim=-1)
         else:
             obs = obs_batch
             flt = 1
