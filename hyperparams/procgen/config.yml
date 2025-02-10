@@ -201,6 +201,11 @@ ascent-canon:
     value_dir: None
     remove_duplicate_actions: True
     centered_logprobs: False
+    adjust_logprob_mean: False
+    infinite_value: True
+    meg_version: direct
+    pirc: True
+    trusted_policy_name: uniform
 
 cartpole-canon:
     algo: canon
@@ -241,6 +246,7 @@ cartpole-canon:
     infinite_value: True
     meg_version: direct
     pirc: True
+    trusted_policy_name: uniform
 
 
 trusted-value:

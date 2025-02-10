@@ -124,6 +124,7 @@ def train(args):
     print('INTIALIZING MODEL...')
     observation_space = env.observation_space
     observation_shape = observation_space.shape
+    act_shape = env.action_space.shape
 
     model, policy = initialize_policy(device, hyperparameters, env, observation_shape)
 
@@ -132,7 +133,7 @@ def train(args):
     #############
     print('INITIALIZING STORAGE...')
     storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps,
-                                                                                      observation_shape, algo)
+                                                                                      observation_shape, algo, act_shape)
 
     ppo_value = True if hyperparameters.get("value_dir", None) == "ppo" else False
     if ppo_value:
@@ -198,6 +199,8 @@ def train(args):
         elif trusted_policy_name == "misgen":
             trusted_policy = CraftedTorchPolicy(True, policy.action_size, device,
                                                 input_dims=len(env.observation_space.shape))
+        elif trusted_policy_name == "self":
+            trusted_policy = policy
         else:
             raise NotImplementedError
 
@@ -310,15 +313,15 @@ def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, see
     return logdir
 
 
-def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo):
+def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo, act_shape):
     hidden_state_dim = model.output_dim
     storage_cons = Storage
     if algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited', 'ppo-tracked']:
         storage_cons = LirlStorage
-    storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
-    storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
-    storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
-    storage_trusted_val = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device)
+    storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
+    storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
+    storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
+    storage_trusted_val = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
 
     return storage, storage_valid, storage_trusted, storage_trusted_val
 

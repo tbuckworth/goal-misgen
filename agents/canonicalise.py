@@ -144,7 +144,6 @@ class Canonicaliser(BaseAgent):
             if not os.path.exists(d):
                 os.makedirs(d)
 
-
     def predict_subject_adv(self, obs, act, hidden_state, done, subject_policy):
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(device=self.device)
@@ -158,8 +157,8 @@ class Canonicaliser(BaseAgent):
                     return (logp_eval_policy - dist.probs.log().mean(dim=-1)).cpu().numpy()
                 # converting log pi to implied hard advantage func:
                 logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
-                return (logp_eval_policy - logp_exp).cpu().numpy()
-        return logp_eval_policy.cpu().numpy()
+                return (logp_eval_policy - logp_exp).cpu().numpy(), dist.probs.cpu().numpy()
+        return logp_eval_policy.cpu().numpy(), dist.probs.cpu().numpy()
 
     def predict(self, obs, hidden_state, done, policy=None):
         if policy is None:
@@ -273,12 +272,15 @@ class Canonicaliser(BaseAgent):
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
         if self.pirc:
-            self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
-            self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
+            self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training",
+                                "logits")
+            self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val,
+                                "Validation", "logits")
 
         if self.meg:
             meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")
-            meg_valid = self.optimize_meg(self.storage_trusted_val, self.q_model_val, self.q_optimizer_val, "Validation")
+            meg_valid = self.optimize_meg(self.storage_trusted_val, self.q_model_val, self.q_optimizer_val,
+                                          "Validation")
         else:
             meg_train = meg_valid = np.nan
 
@@ -286,10 +288,12 @@ class Canonicaliser(BaseAgent):
             with torch.no_grad():
                 if self.print_ascent_rewards:
                     print("Train Env Rew:")
-                df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model, self.value_model_logp)
+                df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model,
+                                                                        self.value_model_logp)
                 if self.print_ascent_rewards:
                     print("Valid Env Rew:")
-                df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val, self.value_model_logp_val)
+                df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val,
+                                                                        self.value_model_logp_val)
 
                 df_train["Env"] = "Train"
                 df_valid["Env"] = "Valid"
@@ -309,13 +313,13 @@ class Canonicaliser(BaseAgent):
             self.env_valid.close()
 
     def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None, subject_policy=None):
-        logp_eval_policy = None
+        logp_eval_policy = probs = None
         for _ in range(self.n_steps):
             act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done, policy)
             if subject_policy is not None:
-                logp_eval_policy = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
+                logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
-            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy)
+            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
@@ -325,7 +329,7 @@ class Canonicaliser(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
     def optimize_value(self, storage, value_model, value_optimizer, env_type, rew_type="reward"):
-        logdir = os.path.join(self.logvaldir,env_type,rew_type)
+        logdir = os.path.join(self.logvaldir, env_type, rew_type)
         if not os.path.exists(logdir):
             os.makedirs(logdir)
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
@@ -359,7 +363,7 @@ class Canonicaliser(BaseAgent):
             for sample in generator:
                 (obs_batch, nobs_batch, act_batch, done_batch,
                  old_log_prob_act_batch, old_value_batch, return_batch,
-                 adv_batch, rew_batch, logp_eval_policy_batch) = sample
+                 adv_batch, rew_batch, logp_eval_policy_batch, probs) = sample
                 value_batch = value_model(obs_batch).squeeze()
                 next_value_batch = value_model(nobs_batch).squeeze()
                 if rew_type == "reward":
@@ -374,11 +378,10 @@ class Canonicaliser(BaseAgent):
                 value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
-                
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val = sample
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val, probs = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
                     next_value_batch_val = value_model(nobs_batch_val).squeeze()
@@ -390,7 +393,8 @@ class Canonicaliser(BaseAgent):
                         term_value = self.inf_term_value() if self.infinite_value else 0
                     else:
                         raise NotImplementedError
-                    target = R + self.gamma * (next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
+                    target = R + self.gamma * (
+                                next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
 
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
@@ -400,11 +404,11 @@ class Canonicaliser(BaseAgent):
             # grad_accumulation_cnt += 1
             # if e == self.val_epoch - 1:
             #     plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
-            if e > ((checkpoint_cnt+1) * save_every) or e == self.val_epoch-1:
+            if e > ((checkpoint_cnt + 1) * save_every) or e == self.val_epoch - 1:
                 print("Saving model.")
                 torch.save({'model_state_dict': self.policy.state_dict(),
                             'optimizer_state_dict': self.optimizer.state_dict()},
-                             logdir + '/model_' + str(e) + '.pth')
+                           logdir + '/model_' + str(e) + '.pth')
                 checkpoint_cnt += 1
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
@@ -450,11 +454,11 @@ class Canonicaliser(BaseAgent):
             optimizer.step()
             optimizer.zero_grad()
             # grad_accumulation_cnt += 1
-            if e > ((checkpoint_cnt+1) * save_every) or e == self.val_epoch-1:
+            if e > ((checkpoint_cnt + 1) * save_every) or e == self.val_epoch - 1:
                 print("Saving model.")
                 torch.save({'model_state_dict': self.policy.state_dict(),
                             'optimizer_state_dict': self.optimizer.state_dict()},
-                             self.logmegdir + '/model_' + str(e) + '.pth')
+                           self.logmegdir + '/model_' + str(e) + '.pth')
                 checkpoint_cnt += 1
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
@@ -467,7 +471,7 @@ class Canonicaliser(BaseAgent):
     def meg_v1(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, probs) = sample
         if not valid:
             # Forcing it to be function of next state
             q_value_batch = q_model(nobs_batch)
@@ -494,24 +498,19 @@ class Canonicaliser(BaseAgent):
     def meg_v2_direct(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
         if not valid:
             q_value_batch = q_model(obs_batch)
             value_batch = q_value_batch.logsumexp(dim=-1)
-            with torch.no_grad():
-                dist, _, _ = self.policy(obs_batch, None, None)
-            meg = (dist.probs * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
-
+            meg = (pi_subject * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
             loss = -meg
             loss.backward()
             losses.append(loss.item())
-
             return meg
         with torch.no_grad():
             q_value_batch = q_model(obs_batch)
             value_batch = q_value_batch.logsumexp(dim=-1)
-            dist, _, _ = self.policy(obs_batch, None, None)
-            meg = (dist.probs * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
+            meg = (pi_subject * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
             losses.append(-meg)
             return None
 
@@ -530,7 +529,7 @@ class Canonicaliser(BaseAgent):
                                                            recurrent=recurrent)
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _ = sample
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _ = sample
                 mask_batch = (1 - done_batch)
                 dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
@@ -577,7 +576,7 @@ class Canonicaliser(BaseAgent):
         return summary
 
     def sample_next_data(self, sample):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         value = self.value_model(obs_batch)
         next_value = self.value_model(nobs_batch)
@@ -623,7 +622,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
             try:
@@ -658,8 +657,8 @@ class Canonicaliser(BaseAgent):
         return logp_batch, rew_batch, adjustment, adjustment_logp
         # For cartpole - plots angle against val models
         import matplotlib.pyplot as plt
-        plt.scatter(obs_batch[:,2].cpu().numpy(),(val_batch).cpu().numpy())
-        plt.scatter(obs_batch[:,2].cpu().numpy(),(val_batch_logp).cpu().numpy())
+        plt.scatter(obs_batch[:, 2].cpu().numpy(), (val_batch).cpu().numpy())
+        plt.scatter(obs_batch[:, 2].cpu().numpy(), (val_batch_logp).cpu().numpy())
         plt.show()
 
     def dummy_optimize(self):

@@ -6,8 +6,9 @@ from collections import deque
 
 class Storage():
 
-    def __init__(self, obs_shape, hidden_state_size, num_steps, num_envs, device):
+    def __init__(self, obs_shape, hidden_state_size, num_steps, num_envs, device, act_shape):
         self.obs_shape = obs_shape
+        self.act_shape = act_shape
         self.hidden_state_size = hidden_state_size
         self.num_steps = num_steps
         self.num_envs = num_envs
@@ -22,13 +23,14 @@ class Storage():
         self.done_batch = torch.zeros(self.num_steps, self.num_envs)
         self.log_prob_act_batch = torch.zeros(self.num_steps, self.num_envs)
         self.log_prob_eval_policy = torch.zeros(self.num_steps, self.num_envs)
+        self.subject_probs = torch.zeros(self.num_steps, self.num_envs, *self.act_shape)
         self.value_batch = torch.zeros(self.num_steps + 1, self.num_envs)
         self.return_batch = torch.zeros(self.num_steps, self.num_envs)
         self.adv_batch = torch.zeros(self.num_steps, self.num_envs)
         self.info_batch = deque(maxlen=self.num_steps)
         self.step = 0
 
-    def store(self, obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy=None):
+    def store(self, obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy=None, probs=None):
         self.obs_batch[self.step] = torch.from_numpy(obs.copy())
         self.hidden_states_batch[self.step] = torch.from_numpy(hidden_state.copy())
         self.act_batch[self.step] = torch.from_numpy(act.copy())
@@ -39,7 +41,8 @@ class Storage():
         self.info_batch.append(info)
         if logp_eval_policy is not None:
             self.log_prob_eval_policy[self.step] = torch.from_numpy(logp_eval_policy.copy())
-
+        if probs is not None:
+            self.subject_probs[self.step] = torch.from_numpy(probs.copy())
         self.step = (self.step + 1) % self.num_steps
 
     def store_last(self, last_obs, last_hidden_state, last_value):
@@ -81,7 +84,7 @@ class Storage():
         # Logic for getting indices of unique tensors
         # TODO: if stochastic, then we need the triples (obs, acts, next_obs)
         all_obs = self.obs_batch[:-1].reshape(-1, *self.obs_shape)
-        all_acts = self.act_batch.reshape(-1,1)
+        all_acts = self.act_batch.reshape(-1, 1)
         all_pairs = torch.concat((all_obs, all_acts), dim=-1)
         unique_pairs, rev_index = all_pairs.unique(dim=0, return_inverse=True)
         if len(unique_pairs) == len(all_pairs):
@@ -180,11 +183,10 @@ class LirlStorage(Storage):
         for indices in sampler:
             obs_batch = torch.FloatTensor(self.obs_batch).reshape(-1, *self.obs_shape)[indices].to(
                 device)
-            step = [i//n for i in indices]
-            env = [i%n for i in indices]
+            step = [i // n for i in indices]
+            env = [i % n for i in indices]
             with torch.no_grad():
                 self.value_batch[step, env] = value_model(obs_batch).to(self.value_batch.device).squeeze()
-
 
     def collect_and_yield(self, indices, valid_envs=0, valid=False):
         if not valid:
@@ -203,6 +205,8 @@ class LirlStorage(Storage):
             rew_batch = torch.FloatTensor(self.rew_batch[:, valid_envs:]).reshape(-1)[indices].to(self.device)
             log_prob_eval_policy = torch.FloatTensor(self.log_prob_eval_policy[:, valid_envs:]).reshape(-1)[indices].to(
                 self.device)
+            probs = torch.FloatTensor(self.subject_probs[:, valid_envs:]).reshape(-1, *self.act_shape)[indices].to(
+                self.device)
 
         else:
             obs_batch = torch.FloatTensor(self.obs_batch[:-1, :valid_envs]).reshape(-1, *self.obs_shape)[indices].to(
@@ -219,5 +223,7 @@ class LirlStorage(Storage):
             rew_batch = torch.FloatTensor(self.rew_batch[:, :valid_envs]).reshape(-1)[indices].to(self.device)
             log_prob_eval_policy = torch.FloatTensor(self.log_prob_eval_policy[:, :valid_envs]).reshape(-1)[indices].to(
                 self.device)
+            probs = torch.FloatTensor(self.subject_probs[:, :valid_envs]).reshape(-1, *self.act_shape)[indices].to(
+                self.device)
 
-        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy
+        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, probs

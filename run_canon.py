@@ -231,6 +231,7 @@ def hp_run(model_file, tag_dict, tag):
         "use_valid_env": True,
         "meg_version": "direct",
         "pirc": False,
+        "trusted_policy_name": "self",
     }
     run_next_hyperparameters(hparams)
 
