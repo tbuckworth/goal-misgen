@@ -67,16 +67,24 @@ class Canonicaliser(BaseAgent):
                  centered_logprobs=False,
                  adjust_logprob_mean=False,
                  infinite_value=True,
+                 meg_version="direct",
+                 pirc=True,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.pirc = pirc
         self.infinite_value = infinite_value
         self.adjust_logprob_mean = adjust_logprob_mean
         self.centered_logprobs = centered_logprobs
         self.remove_duplicate_actions = remove_duplicate_actions
         self.n_actions = self.env.action_space.n
         self.meg = meg
+        if self.meg:
+            if meg_version == "direct":
+                self.meg_version = self.meg_v2_direct
+            elif meg_version == "original":
+                self.meg_version = self.meg_v1
         self.load_value_models = load_value_models
         self.soft_adv = soft_canonicalisation
         self.use_unique_obs = use_unique_obs
@@ -131,8 +139,10 @@ class Canonicaliser(BaseAgent):
         self.norm_funcs = norm_funcs
         self.dist_funcs = dist_funcs
         self.logvaldir = os.path.join(self.logger.logdir, "val_models")
-        if not os.path.exists(self.logvaldir):
-            os.makedirs(self.logvaldir)
+        self.logmegdir = os.path.join(self.logger.logdir, "meg")
+        for d in [self.logvaldir, self.logmegdir]:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
 
     def predict_subject_adv(self, obs, act, hidden_state, done, subject_policy):
@@ -262,8 +272,9 @@ class Canonicaliser(BaseAgent):
         if not self.load_value_models:
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
-        self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
-        self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
+        if self.pirc:
+            self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training","logits")
+            self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val, "Validation","logits")
 
         if self.meg:
             meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")
@@ -271,26 +282,27 @@ class Canonicaliser(BaseAgent):
         else:
             meg_train = meg_valid = np.nan
 
-        with torch.no_grad():
-            if self.print_ascent_rewards:
-                print("Train Env Rew:")
-            df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model, self.value_model_logp)
-            if self.print_ascent_rewards:
-                print("Valid Env Rew:")
-            df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val, self.value_model_logp_val)
+        if self.pirc:
+            with torch.no_grad():
+                if self.print_ascent_rewards:
+                    print("Train Env Rew:")
+                df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model, self.value_model_logp)
+                if self.print_ascent_rewards:
+                    print("Valid Env Rew:")
+                df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val, self.value_model_logp_val)
 
-            df_train["Env"] = "Train"
-            df_valid["Env"] = "Valid"
-            comb = pd.concat([df_train, df_valid])
-            pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
-            wandb.log({
-                "distances": wandb.Table(dataframe=comb),
-                "distances_pivoted": wandb.Table(dataframe=pivoted_df),
-                "L2_L2_Train": dt,
-                "L2_L2_Valid": dv,
-                "Meg_Train": meg_train,
-                "Meg_Valid": meg_valid,
-            })
+                df_train["Env"] = "Train"
+                df_valid["Env"] = "Valid"
+                comb = pd.concat([df_train, df_valid])
+                pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
+                wandb.log({
+                    "distances": wandb.Table(dataframe=comb),
+                    "distances_pivoted": wandb.Table(dataframe=pivoted_df),
+                    "L2_L2_Train": dt,
+                    "L2_L2_Valid": dv,
+                    "Meg_Train": meg_train,
+                    "Meg_Valid": meg_valid,
+                })
 
         self.env.close()
         if self.env_valid is not None:
@@ -411,6 +423,8 @@ class Canonicaliser(BaseAgent):
         max_ent = np.log(1 / self.n_actions)
         q_model.train()
         self.policy.eval()
+        checkpoint_cnt = 0
+        save_every = self.val_epoch // self.num_checkpoints
         for e in range(self.val_epoch):
             recurrent = self.policy.is_recurrent()
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
@@ -428,42 +442,20 @@ class Canonicaliser(BaseAgent):
             megs = []
 
             for sample in generator:
-                (obs_batch, nobs_batch, act_batch, done_batch,
-                 old_log_prob_act_batch, old_value_batch, return_batch,
-                 adv_batch, rew_batch, logp_eval_policy_batch) = sample
-                # Forcing it to be function of next state
-                q_value_batch = q_model(nobs_batch)
-                value_batch = q_value_batch.logsumexp(dim=-1)
-
-                next_q = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
-                target = logp_eval_policy_batch + value_batch - next_q
-                loss = ((target*(1-done_batch)) ** 2).mean()
-
-                loss.backward()
-                losses.append(loss.item())
-                log_pi_soft_star = q_value_batch.log_softmax(dim=-1)
-                #TODO: Would be more efficient if we stored this earlier:
-                with torch.no_grad():
-                    dist, _, _ = self.policy(obs_batch, None, None)
-
-                meg = ((dist.probs * log_pi_soft_star).sum(dim=-1) - max_ent).mean()
-
+                meg = self.meg_version(losses, max_ent, q_model, sample, valid=False)
                 megs.append(meg.item())
             for sample in generator_valid:
-                obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val = sample
-                with torch.no_grad():
-                    q_value_batch_val = q_model(obs_batch_val)
+                _ = self.meg_version(losses_valid, max_ent, q_model, sample, valid=True)
 
-                    value_batch_val = q_value_batch_val.logsumexp(dim=-1)
-                    next_q = q_value_batch_val[torch.arange(len(act_batch_val)), act_batch_val.to(torch.int64)]
-                    loss_val = ((logp_eval_policy_batch_val + value_batch_val - next_q) ** 2).mean()
-
-                losses_valid.append(loss_val.item())
             optimizer.step()
             optimizer.zero_grad()
             # grad_accumulation_cnt += 1
-
+            if e > ((checkpoint_cnt+1) * save_every) or e == self.val_epoch-1:
+                print("Saving model.")
+                torch.save({'model_state_dict': self.policy.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict()},
+                             self.logmegdir + '/model_' + str(e) + '.pth')
+                checkpoint_cnt += 1
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/meg_loss_{env_type}': np.mean(losses),
@@ -471,6 +463,57 @@ class Canonicaliser(BaseAgent):
                 f'Loss/mean_meg_{env_type}': np.mean(megs),
             })
         return np.mean(megs)
+
+    def meg_v1(self, losses, max_ent, q_model, sample, valid=False):
+        (obs_batch, nobs_batch, act_batch, done_batch,
+         old_log_prob_act_batch, old_value_batch, return_batch,
+         adv_batch, rew_batch, logp_eval_policy_batch) = sample
+        if not valid:
+            # Forcing it to be function of next state
+            q_value_batch = q_model(nobs_batch)
+            value_batch = q_value_batch.logsumexp(dim=-1)
+            next_q = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
+            target = logp_eval_policy_batch + value_batch - next_q
+            loss = ((target * (1 - done_batch)) ** 2).mean()
+            loss.backward()
+            losses.append(loss.item())
+            log_pi_soft_star = q_value_batch.log_softmax(dim=-1)
+            # TODO: Would be more efficient if we stored this earlier:
+            with torch.no_grad():
+                dist, _, _ = self.policy(obs_batch, None, None)
+            meg = ((dist.probs * log_pi_soft_star).sum(dim=-1) - max_ent).mean()
+            return meg
+        with torch.no_grad():
+            q_value_batch_val = q_model(obs_batch)
+            value_batch_val = q_value_batch_val.logsumexp(dim=-1)
+            next_q = q_value_batch_val[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
+            loss_val = ((logp_eval_policy_batch + value_batch_val - next_q) ** 2).mean()
+            losses.append(loss_val)
+            return None
+
+    def meg_v2_direct(self, losses, max_ent, q_model, sample, valid=False):
+        (obs_batch, nobs_batch, act_batch, done_batch,
+         old_log_prob_act_batch, old_value_batch, return_batch,
+         adv_batch, rew_batch, logp_eval_policy_batch) = sample
+        if not valid:
+            q_value_batch = q_model(obs_batch)
+            value_batch = q_value_batch.logsumexp(dim=-1)
+            with torch.no_grad():
+                dist, _, _ = self.policy(obs_batch, None, None)
+            meg = (dist.probs * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
+
+            loss = -meg
+            loss.backward()
+            losses.append(loss.item())
+
+            return meg
+        with torch.no_grad():
+            q_value_batch = q_model(obs_batch)
+            value_batch = q_value_batch.logsumexp(dim=-1)
+            dist, _, _ = self.policy(obs_batch, None, None)
+            meg = (dist.probs * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
+            losses.append(-meg)
+            return None
 
     def optimize(self):
         pi_loss_list, value_loss_list, entropy_loss_list, l1_reg_list, total_loss_list = [], [], [], [], []

@@ -198,6 +198,42 @@ def load_all():
     final.to_csv("data/dist_metrics_full.csv", index=False)
     print(final)
 
+def load_meg(tags, min_train_reward):
+    api = wandb.Api()
+    project_name = "goal-misgen"
+    filters = {
+        "$and": [
+            {"state": "finished"},
+            {"$or": [{"tags": t} for t in tags]}
+        ]
+    }
+    runs = api.runs(f"ic-ai-safety/{project_name}", filters=filters)
+    train_rewards = "Mean Training Episode Rewards"
+    val_rewards = "Mean Evaluation Episode Rewards"
+    train_meg = "Meg Train"
+    val_meg = "Meg Valid"
+    # Collect and filter data
+    all_data = []
+    for run in runs:
+        row = {}
+        if "mean_episode_rewards" not in run.summary.keys():
+            continue
+        row[train_rewards] = run.summary.mean_episode_rewards
+        row[val_rewards] = run.summary.val_mean_episode_rewards
+        row[train_meg] = run.summary.mean_meg_Training
+        row[val_meg] = run.summary.mean_meg_Validation
+        row["run"] = run.name
+        row["logdir"] = run.config["logdir"]
+        row["architecture"] = run.config["architecture"]
+        row["tags"] = run.config["wandb_tags"][0]
+        all_data.append(row)
+    df = pd.DataFrame(all_data)
+
+    # x axis mean rewards, y axis meg, colour is whether it's training or validation
+
+    # df.plot.scatter(x=x_metric, y=ratio, alpha=0.7, color='b', label=y_train)
+    # plt.show()
+
 
 def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, tag=None, use_ratio=False):
     env_name = env
@@ -251,35 +287,6 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
         exclude_crafted, meg_adj, min_train_reward, [tag], train_dist_metric, val_dist_metric)
 
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
-
-    # fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(6, 3), sharey=True)  # Adjust figsize as needed
-    # for ax, y_metric in zip(axes, [train_distance, val_distance]):
-    #     # PLOT:
-    #     df.plot.scatter(x=val_rewards, y=y_metric, ax=ax, alpha=0.7)
-    #     z = np.polyfit(df[val_rewards], df[y_metric], 1)  # Linear fit (degree=1)
-    #     p = np.poly1d(z)
-    #     r_squared = np.corrcoef(df[val_rewards], df[y_metric])[0, 1] ** 2
-    #     x_smooth = np.linspace(df[val_rewards].min(), df[val_rewards].max(),
-    #                            50)  # Adjust the number of points for smoothness
-    #     # Compute the corresponding y values for the trendline
-    #     y_pred = p(x_smooth)
-    #     # Plot the trendline
-    #     ax.plot(x_smooth, y_pred,
-    #             color='black',
-    #             alpha=0.5,
-    #             linestyle='-.',
-    #             # linewidth=5,
-    #             # label=f'Trendline (y={z[0]:.2f}x + {z[1]:.2f})\n$R^2$ = {r_squared:.2f}',
-    #             label=f'$R^2$ = {r_squared:.2f}',
-    #             )
-    #     ax.legend()
-    #     ax.set_title(y_metric)
-    #     ax.set_xlabel(val_rewards)
-    #     ax.set_ylabel("Distance")
-    #     # plt.legend()
-    # plt.tight_layout()
-    # plt.savefig(f"data/{env_name}_distances.png")
-    # plt.show()
 
     # Alternative
     x_metric = val_rewards  # val_rpl also interesting

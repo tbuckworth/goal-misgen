@@ -806,6 +806,37 @@ def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, d
     print(f'Titus Meg did not converge in {i} iterations')
     return None
 
+def direct_meg(pi, T, mu=None, n_iterations=20000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
+              state_based=True, soft=True):
+    n_states, n_actions, _ = T.shape
+    g_shape = (n_states, n_actions)
+    g = torch.randn(g_shape, requires_grad=True, device=device)
+    pi = pi.to(device)
+    log_pi = pi.log()
+    log_pi.requires_grad = False
+    T.requires_grad = False
+    meg = torch.tensor(-torch.inf)
+    optimizer = torch.optim.Adam([g], lr=lr)
+    for i in range(n_iterations):
+        old_meg = meg.item()
+        q = g
+        v = q.logsumexp(dim=-1).unsqueeze(-1)
+        meg = einops.einsum(pi, (q - v - np.log(1 / n_actions)), 'states actions, states actions -> ').mean()
+        loss = -meg
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if print_losses and i % 10 == 0:
+            print(f"Loss:{loss:.4f}")
+        if (meg - old_meg).abs().max() < atol:
+            print(f"Meg as Loss:{meg:.4f}")
+            meg = calculate_meg(pi, g, T, GAMMA, mu, device)
+            if not suppress:
+                print(f'Direct Meg converged in {i} iterations. Meg:{meg:.4f}')
+            return meg.detach().cpu()
+    print(f'Direct Meg did not converge in {i} iterations')
+    return None
+
 
 def non_tabular_titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
     n_states, n_actions, _ = T.shape
@@ -960,10 +991,11 @@ class MattGridworld(TabularMDP):
 
 
 meg_funcs = {
-    "Titus Meg Soft S": titus_meg,
-    "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
-    "Titus Meg Hard S": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=True, suppress=suppress),
-    "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
+    "Direct Meg": direct_meg,
+    "Titus Meg": titus_meg,
+    # "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
+    # "Titus Meg Hard S": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=True, suppress=suppress),
+    # "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
     # "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device, atol=0.01),
 }
 
@@ -974,7 +1006,7 @@ def main():
     envs = {e.name: e for e in envs}
 
     for name, env in envs.items():
-        df = env.calc_megs(verbose=False, time_it=False, atol=1e-5)
+        df = env.calc_megs(verbose=False, time_it=False, atol=1e-4)
         print(df)
         # print(f"\n{name}:\n{env.meg_pirc()}")
 

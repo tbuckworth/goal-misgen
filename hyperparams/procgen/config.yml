@@ -239,6 +239,9 @@ cartpole-canon:
     centered_logprobs: False
     adjust_logprob_mean: False
     infinite_value: True
+    meg_version: direct
+    pirc: True
+
 
 trusted-value:
     algo: trusted-value

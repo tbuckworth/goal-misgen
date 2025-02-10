@@ -229,10 +229,8 @@ def hp_run(model_file, tag_dict, tag):
         "centered_logprobs": False,
         "adjust_logprob_mean": False,
         "use_valid_env": True,
-        # "use_unique_obs": True,
-        # "architecture": "crafted-policy",
-        # "misgen": model_file,
-        # "learning_rate": 1e-3,
+        "meg_version": "direct",
+        "pirc": False,
     }
     run_next_hyperparameters(hparams)
 
@@ -310,11 +308,11 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # run_tags_for_files({"Test": None}, cartpole_dirs, ignore_errors=False)
 
-    # run_tags_for_files({"Cartpole_Hard_Mean_Adjusted2": None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"Cartpole_Meg": None}, cartpole_dirs, ignore_errors=True)
 
-    # model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, new_maze_dirs[1:], ignore_errors=True)
-
-    run_tags_for_files({"Ascent_Hard_Mean_Adjusted2":None}, local_unique_ascent_dirs, ignore_errors=True)
+    # # model_files = maze_dirs + new_maze_dirs
+    # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, new_maze_dirs[1:], ignore_errors=True)
     #
-    # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)
+    # run_tags_for_files({"Ascent_Hard_Mean_Adjusted2":None}, local_unique_ascent_dirs, ignore_errors=True)
+    # #
+    # # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)
