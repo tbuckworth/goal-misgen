@@ -247,6 +247,7 @@ cartpole-canon:
     meg_version: direct
     pirc: True
     trusted_policy_name: uniform
+    meg_ground_next: True
 
 
 trusted-value:

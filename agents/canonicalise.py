@@ -69,10 +69,12 @@ class Canonicaliser(BaseAgent):
                  infinite_value=True,
                  meg_version="direct",
                  pirc=True,
+                 meg_ground_next=True,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.meg_ground_next = meg_ground_next
         self.pirc = pirc
         self.infinite_value = infinite_value
         self.adjust_logprob_mean = adjust_logprob_mean
@@ -472,9 +474,13 @@ class Canonicaliser(BaseAgent):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
          adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+        if self.meg_ground_next:
+            obs = nobs_batch
+        else:
+            obs = obs_batch
         if not valid:
             # Forcing it to be function of next state
-            q_value_batch = q_model(nobs_batch)
+            q_value_batch = q_model(obs)
             value_batch = q_value_batch.logsumexp(dim=-1)
             q_selected = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
             target = logp_eval_policy_batch + value_batch - q_selected
@@ -485,7 +491,7 @@ class Canonicaliser(BaseAgent):
             meg = (pi_subject * (log_pi_soft_star - max_ent)).sum(dim=-1).mean()
             return meg
         with torch.no_grad():
-            q_value_batch_val = q_model(obs_batch)
+            q_value_batch_val = q_model(obs)
             value_batch_val = q_value_batch_val.logsumexp(dim=-1)
             q_selected = q_value_batch_val[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
             loss_val = ((logp_eval_policy_batch + value_batch_val - q_selected) ** 2).mean()

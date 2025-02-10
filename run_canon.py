@@ -241,6 +241,7 @@ def hp_run(model_file, tag_dict, tag):
         "meg_version": "original",
         "pirc": False,
         "trusted_policy_name": "self",
+        "meg_ground_next": False,
     }
     run_next_hyperparameters(hparams)
 
@@ -323,6 +324,6 @@ if __name__ == '__main__':
     # # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, new_maze_dirs[1:], ignore_errors=True)
     #
-    run_tags_for_files({"Ascent_Megv1":None}, ascent_represent, ignore_errors=False)
+    run_tags_for_files({"Ascent_Megv1_curr_obs":None}, ascent_represent, ignore_errors=False)
     # #
     # # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)
