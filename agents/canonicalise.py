@@ -502,18 +502,24 @@ class Canonicaliser(BaseAgent):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
          adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+        if self.meg_ground_next:
+            obs = nobs_batch
+            flt = 1 - done_batch
+        else:
+            obs = obs_batch
+            flt = 1
         if not valid:
-            q_value_batch = q_model(obs_batch)
+            q_value_batch = q_model(obs)
             value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
-            meg = (pi_subject * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
+            meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
             loss = -meg
             loss.backward()
             losses.append(loss.item())
             return meg
         with torch.no_grad():
-            q_value_batch = q_model(obs_batch)
+            q_value_batch = q_model(obs)
             value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
-            meg = (pi_subject * (q_value_batch - value_batch - max_ent)).sum(dim=-1).mean()
+            meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
             losses.append(-meg.item())
             return None
 
