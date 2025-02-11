@@ -87,6 +87,8 @@ class Canonicaliser(BaseAgent):
                 self.meg_version = self.meg_v2_direct
             elif meg_version == "original":
                 self.meg_version = self.meg_v1
+            elif meg_version == "critic":
+                self.meg_version = self.meg_v3
         self.load_value_models = load_value_models
         self.soft_adv = soft_canonicalisation
         self.use_unique_obs = use_unique_obs
@@ -518,6 +520,28 @@ class Canonicaliser(BaseAgent):
             value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
             meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
             loss = -meg
+            loss.backward()
+            losses.append(loss.item())
+            return meg
+        with torch.no_grad():
+            q_value_batch = q_model(obs)
+            value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
+            meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
+            losses.append(-meg.item())
+            return None
+
+    def meg_v3(self, losses, max_ent, q_model, sample, valid=False):
+        (obs_batch, nobs_batch, act_batch, done_batch,
+         old_log_prob_act_batch, old_value_batch, return_batch,
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+        obs = nobs_batch
+        if not valid:
+            adv = logp_eval_policy_batch - (pi_subject * pi_subject.log()).sum(dim=-1)
+            q_target = adv + old_value_batch
+            q_value_batch = q_model(obs)
+            loss = (q_value_batch - q_target).pow(2).mean()
+            # oops, maybe not such a good idea actually.
+            meg = (pi_subject * (q_value_batch - max_ent)).mean()
             loss.backward()
             losses.append(loss.item())
             return meg

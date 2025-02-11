@@ -287,7 +287,7 @@ class TabularMDPs:
 class TabularMDP:
     custom_policies = []
 
-    def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed", device=None):
+    def __init__(self, n_states, n_actions, transition_prob, reward_vector, mu=None, gamma=GAMMA, name="Unnamed", device=None, custom_only=False):
         self.device = device if device is not None else "cuda" if torch.cuda.is_available() else "cpu"
         self.own_pircs = {}
         self.new_pircs = {}
@@ -328,6 +328,7 @@ class TabularMDP:
                     # self.hard_adv_stepped,
                     # self.hard_adv_cont,
                     self.uniform] + self.custom_policies
+        policies = self.custom_policies if custom_only else policies
         self.policies = {p.name: p for p in policies if p is not None}
 
     def evaluate_policy(self, policy: TabularPolicy):
@@ -800,6 +801,8 @@ def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, d
             else:
                 q = g
             meg = calculate_meg(pi, q, T, GAMMA, mu, device)
+            if meg < 0:
+                print("but why?")
             if not suppress:
                 print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
             return meg.detach().cpu()
@@ -934,6 +937,35 @@ class OneStep(TabularMDP):
         self.custom_policies = [self.consistent, self.inconsistent]
         super().__init__(n_states, n_actions, T, R, mu, gamma, "One Step")
 
+class DiffParents(TabularMDP):
+    def __init__(self, gamma=GAMMA, custom_only=False):
+        n_states = 6
+        n_actions = 2
+        T = torch.zeros(n_states, n_actions, n_states)
+        T[0, 0, 2] = 1
+        T[0, 1, 1] = 1
+        T[(1,2,4,5), :, -1] = 1
+        T[3, 0, 1] = 1
+        T[3, 1, 4] = 1
+
+        R = torch.zeros(n_states)
+        R[1] = 1
+        mu = torch.zeros(n_states)
+        mu[(0,3),] = 0.5
+
+        consistent_pi = torch.zeros(n_states, n_actions)
+        consistent_pi[0] = torch.FloatTensor([0.2, 0.8])
+        consistent_pi[3] = torch.FloatTensor([0.7, 0.3])
+
+        consistent_pi[(1,2,4,5),] = 0.5
+
+        inconsistent_pi = consistent_pi.clone()
+        inconsistent_pi[0] = torch.FloatTensor([0.8, 0.2])
+        self.consistent = TabularPolicy("Consistent", consistent_pi)
+        self.inconsistent = TabularPolicy("Inconsistent", inconsistent_pi)
+        self.custom_policies = [self.consistent, self.inconsistent]
+        super().__init__(n_states, n_actions, T, R, mu, gamma, "DiffParents", custom_only=custom_only)
+
 
 class MattGridworld(TabularMDP):
     def __init__(self, gamma=GAMMA, N=5):
@@ -991,17 +1023,36 @@ class MattGridworld(TabularMDP):
 
 
 meg_funcs = {
-    "Direct Meg": direct_meg,
+    # "Direct Meg": direct_meg,
     "Titus Meg": titus_meg,
     # "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
     # "Titus Meg Hard S": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=True, suppress=suppress),
     # "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
-    # "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device, atol=0.01),
+    "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device, atol=0.01),
 }
 
+def gridworld_analysis():
+
+    atol = 1e-10
+    outputs = []
+    for i in range(100):
+        env = MattGridworld()
+        policy = env.policies["Hard Smax"]
+        meg = titus_meg(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol)
+        outputs.append(meg.item())
+
+    from matplotlib import pyplot as plt
+    plt.hist(outputs)
+    plt.show()
+
+    print(outputs)
+    out2 = {k:[l.item() for l in v] for k, v in outputs.items()}
+    df = pd.DataFrame(out2)
+    df.mean()
+    df.std()
 
 def main():
-    envs = [AscenderLong(n_states=6), MattGridworld(), OneStep(), ]
+    envs = [MattGridworld(), ]#DiffParents(custom_only=True)]#, AscenderLong(n_states=6), ]
     # envs = [MattGridworld()]
     envs = {e.name: e for e in envs}
 
@@ -1056,6 +1107,7 @@ def vMDP():
 
 
 if __name__ == "__main__":
+    gridworld_analysis()
     # vMDP()
-    main()
+    # main()
     # try_hard_adv_train()
