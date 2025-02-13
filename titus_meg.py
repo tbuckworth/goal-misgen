@@ -740,7 +740,7 @@ class TabularMDP:
 #         if print_losses and i % 10 == 0:
 #             print(f"Loss:{loss:.4f}")
 #         if (q - old_q).abs().max() < 1e-5:
-#             meg = calculate_meg(pi, q, T, GAMMA, mu)
+#             meg, da = calculate_meg(pi, q, T, GAMMA, mu)
 #             if not suppress:
 #                 print(f'Matt Meg converged in {i} iterations. Meg:{meg:.4f}')
 #             return meg
@@ -755,7 +755,7 @@ def calculate_meg(pi, q, T, gamma, mu, device):
     da = state_action_occupancy(pi, T, gamma, mu, device=device)
     meg = einops.einsum(da, torch.log(pi_soft + eps) - np.log(1 / n_actions),
                         'states actions, states actions ->')
-    return meg
+    return meg, da
     # Titus incorrect version:
     log_pi_soft_star = q.log_softmax(dim=-1)
     meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
@@ -800,7 +800,7 @@ def titus_meg(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, d
                 q = einops.einsum(T, g, "s a ns, ns -> s a")
             else:
                 q = g
-            meg = calculate_meg(pi, q, T, GAMMA, mu, device)
+            meg, da = calculate_meg(pi, q, T, GAMMA, mu, device)
             if meg < 0:
                 print("but why?")
             if not suppress:
@@ -833,7 +833,7 @@ def direct_meg(pi, T, mu=None, n_iterations=20000, lr=1e-1, print_losses=False, 
             print(f"Loss:{loss:.4f}")
         if (meg - old_meg).abs().max() < atol:
             print(f"Meg as Loss:{meg:.4f}")
-            meg = calculate_meg(pi, g, T, GAMMA, mu, device)
+            meg, da = calculate_meg(pi, g, T, GAMMA, mu, device)
             if not suppress:
                 print(f'Direct Meg converged in {i} iterations. Meg:{meg:.4f}')
             return meg.detach().cpu()
@@ -841,10 +841,13 @@ def direct_meg(pi, T, mu=None, n_iterations=20000, lr=1e-1, print_losses=False, 
     return None
 
 
-def non_tabular_titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False, suppress=False):
+
+def non_tabular_titus_megv2(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
+              state_based=True, soft=True):
     n_states, n_actions, _ = T.shape
-    g = torch.randn((n_states, 1), requires_grad=True)
-    h = torch.randn((n_states, 1), requires_grad=True)
+    g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+    h = torch.randn((n_states,), requires_grad=True, device=device)
+    pi = pi.to(device)
 
     log_pi = pi.log()
     log_pi.requires_grad = False
@@ -853,26 +856,28 @@ def non_tabular_titus_meg(pi, T, n_iterations=10000, lr=1e-1, print_losses=False
     optimizer = torch.optim.Adam([g, h], lr=lr)
     for i in range(n_iterations):
         old_g = g.detach().clone()
-        # v = q_est.logsumexp(dim=-1).unsqueeze(-1)
-        meg_proxy = ((log_pi + h - g) ** 2).mean()
+        old_h = h.detach().clone()
 
-        # Actually calculating meg here. can use either as loss, but meg_proxy converges faster.
-        q_est = einops.einsum(T, g.squeeze(), "s a ns, ns -> s a")
-        log_pi_soft_star = q_est.log_softmax(dim=-1)
+        next_h = einops.einsum(T, h, "s a ns, ns -> s a")
+        v = g.logsumexp(dim=-1).unsqueeze(-1)
+        loss1 = (next_h - v - log_pi).pow(2).mean()
+        loss2 = (g - next_h).pow(2).mean()
 
-        meg = ((pi * log_pi_soft_star).sum(dim=-1) - np.log(1 / n_actions)).sum()
-
-        loss = meg_proxy
+        loss = loss1 + loss2
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
-            print(f"Tmeg:{meg_proxy:.4f}\tMeg:{meg:.4f}")
-        if (g - old_g).abs().max() < 1e-5:
+            print(f"Loss:{loss.item():.4f}")
+        if torch.allclose(g, old_g, atol=atol) and torch.allclose(h, old_h, atol=atol):
             if not suppress:
-                print(f'Titus Meg converged in {i} iterations. Meg:{meg:.4f}')
+                print(f'Titus Meg converged in {i} iterations.')
+            meg, da = calculate_meg(pi, g, T, GAMMA, mu, device)
+            if meg < 0:
+                print("but why?")
             return meg
     print(f'Titus Meg did not converge in {i} iterations')
+    meg, da = calculate_meg(pi, g, T, GAMMA, mu, device)
     return meg
 
 
@@ -908,6 +913,7 @@ class AscenderLong(TabularMDP):
 
         go_left = torch.zeros((n_states, n_actions))
         go_left[:, 0] = 1
+        go_left[-1] = 0.5
         self.go_left = TabularPolicy("Go Left", go_left)
         self.custom_policies = [self.go_left]
         super().__init__(n_states, n_actions, T, R, mu, gamma, f"Ascender: {int((n_states - 2) // 2)} Pos States")
@@ -1024,11 +1030,12 @@ class MattGridworld(TabularMDP):
 
 meg_funcs = {
     # "Direct Meg": direct_meg,
-    "Titus Meg": titus_meg,
+    # "Titus Meg": titus_meg,
+    "NonTab Meg": non_tabular_titus_megv2,
     # "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
     # "Titus Meg Hard S": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=True, suppress=suppress),
     # "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
-    "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device, atol=0.01),
+    "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device, atol=0.001),
 }
 
 def gridworld_analysis():
@@ -1052,7 +1059,12 @@ def gridworld_analysis():
     df.std()
 
 def main():
-    envs = [MattGridworld(), ]#DiffParents(custom_only=True)]#, AscenderLong(n_states=6), ]
+    envs = [
+        # OneStep(),
+        # DiffParents(),
+        AscenderLong(n_states=6),
+        # MattGridworld(),
+    ]
     # envs = [MattGridworld()]
     envs = {e.name: e for e in envs}
 
@@ -1104,10 +1116,17 @@ def try_hard_adv_train():
 
 def vMDP():
     envs = TabularMDPs(50)
-
+    meg
+    da.round(decimals=1)
+    pi.round(decimals=4)
+    g.round(decimals=1)
+    h.unsqueeze(-1).round(decimals=1)
+    g.logsumexp(dim=-1).unsqueeze(dim=-1).round(decimals=1)
+    loss1
+    loss2
 
 if __name__ == "__main__":
-    gridworld_analysis()
+    # gridworld_analysis()
     # vMDP()
-    # main()
+    main()
     # try_hard_adv_train()
