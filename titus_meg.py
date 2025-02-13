@@ -10,6 +10,8 @@ import einops
 from meg.meg_torch import unknown_utility_meg, state_action_occupancy
 from matplotlib import pyplot as plt
 
+
+
 def hard_adv_from_belmann(log_pi):
     return log_pi - (log_pi.exp() * log_pi).sum(dim=-1).unsqueeze(-1)
 
