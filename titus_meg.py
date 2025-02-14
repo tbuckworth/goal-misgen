@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 import numpy as np
+import scipy.optimize
 import einops
 
 from meg.meg_torch import unknown_utility_meg, state_action_occupancy, soft_value_iteration, state_occupancy
@@ -774,6 +775,8 @@ class MegFunc(ABC):
         self.log_pi.requires_grad = False
         self.T.requires_grad = False
         self.optimizer = torch.optim.Adam(self.param_list, lr=lr)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_iterations, eta_min=0)
+
         self.max_ent = np.log(1 / self.n_actions)
         self.converged = self.meg = self.log_pi_soft_less_max_ent = None
         self.da = state_action_occupancy(self.pi, self.T, GAMMA, self.mu, device=self.device)
@@ -788,17 +791,22 @@ class MegFunc(ABC):
 
     def learn_meg(self):
         start = time.time()
+        loss, q = self.calculate_loss()
+        meg, _ = self.calculate_meg(q)
         for i in range(self.n_iterations):
+            old_meg = meg
             old_params = [p.detach().clone() for p in self.param_list]
 
             loss, q = self.calculate_loss()
             if not self.no_optimizer:
                 loss.backward()
                 self.optimizer.step()
+                self.scheduler.step()
                 self.optimizer.zero_grad()
+            meg, _ = self.calculate_meg(q)
             if self.print_losses and i % 10 == 0 and loss is not None:
                 print(f"Loss:{loss.item():.4f}")
-            if np.all([torch.allclose(p, old_p, atol=self.atol) for p, old_p in zip(self.param_list, old_params)]):
+            if self.check_convergence(old_params, old_meg, meg):
                 if not self.suppress:
                     print(f'{self.name} Meg converged in {i} iterations.')
                 self.converged = True
@@ -808,6 +816,10 @@ class MegFunc(ABC):
         self.converged = False
         meg, da = self.calculate_meg(q)
         return meg, time.time()-start
+
+    def check_convergence(self, old_params, old_meg, meg):
+        # return torch.allclose(old_meg, meg, atol=self.atol)
+        return np.all([torch.allclose(p, old_p, atol=self.atol) for p, old_p in zip(self.param_list, old_params)])
 
     def calculate_loss(self):
         raise NotImplementedError("calculate_loss is an abstract method. It must be overidden.")
@@ -893,6 +905,7 @@ class KLDivMeg(MegFunc):
                  atol=1e-5, state_based=True, soft=True):
         n_states, n_actions, _ = T.shape
         self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+        # self.g = pi.log().detach().clone().to(device).requires_grad_()
         self.h = torch.randn((n_states,), requires_grad=True, device=device)
         self.param_list = [self.g, self.h]
         self.name = "KLDiv Meg"
@@ -930,6 +943,8 @@ class KLDivMeg(MegFunc):
         self.df = pd.DataFrame(data.detach().cpu().numpy(), columns=columns).round(decimals=2)
         print(self.df)
 
+    # def check_convergence(self, old_params, old_meg, meg):
+    #     return torch.allclose(old_meg, meg, atol=self.atol)
 
 class MattMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
@@ -1376,11 +1391,11 @@ def timing():
                  "n_states": env.n_states}]
     outputs = []
     policy_name = "Hard Smax"
-    for atol in [0.001, 0.0001]:
+    for atol in [1e-3, 1e-4, 1e-5]:
         for i in [10, 20, 50, 100, 200]:
             env = AscenderLong(n_states=i)
             policy = env.policies[policy_name]
-            for j in range(3):
+            for j in range(1):
                 outputs += get_stats(KLDivMeg, policy, env, atol)
                 outputs += get_stats(MattMeg, policy, env, atol)
             df = pd.DataFrame(outputs)
@@ -1388,6 +1403,68 @@ def timing():
     df = pd.DataFrame(outputs)
     df.to_csv("data/meg_timings.csv", index=False)
     print(df)
+
+    import pandas as pd
+    import numpy as np
+    import scipy.optimize
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    # Load the CSV file
+    df = pd.read_csv("data/meg_timings.csv")
+
+    # Remove outliers where n_states = 200
+    df_filtered = df[df["n_states"] != 200]
+
+    # Define an exponential function for curve fitting
+    def exp_func(x, a, b, c):
+        return a * np.exp(b * x) + c
+
+    # Get unique atol values
+    unique_atol = df_filtered["atol"].unique()
+
+    # Create subplots for different atol values with exponential fits
+    fig, axes = plt.subplots(1, len(unique_atol), figsize=(12, 6), sharey=True)
+
+    # Plot for each atol with exponential curve fits
+    for ax, atol_value in zip(axes, unique_atol):
+        subset = df_filtered[df_filtered["atol"] == atol_value]
+
+        # Scatter plot
+        sns.scatterplot(
+            data=subset,
+            x="n_states",
+            y="Elapsed",
+            hue="Type",
+            palette="viridis",
+            ax=ax
+        )
+
+        # Fit and plot exponential curves
+        for t in subset["Type"].unique():
+            type_subset = subset[subset["Type"] == t]
+            x_data = type_subset["n_states"].values
+            y_data = type_subset["Elapsed"].values
+
+            # Fit the exponential function
+            try:
+                popt, _ = scipy.optimize.curve_fit(exp_func, x_data, y_data, p0=(1, 0.01, 1))
+                x_fit = np.linspace(min(x_data), max(x_data), 100)
+                y_fit = exp_func(x_fit, *popt)
+                ax.plot(x_fit, y_fit, label=f"{t} Fit")
+            except:
+                pass  # Skip if fitting fails
+
+        ax.set_title(f"atol = {atol_value}")
+        ax.set_xlabel("Number of States")
+
+    # Set common y-axis label
+    axes[0].set_ylabel("Elapsed Time")
+
+    # Show the plot
+    plt.legend(title="Type & Fit", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
 
 
 def main():
