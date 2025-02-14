@@ -11,6 +11,7 @@ import einops
 
 from meg.meg_torch import unknown_utility_meg, state_action_occupancy, soft_value_iteration, state_occupancy
 from matplotlib import pyplot as plt
+import seaborn as sns
 
 
 def hard_adv_from_belmann(log_pi):
@@ -1404,11 +1405,6 @@ def timing():
     df.to_csv("data/meg_timings.csv", index=False)
     print(df)
 
-    import pandas as pd
-    import numpy as np
-    import scipy.optimize
-    import matplotlib.pyplot as plt
-    import seaborn as sns
 
     # Load the CSV file
     df = pd.read_csv("data/meg_timings.csv")
