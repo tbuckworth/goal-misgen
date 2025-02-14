@@ -68,7 +68,7 @@ class MlpModelNoFinalRelu(nn.Module):
         self.output_dim = hidden_dims[-1]
         if isinstance(self.output_dim, list):
             hidden_dims = hidden_dims[:-1]
-            self.final_layers = [nn.Linear(hidden_dims[-1], k) for k in self.output_dim]
+            self.final_layers = nn.ModuleList([orthogonal_init(nn.Linear(hidden_dims[-1], k)) for k in self.output_dim])
         else:
             self.final_layers = None
 
@@ -377,7 +377,7 @@ class ImpalaValueModel(MLPLayers):
             self.final_layers = None
         elif isinstance(output_dim, list):
             self.layers = nn.Sequential(*(self.generate_layers(self.model.output_dim, hidden_dims[:-1], hidden_dims[-1]) + [nn.ReLU()]))
-            self.final_layers = [nn.Linear(hidden_dims[-1], k) for k in output_dim]
+            self.final_layers = nn.ModuleList([orthogonal_init(nn.Linear(hidden_dims[-1], k)) for k in output_dim])
         else:
             raise NotImplementedError("output_dim must be int or list")
 

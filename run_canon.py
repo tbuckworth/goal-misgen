@@ -2,7 +2,7 @@ import re
 
 from helper_local import get_model_with_largest_checkpoint
 from hyperparameter_optimization import run_next_hyperparameters
-from load_wandb_table import load_summary
+from load_wandb_table import load_summary, load_meg
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ascent_represent = [
@@ -262,8 +262,10 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
                     except Exception as e:
                         pass
         try:
-            load_summary(env=tag, exclude_crafted=True, tag=tag)
+            load_meg([tag])
+            # load_summary(env=tag, exclude_crafted=True, tag=tag)
         except Exception as e:
+
             print(e)
             pass
 
@@ -324,6 +326,6 @@ if __name__ == '__main__':
     # # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, new_maze_dirs[1:], ignore_errors=True)
     #
-    run_tags_for_files({"Ascent_Meg_orig_4":None}, local_unique_ascent_dirs, ignore_errors=False)
+    run_tags_for_files({"Ascent_Meg_KL0":None}, local_unique_ascent_dirs, ignore_errors=False)
     # #
     # # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)

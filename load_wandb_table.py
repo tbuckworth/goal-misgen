@@ -250,6 +250,7 @@ def load_meg(tags):
     plt.title("Scatter Plot: Mean Returns vs. Meg (Training vs. Validation)")
     plt.legend()
     plt.grid(True)
+    plt.savefig(f"data/{'_'.join(tags)}.png")
     plt.show()
     print("done")
     # df.plot.scatter(x=x_metric, y=ratio, alpha=0.7, color='b', label=y_train)
