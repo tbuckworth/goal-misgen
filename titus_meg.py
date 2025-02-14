@@ -527,12 +527,10 @@ class TabularMDP:
             print(f"\n{self.name} Environment\t{method}:")
         megs = {}
         for name, policy in self.policies.items():
-            start = time.time()
             meg_object = meg_func(policy.pi, self.T, self.mu, device=self.device, suppress=True, atol=atol)
-            meg = meg_object.learn_meg()
-            meg_object.print()
+            meg, elapsed = meg_object.learn_meg()
+            # meg_object.print()
             policy.megs[method] = meg_object
-            elapsed = time.time() - start
             if verbose:
                 print(f"{name}\tMeg: {meg:.4f}\tElapsed: {elapsed:.4f}")
             megs[name] = {"Meg": meg.item(), "Time": elapsed} if time_it else meg.item()
@@ -772,7 +770,7 @@ class MegFunc(ABC):
         self.mu = mu
         self.T = T
         self.pi = pi.to(device)
-        self.log_pi = pi.log()
+        self.log_pi = self.pi.log()
         self.log_pi.requires_grad = False
         self.T.requires_grad = False
         self.optimizer = torch.optim.Adam(self.param_list, lr=lr)
@@ -789,6 +787,7 @@ class MegFunc(ABC):
         return self.meg, self.da
 
     def learn_meg(self):
+        start = time.time()
         for i in range(self.n_iterations):
             old_params = [p.detach().clone() for p in self.param_list]
 
@@ -802,13 +801,13 @@ class MegFunc(ABC):
             if np.all([torch.allclose(p, old_p, atol=self.atol) for p, old_p in zip(self.param_list, old_params)]):
                 if not self.suppress:
                     print(f'{self.name} Meg converged in {i} iterations.')
-                    self.converged = True
+                self.converged = True
                 meg, da = self.calculate_meg(q)
-                return meg
+                return meg, time.time()-start
         print(f'{self.name} Meg did not converge in {i} iterations')
         self.converged = False
         meg, da = self.calculate_meg(q)
-        return meg
+        return meg, time.time()-start
 
     def calculate_loss(self):
         raise NotImplementedError("calculate_loss is an abstract method. It must be overidden.")
@@ -850,13 +849,16 @@ class NonTabMeg(MegFunc):
         self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
         self.h = torch.randn((n_states,), requires_grad=True, device=device)
         self.param_list = [self.g, self.h]
-        self.name = "Non Tabular Meg" + " Hard" if not soft else ""
+        self.name = "Non Tabular Meg" + (" Hard" if not soft else "")
         super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
 
     def calculate_loss(self):
         next_h = self.get_next_h()
         v = self.value()
-        loss1 = (self.g - v - self.log_pi).pow(2).mean()
+        try:
+            loss1 = (self.g - v - self.log_pi).pow(2).mean()
+        except RuntimeError as e:
+            raise e
         loss2 = (self.g - next_h).pow(2).mean()
         loss = loss1 + loss2 * 10
         return loss, self.g
@@ -893,7 +895,7 @@ class KLDivMeg(MegFunc):
         self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
         self.h = torch.randn((n_states,), requires_grad=True, device=device)
         self.param_list = [self.g, self.h]
-        self.name = "Non Tabular Meg" + " Hard" if not soft else ""
+        self.name = "KLDiv Meg"
         super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
 
     def calculate_loss(self):
@@ -1361,6 +1363,32 @@ def random_mdp():
     for i in range(100):
         RandMDP().calc_megs(verbose=True, time_it=False, atol=1e-4)
 
+def timing():
+    def get_stats(MegConstructor, policy, env, atol):
+        learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol)
+        meg, elapsed = learner.learn_meg()
+        converged = learner.converged
+        return [{"Type": learner.name,
+                 "Meg": meg.item(),
+                 "Elapsed": elapsed,
+                 "Converged": converged,
+                 "atol": atol,
+                 "n_states": env.n_states}]
+    outputs = []
+    policy_name = "Hard Smax"
+    for atol in [0.001, 0.0001]:
+        for i in [6, 10, 25, 50, 100, 200]:
+            env = AscenderLong(n_states=i)
+            policy = env.policies[policy_name]
+            for j in range(3):
+                outputs += get_stats(KLDivMeg, policy, env, atol)
+                outputs += get_stats(MattMeg, policy, env, atol)
+            df = pd.DataFrame(outputs)
+            print(df)
+    df = pd.DataFrame(outputs)
+    df.to_csv("data/meg_timings.csv", index=False)
+    print(df)
+
 
 def main():
     envs = [
@@ -1434,9 +1462,10 @@ def vMDP():
 
 
 if __name__ == "__main__":
+    timing()
     # cust_mpd()
     # random_mdp()
-    main()
+    # main()
     # gridworld_analysis()
     # vMDP()
     # try_hard_adv_train()
