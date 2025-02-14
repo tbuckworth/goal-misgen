@@ -83,6 +83,7 @@ class TabularPolicy:
             decimals=3) == 1).all(), "pi is not a probability distribution along final dim"
         self.log_pi = self.pi.log()
         self.R = None
+        self.megs = {}
 
 
 # Define a tabular MDP
@@ -325,14 +326,11 @@ class TabularMDP:
         # self.hard_adv = self.hard_adv_learner(print_message=False, n_iterations=10000)
         # self.hard_adv_stepped = self.hard_adv_learner_stepped(print_message=False, n_iterations=10000)
         # self.hard_adv_cont = self.hard_adv_learner_continual(print_message=False, n_iterations=10000)
-        policies = [#self.soft_opt,
+        policies = [self.soft_opt,
                     self.hard_opt,
                     self.hard_smax,
-                    # self.hard_adv,
-                    # self.hard_adv_cosine,
-                    # self.hard_adv_stepped,
-                    # self.hard_adv_cont,
                     self.uniform] + self.custom_policies
+
         policies = self.custom_policies if custom_only else policies
         self.policies = {p.name: p for p in policies if p is not None}
 
@@ -530,7 +528,10 @@ class TabularMDP:
         megs = {}
         for name, policy in self.policies.items():
             start = time.time()
-            meg = meg_func(policy.pi, self.T, self.mu, device=self.device, suppress=True, atol=atol)
+            meg_object = meg_func(policy.pi, self.T, self.mu, device=self.device, suppress=True, atol=atol)
+            meg = meg_object.learn_meg()
+            meg_object.print()
+            policy.megs[method] = meg_object
             elapsed = time.time() - start
             if verbose:
                 print(f"{name}\tMeg: {meg:.4f}\tElapsed: {elapsed:.4f}")
@@ -756,8 +757,10 @@ class MegFunc(ABC):
     param_list = []
     no_optimizer = False
     name = "Unnamed"
-    def __init__(self, pi, T, mu=None, n_iterations:int=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
-              state_based=True, soft=True):
+
+    def __init__(self, pi, T, mu=None, n_iterations: int = 10000, lr=1e-1, print_losses=False, device="cpu",
+                 suppress=False, atol=1e-5,
+                 state_based=True, soft=True):
         self.n_states, self.n_actions, _ = T.shape
         self.n_iterations = n_iterations
         self.print_losses = print_losses
@@ -773,17 +776,16 @@ class MegFunc(ABC):
         self.log_pi.requires_grad = False
         self.T.requires_grad = False
         self.optimizer = torch.optim.Adam(self.param_list, lr=lr)
-        self.max_ent = np.log(1/self.n_actions)
+        self.max_ent = np.log(1 / self.n_actions)
         self.converged = self.meg = self.log_pi_soft_less_max_ent = None
         self.da = state_action_occupancy(self.pi, self.T, GAMMA, self.mu, device=self.device)
-
 
     def calculate_meg(self, q):
         eps = 1e-9
         pi_soft = q.softmax(dim=-1)
         self.log_pi_soft_less_max_ent = torch.log(pi_soft + eps) - self.max_ent
         self.meg = einops.einsum(self.da, self.log_pi_soft_less_max_ent,
-                            'states actions, states actions ->')
+                                 'states actions, states actions ->')
         return self.meg, self.da
 
     def learn_meg(self):
@@ -797,7 +799,7 @@ class MegFunc(ABC):
                 self.optimizer.zero_grad()
             if self.print_losses and i % 10 == 0 and loss is not None:
                 print(f"Loss:{loss.item():.4f}")
-            if torch.all([torch.all_close(p, old_p, atol=self.atol) for p, old_p in zip(self.param_list, old_params)]):
+            if np.all([torch.allclose(p, old_p, atol=self.atol) for p, old_p in zip(self.param_list, old_params)]):
                 if not self.suppress:
                     print(f'{self.name} Meg converged in {i} iterations.')
                     self.converged = True
@@ -811,9 +813,11 @@ class MegFunc(ABC):
     def calculate_loss(self):
         raise NotImplementedError("calculate_loss is an abstract method. It must be overidden.")
 
+
 class TitusMeg(MegFunc):
-    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
-              state_based=True, soft=True):
+    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
+                 atol=1e-5,
+                 state_based=True, soft=True):
         n_states, n_actions, _ = T.shape
         if state_based:
             g_shape = (n_states,)
@@ -850,15 +854,79 @@ class NonTabMeg(MegFunc):
         super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
 
     def calculate_loss(self):
-        next_h = einops.einsum(self.T, self.h, "s a ns, ns -> s a")
-        if self.soft:
-            v = self.g.logsumexp(dim=-1).unsqueeze(-1)
-        else:
-            v = (self.pi * (self.g + self.log_pi)).sum(dim=-1).unsqueeze(-1)
+        next_h = self.get_next_h()
+        v = self.value()
         loss1 = (self.g - v - self.log_pi).pow(2).mean()
         loss2 = (self.g - next_h).pow(2).mean()
         loss = loss1 + loss2 * 10
         return loss, self.g
+
+    def get_next_h(self):
+        return einops.einsum(self.T, self.h, "s a ns, ns -> s a")
+
+    def value(self):
+        if self.soft:
+            return self.g.logsumexp(dim=-1).unsqueeze(-1)
+        return (self.pi * (self.g + self.log_pi)).sum(dim=-1).unsqueeze(-1)
+
+    def print(self):
+        v = self.value().detach()
+        next_h = self.get_next_h().detach()
+        q = self.g.detach()
+        columns = []
+        for name in ["next_h", "q", "v", "q-v", "log_pi", "log_pi - q + v"]:
+            if name == "v":
+                columns += ["v"]
+            else:
+                columns += [f"{name}_{i}" for i in range(self.n_actions)]
+        data = torch.concat((
+            next_h, q, v, q - v, self.log_pi, self.log_pi - q + v,
+        ), dim=-1)
+        self.df = pd.DataFrame(data.detach().cpu().numpy(), columns=columns).round(decimals=2)
+        print(self.df)
+
+
+class KLDivMeg(MegFunc):
+    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
+                 atol=1e-5, state_based=True, soft=True):
+        n_states, n_actions, _ = T.shape
+        self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+        self.h = torch.randn((n_states,), requires_grad=True, device=device)
+        self.param_list = [self.g, self.h]
+        self.name = "Non Tabular Meg" + " Hard" if not soft else ""
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
+
+    def calculate_loss(self):
+        next_h = self.get_next_h()
+        # loss1 = (self.g - v - self.log_pi).pow(2).mean()
+        loss1 = -(self.pi * (self.g.log_softmax(dim=-1) - self.max_ent)).mean()
+        loss2 = (self.g - next_h).pow(2).mean()
+        loss = loss1 + loss2 * 10
+        return loss, self.g
+
+    def get_next_h(self):
+        return einops.einsum(self.T, self.h, "s a ns, ns -> s a")
+
+    def value(self):
+        if self.soft:
+            return self.g.logsumexp(dim=-1).unsqueeze(-1)
+        return (self.pi * (self.g + self.log_pi)).sum(dim=-1).unsqueeze(-1)
+
+    def print(self):
+        v = self.value().detach()
+        next_h = self.get_next_h().detach()
+        q = self.g.detach()
+        columns = []
+        for name in ["next_h", "q", "v", "q-v", "log_pi", "log_pi - q + v"]:
+            if name == "v":
+                columns += ["v"]
+            else:
+                columns += [f"{name}_{i}" for i in range(self.n_actions)]
+        data = torch.concat((
+            next_h, q, v, q - v, self.log_pi, self.log_pi - q + v,
+        ), dim=-1)
+        self.df = pd.DataFrame(data.detach().cpu().numpy(), columns=columns).round(decimals=2)
+        print(self.df)
 
 
 class MattMeg(MegFunc):
@@ -879,7 +947,8 @@ class MattMeg(MegFunc):
         super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
 
     def calculate_loss(self):
-        self.Q, pi_soft = soft_value_iteration(self.U, self.T, self.beta, GAMMA, self.Q, device=self.device, atol=self.atol)
+        self.Q, pi_soft = soft_value_iteration(self.U, self.T, self.beta, GAMMA, self.Q, device=self.device,
+                                               atol=self.atol)
 
         self.d_pi = state_occupancy(self.pi, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
         d_pi_soft = state_occupancy(pi_soft, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
@@ -888,6 +957,22 @@ class MattMeg(MegFunc):
         self.U += self.lr * grad
 
         return None, self.Q
+
+    def print(self):
+        v = self.Q.logsumexp(dim=-1).unsqueeze(-1).detach()
+        U = self.U.detach().unsqueeze(-1)
+        q = self.Q.detach()
+        columns = []
+        for name in ["U", "q", "v", "q-v", "log_pi", "log_pi - q + v"]:
+            if name in ["v", "U"]:
+                columns += [name]
+            else:
+                columns += [f"{name}_{i}" for i in range(self.n_actions)]
+        data = torch.concat((
+            U, q, v, q - v, self.log_pi, self.log_pi - q + v,
+        ), dim=-1)
+        self.df = pd.DataFrame(data.detach().cpu().numpy(), columns=columns).round(decimals=2)
+        print(self.df)
 
 
 def calculate_meg(pi, q, T, gamma, mu, device):
@@ -1015,7 +1100,7 @@ def non_tabular_titus_megv2(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_l
         optimizer.zero_grad()
         if print_losses and i % 10 == 0:
             print(f"Loss:{loss.item():.4f}")
-        if loss2.abs()<0.01 and torch.allclose(g, old_g, atol=atol) and torch.allclose(h, old_h, atol=atol):
+        if loss2.abs() < 0.01 and torch.allclose(g, old_g, atol=atol) and torch.allclose(h, old_h, atol=atol):
             if not suppress:
                 print(f'Titus Meg converged in {i} iterations.')
             meg, da = calculate_meg(pi, g, T, GAMMA, mu, device)
@@ -1027,6 +1112,7 @@ def non_tabular_titus_megv2(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_l
     return meg
     log_pi.round(decimals=2)
     (g - g.max(dim=-1)[0].unsqueeze(-1)).round(decimals=1)
+
 
 # Define an epsilon-greedy policy
 def epsilon_greedy_policy(q_values, epsilon):
@@ -1238,14 +1324,11 @@ class MattGridworld(TabularMDP):
 
 
 meg_funcs = {
-    # "Direct Meg": direct_meg,
-    "Titus Meg": titus_meg,
-    "NonTab Meg": non_tabular_titus_megv2,
-    # "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
-    "NonTab Meg Hard": lambda pi, T, mu, device, suppress, atol: non_tabular_titus_megv2(pi, T, mu=mu, device=device, atol=atol, soft=False, suppress=suppress),
-    # "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
-    "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device,
-                                                                              atol=0.01),
+    "KLDiv Meg": KLDivMeg,
+    # "Titus Meg": TitusMeg,
+    "NonTab Meg": NonTabMeg,
+    # "NonTab Meg Hard": lambda pi, T, mu, device, suppress, atol: NonTabMeg(pi, T, mu=mu, device=device, atol=atol, soft=False, suppress=suppress),
+    "Real Meg": lambda pi, T, mu, device, suppress, atol: MattMeg(pi, T, mu=mu, device=device, atol=0.01),
 }
 
 
@@ -1268,9 +1351,11 @@ def gridworld_analysis():
     df.mean()
     df.std()
 
+
 def cust_mpd():
     while True:
         CustMDP().calc_megs(verbose=True, time_it=False, atol=1e-4)
+
 
 def random_mdp():
     for i in range(100):
@@ -1279,6 +1364,7 @@ def random_mdp():
 
 def main():
     envs = [
+        CustMDP(),
         OneStepOther(),
         OneStep(),
         DiffParents(),
@@ -1348,9 +1434,9 @@ def vMDP():
 
 
 if __name__ == "__main__":
-    cust_mpd()
+    # cust_mpd()
     # random_mdp()
-    # main()
+    main()
     # gridworld_analysis()
     # vMDP()
     # try_hard_adv_train()
