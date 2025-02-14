@@ -1365,7 +1365,7 @@ def random_mdp():
 
 def timing():
     def get_stats(MegConstructor, policy, env, atol):
-        learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol)
+        learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol, n_iterations=100000)
         meg, elapsed = learner.learn_meg()
         converged = learner.converged
         return [{"Type": learner.name,
@@ -1377,7 +1377,7 @@ def timing():
     outputs = []
     policy_name = "Hard Smax"
     for atol in [0.001, 0.0001]:
-        for i in [6, 10, 25, 50, 100, 200]:
+        for i in [10, 20, 50, 100, 200]:
             env = AscenderLong(n_states=i)
             policy = env.policies[policy_name]
             for j in range(3):

@@ -238,7 +238,7 @@ def hp_run(model_file, tag_dict, tag):
         "centered_logprobs": False,
         "adjust_logprob_mean": False,
         "use_valid_env": True,
-        "meg_version": "original",
+        "meg_version": "kldiv",
         "pirc": False,
         "trusted_policy_name": "self",
         "meg_ground_next": True,

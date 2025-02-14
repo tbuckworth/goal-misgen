@@ -52,6 +52,7 @@ class MlpModel(nn.Module):
         return x
 
 
+
 class MlpModelNoFinalRelu(nn.Module):
     def __init__(self,
                  input_dims=4,
@@ -64,23 +65,33 @@ class MlpModelNoFinalRelu(nn.Module):
         """
         super(MlpModelNoFinalRelu, self).__init__()
         self.embedder = lambda x: x
+        self.output_dim = hidden_dims[-1]
+        if isinstance(self.output_dim, list):
+            hidden_dims = hidden_dims[:-1]
+            self.final_layers = [nn.Linear(hidden_dims[-1], k) for k in self.output_dim]
+        else:
+            self.final_layers = None
+
         # Hidden layers
         hidden_dims = [input_dims] + hidden_dims
         layers = []
+
         for i in range(len(hidden_dims) - 1):
             in_features = hidden_dims[i]
             out_features = hidden_dims[i + 1]
             layers.append(nn.Linear(in_features, out_features))
             if i < len(hidden_dims) - 2:
                 layers.append(nn.ReLU())
+
         self.layers = nn.Sequential(*layers)
-        self.output_dim = hidden_dims[-1]
         self.apply(orthogonal_init)
 
     def forward(self, x):
         for layer in self.layers:
             x = layer(x)
-        return x
+        if self.final_layers is None:
+            return x
+        return (fl(x) for fl in self.final_layers)
 
     def embed_and_forward(self, obs, action=None):
         x = self.embedder(obs)
@@ -361,7 +372,14 @@ class ImpalaValueModel(MLPLayers):
         super(ImpalaValueModel, self).__init__()
         self.model = ImpalaModel(in_channels=in_channels, **kwargs)
         self.output_dim = output_dim
-        self.layers = nn.Sequential(*self.generate_layers(self.model.output_dim, hidden_dims, self.output_dim))
+        if isinstance(output_dim, int):
+            self.layers = nn.Sequential(*self.generate_layers(self.model.output_dim, hidden_dims, self.output_dim))
+            self.final_layers = None
+        elif isinstance(output_dim, list):
+            self.layers = nn.Sequential(*(self.generate_layers(self.model.output_dim, hidden_dims[:-1], hidden_dims[-1]) + [nn.ReLU()]))
+            self.final_layers = [nn.Linear(hidden_dims[-1], k) for k in output_dim]
+        else:
+            raise NotImplementedError("output_dim must be int or list")
 
         self.apply(xavier_uniform_init)
 
@@ -369,4 +387,6 @@ class ImpalaValueModel(MLPLayers):
         h = self.model(x)
         for layer in self.layers:
             h = layer(h)
-        return h
+        if self.final_layers is None:
+            return h
+        return (fl(h) for fl in self.final_layers)

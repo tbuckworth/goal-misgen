@@ -70,10 +70,11 @@ class Canonicaliser(BaseAgent):
                  meg_version="direct",
                  pirc=True,
                  meg_ground_next=True,
-                 **kwargs):
+                 consistency_coef=10., **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.consistency_coef = consistency_coef
         self.meg_ground_next = meg_ground_next
         self.pirc = pirc
         self.infinite_value = infinite_value
@@ -89,6 +90,8 @@ class Canonicaliser(BaseAgent):
                 self.meg_version = self.meg_v1
             elif meg_version == "critic":
                 self.meg_version = self.meg_v3
+            elif meg_version == "kldiv":
+                self.meg_version = self.kl_div_meg
         self.load_value_models = load_value_models
         self.soft_adv = soft_canonicalisation
         self.use_unique_obs = use_unique_obs
@@ -550,6 +553,29 @@ class Canonicaliser(BaseAgent):
             value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
             meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
             losses.append(-meg.item())
+            return None
+
+    def kl_div_meg(self, losses, max_ent, q_model, sample, valid=False):
+        (obs_batch, nobs_batch, act_batch, done_batch,
+         old_log_prob_act_batch, old_value_batch, return_batch,
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+        def generate_loss_meg():
+            q_value_batch, _ = q_model(obs_batch)
+            q_taken = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
+            _, next_q = q_model(nobs_batch)
+            meg = (pi_subject * (q_value_batch - max_ent)).mean()
+            loss1 = -meg
+            loss2 = (q_taken - next_q).pow(2).mean()
+            loss = loss1 + loss2 * self.consistency_coef  # should be at least 10
+            return loss, meg
+        if not valid:
+            loss, meg = generate_loss_meg()
+            loss.backward()
+            losses.append(loss.item())
+            return meg
+        with torch.no_grad():
+            loss, meg = generate_loss_meg()
+            losses.append(loss.item())
             return None
 
     def optimize(self):

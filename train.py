@@ -183,8 +183,11 @@ def train(args):
         value_model_logp_val.to(device)
 
         if hyperparameters.get("meg", False):
-            q_model = model_constructor(2)
-            q_model_val = model_constructor(2)
+            output_dim = env.action_space.n
+            if hyperparameters.get("meg_version", None) == "kldiv":
+                output_dim = [output_dim, 1]
+            q_model = model_constructor(output_dim)
+            q_model_val = model_constructor(output_dim)
             q_model.to(device)
             q_model_val.to(device)
         else:
