@@ -1,4 +1,5 @@
 import time
+from abc import ABC
 
 import pandas as pd
 import torch
@@ -7,7 +8,7 @@ from torch import nn
 import numpy as np
 import einops
 
-from meg.meg_torch import unknown_utility_meg, state_action_occupancy
+from meg.meg_torch import unknown_utility_meg, state_action_occupancy, soft_value_iteration, state_occupancy
 from matplotlib import pyplot as plt
 
 
@@ -751,6 +752,143 @@ class TabularMDP:
 #     print(f'Matt Meg did not converge in {i} iterations')
 #     return None
 
+class MegFunc(ABC):
+    param_list = []
+    no_optimizer = False
+    name = "Unnamed"
+    def __init__(self, pi, T, mu=None, n_iterations:int=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
+              state_based=True, soft=True):
+        self.n_states, self.n_actions, _ = T.shape
+        self.n_iterations = n_iterations
+        self.print_losses = print_losses
+        self.device = device
+        self.suppress = suppress
+        self.atol = atol
+        self.state_based = state_based
+        self.soft = soft
+        self.mu = mu
+        self.T = T
+        self.pi = pi.to(device)
+        self.log_pi = pi.log()
+        self.log_pi.requires_grad = False
+        self.T.requires_grad = False
+        self.optimizer = torch.optim.Adam(self.param_list, lr=lr)
+        self.max_ent = np.log(1/self.n_actions)
+        self.converged = self.meg = self.log_pi_soft_less_max_ent = None
+        self.da = state_action_occupancy(self.pi, self.T, GAMMA, self.mu, device=self.device)
+
+
+    def calculate_meg(self, q):
+        eps = 1e-9
+        pi_soft = q.softmax(dim=-1)
+        self.log_pi_soft_less_max_ent = torch.log(pi_soft + eps) - self.max_ent
+        self.meg = einops.einsum(self.da, self.log_pi_soft_less_max_ent,
+                            'states actions, states actions ->')
+        return self.meg, self.da
+
+    def learn_meg(self):
+        for i in range(self.n_iterations):
+            old_params = [p.detach().clone() for p in self.param_list]
+
+            loss, q = self.calculate_loss()
+            if not self.no_optimizer:
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+            if self.print_losses and i % 10 == 0 and loss is not None:
+                print(f"Loss:{loss.item():.4f}")
+            if torch.all([torch.all_close(p, old_p, atol=self.atol) for p, old_p in zip(self.param_list, old_params)]):
+                if not self.suppress:
+                    print(f'{self.name} Meg converged in {i} iterations.')
+                    self.converged = True
+                meg, da = self.calculate_meg(q)
+                return meg
+        print(f'{self.name} Meg did not converge in {i} iterations')
+        self.converged = False
+        meg, da = self.calculate_meg(q)
+        return meg
+
+    def calculate_loss(self):
+        raise NotImplementedError("calculate_loss is an abstract method. It must be overidden.")
+
+class TitusMeg(MegFunc):
+    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False, atol=1e-5,
+              state_based=True, soft=True):
+        n_states, n_actions, _ = T.shape
+        if state_based:
+            g_shape = (n_states,)
+        else:
+            g_shape = (n_states, n_actions)
+        self.g = torch.randn(g_shape, requires_grad=True, device=device)
+        self.param_list = [self.g]
+        self.name = "Titus Meg" + " next state based" if state_based else ""
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
+
+    def calculate_loss(self):
+        if self.state_based:
+            q = einops.einsum(self.T, self.g, "s a ns, ns -> s a")
+        else:
+            q = self.g
+        if self.soft:
+            a = self.log_pi
+            v = q.logsumexp(dim=-1).unsqueeze(-1)
+        else:
+            a = self.log_pi - (self.pi * self.log_pi).sum(dim=-1).unsqueeze(-1)
+            v = (self.pi * q).sum(dim=-1).unsqueeze(-1)
+        loss = ((a + v - q) ** 2).mean()
+        return loss, q
+
+
+class NonTabMeg(MegFunc):
+    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
+                 atol=1e-5, state_based=True, soft=True):
+        n_states, n_actions, _ = T.shape
+        self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+        self.h = torch.randn((n_states,), requires_grad=True, device=device)
+        self.param_list = [self.g, self.h]
+        self.name = "Non Tabular Meg" + " Hard" if not soft else ""
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
+
+    def calculate_loss(self):
+        next_h = einops.einsum(self.T, self.h, "s a ns, ns -> s a")
+        if self.soft:
+            v = self.g.logsumexp(dim=-1).unsqueeze(-1)
+        else:
+            v = (self.pi * (self.g + self.log_pi)).sum(dim=-1).unsqueeze(-1)
+        loss1 = (self.g - v - self.log_pi).pow(2).mean()
+        loss2 = (self.g - next_h).pow(2).mean()
+        loss = loss1 + loss2 * 10
+        return loss, self.g
+
+
+class MattMeg(MegFunc):
+    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
+                 atol=1e-5, state_based=True, soft=True):
+        n_states, n_actions, _ = T.shape
+
+        self.Q = torch.rand(n_states, n_actions, device=device)
+        self.beta = 1.0
+        self.U = torch.rand(n_states, device=device)
+        self.d_pi = torch.rand(n_states, device=device)
+        self.lr = lr
+        self.no_optimizer = True
+        self.param_list = [self.U]
+        self.name = "Matt Meg"
+        if mu is None:
+            mu = torch.ones(n_states, device=device) / n_states
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
+
+    def calculate_loss(self):
+        self.Q, pi_soft = soft_value_iteration(self.U, self.T, self.beta, GAMMA, self.Q, device=self.device, atol=self.atol)
+
+        self.d_pi = state_occupancy(self.pi, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
+        d_pi_soft = state_occupancy(pi_soft, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
+        grad = einops.einsum(self.d_pi - d_pi_soft, self.U, 'states, states -> states')
+
+        self.U += self.lr * grad
+
+        return None, self.Q
+
 
 def calculate_meg(pi, q, T, gamma, mu, device):
     eps = 1e-9
@@ -864,7 +1002,10 @@ def non_tabular_titus_megv2(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_l
         old_h = h.detach().clone()
 
         next_h = einops.einsum(T, h, "s a ns, ns -> s a")
-        v = g.logsumexp(dim=-1).unsqueeze(-1)
+        if soft:
+            v = g.logsumexp(dim=-1).unsqueeze(-1)
+        else:
+            v = (pi * (g + log_pi)).sum(dim=-1).unsqueeze(-1)
         loss1 = (g - v - log_pi).pow(2).mean()
         loss2 = (g - next_h).pow(2).mean()
 
@@ -884,7 +1025,8 @@ def non_tabular_titus_megv2(pi, T, mu=None, n_iterations=10000, lr=1e-1, print_l
     print(f'Titus Meg did not converge in {i} iterations')
     meg, da = calculate_meg(pi, g, T, GAMMA, mu, device)
     return meg
-
+    log_pi.round(decimals=2)
+    (g - g.max(dim=-1)[0].unsqueeze(-1)).round(decimals=1)
 
 # Define an epsilon-greedy policy
 def epsilon_greedy_policy(q_values, epsilon):
@@ -1100,7 +1242,7 @@ meg_funcs = {
     "Titus Meg": titus_meg,
     "NonTab Meg": non_tabular_titus_megv2,
     # "Titus Meg Soft SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=True, state_based=False, suppress=suppress),
-    # "Titus Meg Hard S": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=True, suppress=suppress),
+    "NonTab Meg Hard": lambda pi, T, mu, device, suppress, atol: non_tabular_titus_megv2(pi, T, mu=mu, device=device, atol=atol, soft=False, suppress=suppress),
     # "Titus Meg Hard SxA": lambda pi, T, mu, device, suppress, atol: titus_meg(pi, T, mu=mu, device=device, atol=atol, soft=False, state_based=False, suppress=suppress),
     "Real Meg": lambda pi, T, mu, device, suppress, atol: unknown_utility_meg(pi, T, gamma=GAMMA, mu=mu, device=device,
                                                                               atol=0.01),
