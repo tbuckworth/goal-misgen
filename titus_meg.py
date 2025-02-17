@@ -757,10 +757,12 @@ class MegFunc(ABC):
     param_list = []
     no_optimizer = False
     name = "Unnamed"
+    convergence_type = None
+    use_scheduler=None
 
-    def __init__(self, pi, T, mu=None, n_iterations: int = 10000, lr=1e-1, print_losses=False, device="cpu",
+    def __init__(self, pi, T, mu=None, n_iterations: int = 10000, lr=1e-2, print_losses=False, device="cpu",
                  suppress=False, atol=1e-5,
-                 state_based=True, soft=True):
+                 state_based=True, soft=True, use_scheduler=False):
         self.n_states, self.n_actions, _ = T.shape
         self.n_iterations = n_iterations
         self.print_losses = print_losses
@@ -775,8 +777,10 @@ class MegFunc(ABC):
         self.log_pi = self.pi.log()
         self.log_pi.requires_grad = False
         self.T.requires_grad = False
+        self.use_scheduler = use_scheduler
         self.optimizer = torch.optim.Adam(self.param_list, lr=lr)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_iterations, eta_min=0)
+        if self.use_scheduler:
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_iterations, eta_min=0)
 
         self.max_ent = np.log(1 / self.n_actions)
         self.converged = self.meg = self.log_pi_soft_less_max_ent = None
@@ -792,17 +796,22 @@ class MegFunc(ABC):
 
     def learn_meg(self):
         start = time.time()
-        loss, q = self.calculate_loss()
-        meg, _ = self.calculate_meg(q)
+        if self.convergence_type == "Meg":
+            _, q = self.calculate_loss()
+            meg, _ = self.calculate_meg(q)
+        else:
+            q = meg = old_meg = None
         for i in range(self.n_iterations):
-            old_meg = meg
+            if self.convergence_type == "Meg":
+                old_meg = meg
             old_params = [p.detach().clone() for p in self.param_list]
 
             loss, q = self.calculate_loss()
             if not self.no_optimizer:
                 loss.backward()
                 self.optimizer.step()
-                self.scheduler.step()
+                if self.use_scheduler:
+                    self.scheduler.step()
                 self.optimizer.zero_grad()
             meg, _ = self.calculate_meg(q)
             if self.print_losses and i % 10 == 0 and loss is not None:
@@ -903,7 +912,7 @@ class NonTabMeg(MegFunc):
 
 class KLDivMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
-                 atol=1e-5, state_based=True, soft=True):
+                 atol=1e-5, state_based=True, soft=True, convergence_type="Q", use_scheduler=False):
         n_states, n_actions, _ = T.shape
         self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
         # Thought this would make sense, but seems to get stuck in local optima:
@@ -911,7 +920,9 @@ class KLDivMeg(MegFunc):
         self.h = torch.randn((n_states,), requires_grad=True, device=device)
         self.param_list = [self.g, self.h]
         self.name = "KLDiv Meg"
-        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
+        self.convergence_type = convergence_type
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft,
+                         use_scheduler=use_scheduler)
 
     def calculate_loss(self):
         next_h = self.get_next_h()
@@ -946,12 +957,16 @@ class KLDivMeg(MegFunc):
         print(self.df)
 
     def check_convergence(self, old_params, old_meg, meg):
-        # We are checking for convergence of the q function to make it consistent with original (real/matt) Meg.
-        return torch.allclose(old_params[0], self.param_list[0], atol=self.atol)
+        if self.convergence_type == "Q":
+            # We are checking for convergence of the q function to make it consistent with original (real/matt) Meg.
+            return torch.allclose(old_params[0], self.param_list[0], atol=self.atol)
+        if self.convergence_type != "Meg":
+            raise NotImplementedError(f'{self.convergence_type} is not implemented. Meg/Q only.')
+        return torch.allclose(old_meg, meg, atol=self.atol)
 
 class MattMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
-                 atol=1e-5, state_based=True, soft=True):
+                 atol=1e-5, state_based=True, soft=True, convergence_type="U", use_scheduler=None):
         n_states, n_actions, _ = T.shape
 
         self.Q = torch.rand(n_states, n_actions, device=device)
@@ -960,16 +975,17 @@ class MattMeg(MegFunc):
         self.d_pi = torch.rand(n_states, device=device)
         self.lr = lr
         self.no_optimizer = True
-        self.param_list = [self.Q]
+        self.param_list = [self.U, self.Q]
         self.name = "Matt Meg"
+        self.convergence_type = convergence_type
         if mu is None:
             mu = torch.ones(n_states, device=device) / n_states
         super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft)
 
     def calculate_loss(self):
-        self.Q, pi_soft = soft_value_iteration(self.U, self.T, self.beta, GAMMA, self.Q, device=self.device,
+        Q, pi_soft = soft_value_iteration(self.U, self.T, self.beta, GAMMA, self.Q, device=self.device,
                                                atol=self.atol)
-
+        self.Q.copy_(Q)
         self.d_pi = state_occupancy(self.pi, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
         d_pi_soft = state_occupancy(pi_soft, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
         grad = einops.einsum(self.d_pi - d_pi_soft, self.U, 'states, states -> states')
@@ -993,6 +1009,21 @@ class MattMeg(MegFunc):
         ), dim=-1)
         self.df = pd.DataFrame(data.detach().cpu().numpy(), columns=columns).round(decimals=2)
         print(self.df)
+
+    def check_convergence(self, old_params, old_meg, meg):
+        if self.convergence_type == "Q":
+            # We are checking for convergence of the q function to make it consistent with original (real/matt) Meg.
+            old = old_params[1]
+            new = self.param_list[1]
+        elif self.convergence_type == "U":
+            old = old_params[0]
+            new = self.param_list[0]
+        elif self.convergence_type == "Meg":
+            old = old_meg
+            new = meg
+        else:
+            raise NotImplementedError(f'{self.convergence_type} is not implemented. Meg/Q/U only.')
+        return torch.allclose(old, new, atol=self.atol)
 
 
 def calculate_meg(pi, q, T, gamma, mu, device):
@@ -1382,25 +1413,32 @@ def random_mdp():
         RandMDP().calc_megs(verbose=True, time_it=False, atol=1e-4)
 
 def timing():
-    def get_stats(MegConstructor, policy, env, atol):
-        learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol, n_iterations=100000)
+    def get_stats(MegConstructor, policy, env, atol, convergence_type, use_scheduler):
+        learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol,
+                                 n_iterations=100000,
+                                 convergence_type=convergence_type,
+                                 use_scheduler=use_scheduler)
         meg, elapsed = learner.learn_meg()
         converged = learner.converged
         return [{"Type": learner.name,
                  "Meg": meg.item(),
                  "Elapsed": elapsed,
+                 "Convergence_Type": convergence_type,
+                 "Scheduler": use_scheduler,
                  "Converged": converged,
                  "atol": atol,
                  "n_states": env.n_states}]
     outputs = []
     policy_name = "Hard Smax"
-    for atol in [1e-3, 1e-4, 1e-5]:
-        for i in [10, 20, 50, 100, 200]:
+    for atol in [1e-3, 1e-5]:
+        for i in [10, 20, 50, 75, 100, 150]:
             env = AscenderLong(n_states=i)
             policy = env.policies[policy_name]
-            for j in range(1):
-                outputs += get_stats(KLDivMeg, policy, env, atol)
-                outputs += get_stats(MattMeg, policy, env, atol)
+            for convergence_type in ["Q"]:
+                for j in range(1):
+                    outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=True)
+                    outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=False)
+                    outputs += get_stats(MattMeg, policy, env, atol, convergence_type, use_scheduler=None)
             df = pd.DataFrame(outputs)
             print(df)
     df = pd.DataFrame(outputs)
@@ -1462,7 +1500,9 @@ def timing():
     # Show the plot
     plt.legend(title="Type & Fit", bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
+    plt.savefig("data/meg_timings.png")
     plt.show()
+
 
 
 def main():
