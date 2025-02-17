@@ -906,6 +906,7 @@ class KLDivMeg(MegFunc):
                  atol=1e-5, state_based=True, soft=True):
         n_states, n_actions, _ = T.shape
         self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+        # Thought this would make sense, but seems to get stuck in local optima:
         # self.g = pi.log().detach().clone().to(device).requires_grad_()
         self.h = torch.randn((n_states,), requires_grad=True, device=device)
         self.param_list = [self.g, self.h]
@@ -944,8 +945,9 @@ class KLDivMeg(MegFunc):
         self.df = pd.DataFrame(data.detach().cpu().numpy(), columns=columns).round(decimals=2)
         print(self.df)
 
-    # def check_convergence(self, old_params, old_meg, meg):
-    #     return torch.allclose(old_meg, meg, atol=self.atol)
+    def check_convergence(self, old_params, old_meg, meg):
+        # We are checking for convergence of the q function to make it consistent with original (real/matt) Meg.
+        return torch.allclose(old_params[0], self.param_list[0], atol=self.atol)
 
 class MattMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
@@ -958,7 +960,7 @@ class MattMeg(MegFunc):
         self.d_pi = torch.rand(n_states, device=device)
         self.lr = lr
         self.no_optimizer = True
-        self.param_list = [self.U]
+        self.param_list = [self.Q]
         self.name = "Matt Meg"
         if mu is None:
             mu = torch.ones(n_states, device=device) / n_states
