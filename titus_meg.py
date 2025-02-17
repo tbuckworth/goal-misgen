@@ -1431,13 +1431,13 @@ def timing():
     outputs = []
     policy_name = "Hard Smax"
     for atol in [1e-3, 1e-5]:
-        for i in [10, 20, 50, 75, 100, 150]:
+        for i in [10, 20, 50, 76, 100, 150]:
             env = AscenderLong(n_states=i)
             policy = env.policies[policy_name]
             for convergence_type in ["Q"]:
                 for j in range(1):
                     outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=True)
-                    outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=False)
+                    # outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=False)
                     outputs += get_stats(MattMeg, policy, env, atol, convergence_type, use_scheduler=None)
             df = pd.DataFrame(outputs)
             print(df)
