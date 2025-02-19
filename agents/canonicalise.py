@@ -442,6 +442,8 @@ class Canonicaliser(BaseAgent):
         checkpoint_cnt = 0
         save_every = self.val_epoch // self.num_checkpoints
         for e in range(self.val_epoch):
+            #TODO: make this exponential?
+            self.current_consistency_coef = (1.05**(e+1))/(1.05**self.val_epoch) * self.consistency_coef
             recurrent = self.policy.is_recurrent()
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=recurrent,
@@ -563,10 +565,11 @@ class Canonicaliser(BaseAgent):
             q_value_batch, _ = q_model(obs_batch)
             q_taken = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
             _, next_q = q_model(nobs_batch)
-            meg = (pi_subject * (q_value_batch - max_ent)).mean()
+            log_pi_star = q_value_batch.log_softmax(dim=-1)
+            meg = (pi_subject * (log_pi_star - max_ent)).mean()
             loss1 = -meg
-            loss2 = (q_taken - next_q).pow(2).mean()
-            loss = loss1 + loss2 * self.consistency_coef  # should be at least 10
+            loss2 = ((q_taken - next_q) * (1-done_batch)).pow(2).mean()
+            loss = loss1 + loss2 * self.current_consistency_coef
             return loss, meg
         if not valid:
             loss, meg = generate_loss_meg()

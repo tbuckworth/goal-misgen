@@ -1,3 +1,4 @@
+import re
 import time
 from abc import ABC
 
@@ -316,7 +317,7 @@ class TabularMDP:
 
         self.soft_opt = self.soft_q_value_iteration(print_message=False, n_iterations=10000)
         self.hard_opt = self.q_value_iteration(print_message=False, n_iterations=10000, argmax=True)
-        self.hard_smax = self.q_value_iteration(print_message=False, n_iterations=10000, argmax=False)
+        self.hard_smax = self.q_value_iteration(print_message=False, n_iterations=100000, argmax=False)
 
         q_uni = torch.zeros((n_states, n_actions), device=self.device)
         unipi = q_uni.softmax(dim=-1)
@@ -359,7 +360,7 @@ class TabularMDP:
             Q = einops.einsum(T, gamma * V, 'states actions next_states, next_states -> states actions') + R.unsqueeze(
                 1)
 
-            if (Q - old_Q).abs().max() < 1e-5:
+            if (Q - old_Q).abs().max() < 1e-8:
                 if print_message:
                     print(f'Q-value iteration converged in {i} iterations')
                 if argmax:
@@ -1177,15 +1178,20 @@ def epsilon_greedy_policy(q_values, epsilon):
 
 
 class AscenderLong(TabularMDP):
-    def __init__(self, n_states, gamma=GAMMA):
+    def __init__(self, n_states, stochastic=False, gamma=GAMMA):
         assert n_states % 2 == 0, (
             "Ascender requires a central starting state with an equal number of states to the left"
             " and right, plus an infinite terminal state. Therefore n_states must be even.")
         n_actions = 2
         T = torch.zeros(n_states, n_actions, n_states)
+        p = 1 if not stochastic else 0.9
         for i in range(n_states - 3):
-            T[i + 1, 1, i + 2] = 1
-            T[i + 1, 0, i] = 1
+            T[i + 1, 1, i + 2] = p
+            T[i + 1, 0, i] = p
+
+            T[i + 1, 1, i] = 1-p
+            T[i + 1, 0, i + 2] = 1-p
+
         T[(0, -1, -2), :, -1] = 1  # /n_actions
 
         R = torch.zeros(n_states)
@@ -1413,7 +1419,8 @@ def random_mdp():
         RandMDP().calc_megs(verbose=True, time_it=False, atol=1e-4)
 
 def timing():
-    def get_stats(MegConstructor, policy, env, atol, convergence_type, use_scheduler):
+    csv_file = "data/meg_timings_stochastic.csv"
+    def get_stats(MegConstructor, policy, env, atol, convergence_type, use_scheduler, seed):
         learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol,
                                  n_iterations=100000,
                                  convergence_type=convergence_type,
@@ -1427,30 +1434,36 @@ def timing():
                  "Scheduler": use_scheduler,
                  "Converged": converged,
                  "atol": atol,
+                 "seed": seed,
                  "n_states": env.n_states}]
     outputs = []
     policy_name = "Hard Smax"
     for atol in [1e-3, 1e-5]:
         for i in [10, 20, 50, 76, 100, 150]:
-            env = AscenderLong(n_states=i)
-            policy = env.policies[policy_name]
             for convergence_type in ["Q"]:
-                for j in range(1):
-                    outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=True)
+                for seed in [42, 6033, 0, 100, 500]:
+                    np.random.seed(seed)
+                    env = AscenderLong(n_states=i, stochastic=True)
+                    policy = env.policies[policy_name]
+                    outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=True, seed=seed)
                     # outputs += get_stats(KLDivMeg, policy, env, atol, convergence_type, use_scheduler=False)
-                    outputs += get_stats(MattMeg, policy, env, atol, convergence_type, use_scheduler=None)
+                    outputs += get_stats(MattMeg, policy, env, atol, convergence_type, use_scheduler=None, seed=seed)
             df = pd.DataFrame(outputs)
             print(df)
     df = pd.DataFrame(outputs)
-    df.to_csv("data/meg_timings.csv", index=False)
+    df.to_csv(csv_file, index=False)
     print(df)
+    plot_timings(csv_file)
 
 
+
+def plot_timings(csv_dir):
+    save_dir = re.sub(r"\.csv",".png", csv_dir)
     # Load the CSV file
-    df = pd.read_csv("data/meg_timings.csv")
+    df = pd.read_csv(csv_dir)
 
     # Remove outliers where n_states = 200
-    df_filtered = df[df["n_states"] != 200]
+    df_filtered = df[df["n_states"] != 150]
 
     # Define an exponential function for curve fitting
     def exp_func(x, a, b, c):
@@ -1460,10 +1473,10 @@ def timing():
     unique_atol = df_filtered["atol"].unique()
 
     # Create subplots for different atol values with exponential fits
-    fig, axes = plt.subplots(1, len(unique_atol), figsize=(12, 6), sharey=True)
+    fig, axes = plt.subplots(2, len(unique_atol), figsize=(12, 12), sharey='row')
 
-    # Plot for each atol with exponential curve fits
-    for ax, atol_value in zip(axes, unique_atol):
+    # Plot for each atol with exponential curve fits (Elapsed Time)
+    for ax, atol_value in zip(axes[0], unique_atol):
         subset = df_filtered[df_filtered["atol"] == atol_value]
 
         # Scatter plot
@@ -1494,15 +1507,32 @@ def timing():
         ax.set_title(f"atol = {atol_value}")
         ax.set_xlabel("Number of States")
 
-    # Set common y-axis label
-    axes[0].set_ylabel("Elapsed Time")
+    # Plot for each atol (Meg values)
+    for ax, atol_value in zip(axes[1], unique_atol):
+        subset = df_filtered[df_filtered["atol"] == atol_value]
+
+        # Scatter plot
+        sns.scatterplot(
+            data=subset,
+            x="n_states",
+            y="Meg",
+            hue="Type",
+            palette="viridis",
+            ax=ax
+        )
+
+        ax.set_title(f"atol = {atol_value} (Meg)")
+        ax.set_xlabel("Number of States")
+
+    # Set common y-axis labels
+    axes[0, 0].set_ylabel("Elapsed Time")
+    axes[1, 0].set_ylabel("Meg Value")
 
     # Show the plot
-    plt.legend(title="Type & Fit", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.legend(title="Type", bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig("data/meg_timings.png")
+    plt.savefig(save_dir)
     plt.show()
-
 
 
 def main():

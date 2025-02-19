@@ -248,6 +248,7 @@ cartpole-canon:
     pirc: True
     trusted_policy_name: uniform
     meg_ground_next: True
+    consistency_coef: 10.
 
 
 trusted-value:
