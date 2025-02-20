@@ -266,11 +266,19 @@ class LirlStorage(Storage):
         yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, probs, indices
 
     def store_meg(self, elementwise_meg, indices, valid_envs=0):
-        self.elementwise_meg[:, valid_envs:].reshape(-1)[indices] = elementwise_meg.detach().cpu().clone()
+        n = self.num_envs - valid_envs
+        idx_pairs = [(i//n,i%n) for i in indices]
+        row_idx, col_idx = zip(*idx_pairs)
+
+        self.elementwise_meg[:, valid_envs:][row_idx, col_idx] = elementwise_meg.detach().cpu().clone().float()
+
 
     def full_meg(self, valid_envs=0):
-        d = self.done_batch.clone()
-        self.elementwise_meg[:, 16:]
-        ((self.elementwise_meg==0).all(dim=-1)).sum()
+        # TODO: tbd - very confused
+        d = self.done_batch.clone().bool()
+
+        n = torch.zeros_like(d).int()
+        n[1:][d[:-1]] += 1
+        n[2:][d[:-2]] += 1
 
 

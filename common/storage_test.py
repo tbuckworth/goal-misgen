@@ -20,6 +20,7 @@ class StorageTest(unittest.TestCase):
             elementwise_meg = torch.rand_like(sample[3])
             indices = sample[-1]
             storage.store_meg(elementwise_meg, indices, n_val_envs)
+        storage.done_batch = torch.randint(0,2, storage.done_batch.shape)
         storage.full_meg(n_val_envs)
 
 
