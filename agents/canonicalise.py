@@ -483,6 +483,7 @@ class Canonicaliser(BaseAgent):
                 f'Loss/meg_loss_{env_type}': np.mean(losses),
                 f'Loss/meg_loss_valid_{env_type}': np.mean(losses_valid),
                 f'Loss/mean_meg_{env_type}': np.mean(megs),
+                f'Loss/full_meg_{env_type}': full_meg.item(),
             })
         return np.mean(megs)
 
