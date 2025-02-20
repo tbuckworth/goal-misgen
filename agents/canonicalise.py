@@ -467,7 +467,7 @@ class Canonicaliser(BaseAgent):
             for sample in generator_valid:
                 _, elementwise_meg = self.meg_version(losses_valid, max_ent, q_model, sample, valid=True)
             
-            full_meg = storage.full_meg()
+            full_meg = storage.full_meg(self.gamma, self.n_val_envs)
             
             optimizer.step()
             optimizer.zero_grad()

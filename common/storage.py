@@ -204,6 +204,7 @@ class Storage():
                     discount = 1.0
         return np.array(returns)
 
+
 class LirlStorage(Storage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -262,23 +263,37 @@ class LirlStorage(Storage):
                 self.device)
             probs = torch.FloatTensor(self.subject_probs[:, :valid_envs]).reshape(-1, *self.act_shape)[indices].to(
                 self.device)
-        #todo make this a dict:
+        # todo make this a dict:
         yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, probs, indices
 
     def store_meg(self, elementwise_meg, indices, valid_envs=0):
         n = self.num_envs - valid_envs
-        idx_pairs = [(i//n,i%n) for i in indices]
+        idx_pairs = [(i // n, i % n) for i in indices]
         row_idx, col_idx = zip(*idx_pairs)
 
         self.elementwise_meg[:, valid_envs:][row_idx, col_idx] = elementwise_meg.detach().cpu().clone().float()
 
-
-    def full_meg(self, valid_envs=0):
-        # TODO: tbd - very confused
+    def full_meg(self, gamma=0.99, valid_envs=0):
+        # TODO: double check this is legit
         d = self.done_batch.clone().bool()
 
+        n_full_episodes = d.sum(dim=0) - 1
+
         n = torch.zeros_like(d).int()
-        n[1:][d[:-1]] += 1
-        n[2:][d[:-2]] += 1
 
+        for col in range(d.shape[1]):
+            start = False
+            for row in range(d.shape[0]):
+                done = d[row, col]
+                if done:
+                    start = True
+                    count = 1
+                if not d[row, col:].any():
+                    start = False
+                if start and row + 1 < d.shape[0]:
+                    n[row + 1, col] = count
+                    count += 1
 
+        discounts = (gamma ** n) * (1 - (n == 0).int())
+        full_meg = (self.elementwise_meg * discounts).sum() / n_full_episodes.sum()
+        return full_meg
