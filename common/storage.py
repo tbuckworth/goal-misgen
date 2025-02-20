@@ -204,10 +204,10 @@ class Storage():
                     discount = 1.0
         return np.array(returns)
 
-
 class LirlStorage(Storage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.elementwise_meg = torch.zeros(self.num_steps, self.num_envs)
 
     def store_values(self, value_model, device, mini_batch_size):
         batch_size = self.num_steps * self.num_envs
@@ -262,5 +262,15 @@ class LirlStorage(Storage):
                 self.device)
             probs = torch.FloatTensor(self.subject_probs[:, :valid_envs]).reshape(-1, *self.act_shape)[indices].to(
                 self.device)
+        #todo make this a dict:
+        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, probs, indices
 
-        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, probs
+    def store_meg(self, elementwise_meg, indices, valid_envs=0):
+        self.elementwise_meg[:, valid_envs:].reshape(-1)[indices] = elementwise_meg.detach().cpu().clone()
+
+    def full_meg(self, valid_envs=0):
+        d = self.done_batch.clone()
+        self.elementwise_meg[:, 16:]
+        ((self.elementwise_meg==0).all(dim=-1)).sum()
+
+

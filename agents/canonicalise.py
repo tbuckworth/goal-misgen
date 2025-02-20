@@ -375,7 +375,7 @@ class Canonicaliser(BaseAgent):
             for sample in generator:
                 (obs_batch, nobs_batch, act_batch, done_batch,
                  old_log_prob_act_batch, old_value_batch, return_batch,
-                 adv_batch, rew_batch, logp_eval_policy_batch, probs) = sample
+                 adv_batch, rew_batch, logp_eval_policy_batch, probs, indices) = sample
                 value_batch = value_model(obs_batch).squeeze()
                 next_value_batch = value_model(nobs_batch).squeeze()
                 if rew_type == "reward":
@@ -393,7 +393,7 @@ class Canonicaliser(BaseAgent):
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val, probs = sample
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val, probs, indices = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
                     next_value_batch_val = value_model(nobs_batch_val).squeeze()
@@ -442,7 +442,7 @@ class Canonicaliser(BaseAgent):
         checkpoint_cnt = 0
         save_every = self.val_epoch // self.num_checkpoints
         for e in range(self.val_epoch):
-            #TODO: make this exponential?
+            #TODO: play around with this:
             self.current_consistency_coef = (1.05**(e+1))/(1.05**self.val_epoch) * self.consistency_coef
             recurrent = self.policy.is_recurrent()
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
@@ -460,11 +460,15 @@ class Canonicaliser(BaseAgent):
             megs = []
 
             for sample in generator:
-                meg = self.meg_version(losses, max_ent, q_model, sample, valid=False)
+                meg, elementwise_meg = self.meg_version(losses, max_ent, q_model, sample, valid=False)
+                indices = sample[-1]
+                storage.store_meg(elementwise_meg, indices, valid_envs=self.n_val_envs)
                 megs.append(meg.item())
             for sample in generator_valid:
-                _ = self.meg_version(losses_valid, max_ent, q_model, sample, valid=True)
-
+                _, elementwise_meg = self.meg_version(losses_valid, max_ent, q_model, sample, valid=True)
+            
+            full_meg = storage.full_meg()
+            
             optimizer.step()
             optimizer.zero_grad()
             # grad_accumulation_cnt += 1
@@ -485,7 +489,7 @@ class Canonicaliser(BaseAgent):
     def meg_v1(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
         if self.meg_ground_next:
             obs = nobs_batch
         else:
@@ -513,7 +517,7 @@ class Canonicaliser(BaseAgent):
     def meg_v2_direct(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
         if self.meg_ground_next:
             obs = nobs_batch
             flt = (1 - done_batch).unsqueeze(dim=-1)
@@ -536,50 +540,53 @@ class Canonicaliser(BaseAgent):
             return None
 
     def meg_v3(self, losses, max_ent, q_model, sample, valid=False):
-        (obs_batch, nobs_batch, act_batch, done_batch,
-         old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
-        obs = nobs_batch
-        if not valid:
-            adv = logp_eval_policy_batch - (pi_subject * pi_subject.log()).sum(dim=-1)
-            q_target = adv + old_value_batch
-            q_value_batch = q_model(obs)
-            loss = (q_value_batch - q_target).pow(2).mean()
-            # oops, maybe not such a good idea actually.
-            meg = (pi_subject * (q_value_batch - max_ent)).mean()
-            loss.backward()
-            losses.append(loss.item())
-            return meg
-        with torch.no_grad():
-            q_value_batch = q_model(obs)
-            value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
-            meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
-            losses.append(-meg.item())
-            return None
+        raise NotImplementedError
+        # (obs_batch, nobs_batch, act_batch, done_batch,
+        #  old_log_prob_act_batch, old_value_batch, return_batch,
+        #  adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
+        # obs = nobs_batch
+        # if not valid:
+        #     adv = logp_eval_policy_batch - (pi_subject * pi_subject.log()).sum(dim=-1)
+        #     q_target = adv + old_value_batch
+        #     q_value_batch = q_model(obs)
+        #     loss = (q_value_batch - q_target).pow(2).mean()
+        #     # oops, maybe not such a good idea actually.
+        #     meg = (pi_subject * (q_value_batch - max_ent)).mean()
+        #     loss.backward()
+        #     losses.append(loss.item())
+        #     return meg
+        # with torch.no_grad():
+        #     q_value_batch = q_model(obs)
+        #     value_batch = q_value_batch.logsumexp(dim=-1).unsqueeze(dim=-1)
+        #     meg = (pi_subject * (q_value_batch - value_batch - max_ent) * flt).sum(dim=-1).mean()
+        #     losses.append(-meg.item())
+        #     return None
 
     def kl_div_meg(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
         def generate_loss_meg():
             q_value_batch, _ = q_model(obs_batch)
             q_taken = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
             _, next_q = q_model(nobs_batch)
             log_pi_star = q_value_batch.log_softmax(dim=-1)
-            meg = (pi_subject * (log_pi_star - max_ent)).mean()
+            meg = (pi_subject * (log_pi_star - max_ent)).mean() #TODO: sum?
             loss1 = -meg
             loss2 = ((q_taken - next_q) * (1-done_batch)).pow(2).mean()
             loss = loss1 + loss2 * self.current_consistency_coef
-            return loss, meg
+            # self.full_meg(done_batch, pi_subject, log_pi_star, max_ent)
+            elementwise_meg = (pi_subject * (log_pi_star - max_ent)).sum(dim=-1)
+            return loss, meg, elementwise_meg
         if not valid:
-            loss, meg = generate_loss_meg()
+            loss, meg, elementwise_meg = generate_loss_meg()
             loss.backward()
             losses.append(loss.item())
-            return meg
+            return meg, elementwise_meg
         with torch.no_grad():
-            loss, meg = generate_loss_meg()
+            loss, meg, elementwise_meg = generate_loss_meg()
             losses.append(loss.item())
-            return None
+            return None, elementwise_meg
 
     def optimize(self):
         pi_loss_list, value_loss_list, entropy_loss_list, l1_reg_list, total_loss_list = [], [], [], [], []
@@ -596,7 +603,7 @@ class Canonicaliser(BaseAgent):
                                                            recurrent=recurrent)
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _ = sample
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _, _ = sample
                 mask_batch = (1 - done_batch)
                 dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
@@ -643,7 +650,7 @@ class Canonicaliser(BaseAgent):
         return summary
 
     def sample_next_data(self, sample):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, _, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         value = self.value_model(obs_batch)
         next_value = self.value_model(nobs_batch)
@@ -689,7 +696,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _ = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
             try:
@@ -739,3 +746,5 @@ class Canonicaliser(BaseAgent):
 
     def inf_term_value(self):
         return (1 / (1 - self.gamma)) * np.log(self.n_actions)
+
+

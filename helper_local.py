@@ -238,7 +238,6 @@ def add_training_args(parser):
     return parser
 
 
-
 def get_model_with_largest_checkpoint(folder):
     search = lambda x: re.search(r"model_(\d*).pth", x)
     if search(folder):
