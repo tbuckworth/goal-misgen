@@ -406,7 +406,7 @@ class Canonicaliser(BaseAgent):
                     else:
                         raise NotImplementedError
                     target = R + self.gamma * (
-                                next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
+                            next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
 
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
@@ -442,8 +442,8 @@ class Canonicaliser(BaseAgent):
         checkpoint_cnt = 0
         save_every = self.val_epoch // self.num_checkpoints
         for e in range(self.val_epoch):
-            #TODO: play around with this:
-            self.current_consistency_coef = (1.05**(e+1))/(1.05**self.val_epoch) * self.consistency_coef
+            # TODO: play around with this:
+            self.current_consistency_coef = (1.05 ** (e + 1)) / (1.05 ** self.val_epoch) * self.consistency_coef
             recurrent = self.policy.is_recurrent()
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=recurrent,
@@ -455,8 +455,8 @@ class Canonicaliser(BaseAgent):
                                                             valid_envs=self.n_val_envs,
                                                             valid=True,
                                                             )
-            losses = []
-            losses_valid = []
+            losses = {"loss": [], "meg_loss": [], "consistency_loss": []}
+            losses_valid = {"loss": [], "meg_loss": [], "consistency_loss": []}
             megs = []
 
             for sample in generator:
@@ -466,9 +466,9 @@ class Canonicaliser(BaseAgent):
                 megs.append(meg.item())
             for sample in generator_valid:
                 _, elementwise_meg = self.meg_version(losses_valid, max_ent, q_model, sample, valid=True)
-            
+
             full_meg = storage.full_meg(self.gamma, self.n_val_envs)
-            
+
             optimizer.step()
             optimizer.zero_grad()
             # grad_accumulation_cnt += 1
@@ -480,8 +480,12 @@ class Canonicaliser(BaseAgent):
                 checkpoint_cnt += 1
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
-                f'Loss/meg_loss_{env_type}': np.mean(losses),
-                f'Loss/meg_loss_valid_{env_type}': np.mean(losses_valid),
+                f'Loss/full_meg_loss_{env_type}': np.mean(losses["loss"]),
+                f'Loss/full_meg_loss_valid_{env_type}': np.mean(losses_valid["loss"]),
+                f'Loss/meg_loss_{env_type}': np.mean(losses["meg_loss"]),
+                f'Loss/meg_loss_valid_{env_type}': np.mean(losses_valid["meg_loss"]),
+                f'Loss/consistency_loss_{env_type}': np.mean(losses["consistency_loss"]),
+                f'Loss/consistency_loss_valid_{env_type}': np.mean(losses_valid["consistency_loss"]),
                 f'Loss/mean_meg_{env_type}': np.mean(megs),
                 f'Loss/full_meg_{env_type}': full_meg.item(),
             })
@@ -567,26 +571,29 @@ class Canonicaliser(BaseAgent):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
          adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
+
         def generate_loss_meg():
             q_value_batch, _ = q_model(obs_batch)
             q_taken = q_value_batch[torch.arange(len(act_batch)), act_batch.to(torch.int64)]
             _, next_q = q_model(nobs_batch)
             log_pi_star = q_value_batch.log_softmax(dim=-1)
-            meg = (pi_subject * (log_pi_star - max_ent)).mean() #TODO: sum?
+            meg = (pi_subject * (log_pi_star - max_ent)).mean()  # TODO: sum?
             loss1 = -meg
-            loss2 = ((q_taken - next_q) * (1-done_batch)).pow(2).mean()
+            loss2 = ((q_taken - next_q) * (1 - done_batch)).pow(2).mean()
             loss = loss1 + loss2 * self.current_consistency_coef
             # self.full_meg(done_batch, pi_subject, log_pi_star, max_ent)
             elementwise_meg = (pi_subject * (log_pi_star - max_ent)).sum(dim=-1)
+            losses["loss"].append(loss.item())
+            losses["meg_loss"].append(loss1.item())
+            losses["consistency_loss"].append(loss2.item())
             return loss, meg, elementwise_meg
+
         if not valid:
             loss, meg, elementwise_meg = generate_loss_meg()
             loss.backward()
-            losses.append(loss.item())
             return meg, elementwise_meg
         with torch.no_grad():
             loss, meg, elementwise_meg = generate_loss_meg()
-            losses.append(loss.item())
             return None, elementwise_meg
 
     def optimize(self):
@@ -747,5 +754,3 @@ class Canonicaliser(BaseAgent):
 
     def inf_term_value(self):
         return (1 / (1 - self.gamma)) * np.log(self.n_actions)
-
-

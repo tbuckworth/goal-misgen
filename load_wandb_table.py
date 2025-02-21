@@ -224,8 +224,9 @@ def load_meg(tags):
         row[val_rewards] = run.summary.val_mean_episode_rewards
         row[train_returns] = run.summary.mean_returns
         row[val_returns] = run.summary.val_mean_returns
-        row[train_meg] = run.summary['Loss/mean_meg_Training']
-        row[val_meg] = run.summary['Loss/mean_meg_Validation']
+        # mean_meg_Training might be better
+        row[train_meg] = run.summary['Loss/full_meg_Training']
+        row[val_meg] = run.summary['Loss/full_meg_Validation']
         row["run"] = run.name
         row["logdir"] = run.config["logdir"]
         row["architecture"] = run.config["architecture"]
@@ -494,7 +495,7 @@ def get_summary():
 
 
 if __name__ == "__main__":
-    load_meg(["Ascent_Meg_orig_4"])
+    load_meg(["Ascent_Meg_KL5"])
     # get_summary()
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",
