@@ -579,7 +579,7 @@ class Canonicaliser(BaseAgent):
             log_pi_star = q_value_batch.log_softmax(dim=-1)
             meg = (pi_subject * (log_pi_star - max_ent)).mean()  # TODO: sum?
             loss1 = -meg
-            loss2 = ((q_taken - next_q) * (1 - done_batch)).pow(2).mean()
+            loss2 = ((q_taken - self.gamma * next_q) * (1 - done_batch)).pow(2).mean()
             loss = loss1 + loss2 * self.current_consistency_coef
             # self.full_meg(done_batch, pi_subject, log_pi_star, max_ent)
             elementwise_meg = (pi_subject * (log_pi_star - max_ent)).sum(dim=-1)
