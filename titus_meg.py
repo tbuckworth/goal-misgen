@@ -929,7 +929,7 @@ class KLDivMeg(MegFunc):
         next_h = self.get_next_h()
         # loss1 = (self.g - v - self.log_pi).pow(2).mean()
         loss1 = -(self.pi * (self.g.log_softmax(dim=-1) - self.max_ent)).mean()
-        loss2 = (self.g - next_h).pow(2).mean()
+        loss2 = (self.g - GAMMA * next_h).pow(2).mean()
         loss = loss1 + loss2 * 10
         return loss, self.g
 
@@ -964,6 +964,26 @@ class KLDivMeg(MegFunc):
         if self.convergence_type != "Meg":
             raise NotImplementedError(f'{self.convergence_type} is not implemented. Meg/Q only.')
         return torch.allclose(old_meg, meg, atol=self.atol)
+
+class QRMeg(MegFunc):
+    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
+                 atol=1e-5, state_based=True, soft=True, convergence_type="Q", use_scheduler=False):
+        n_states, n_actions, _ = T.shape
+        self.q = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+        self.r = torch.randn((n_states,n_actions), requires_grad=True, device=device)
+        self.param_list = [self.q, self.r]
+        self.name = "QR Meg"
+        self.convergence_type = convergence_type
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based, soft,
+                         use_scheduler=use_scheduler)
+
+    def calculate_loss(self):
+        v = self.q.logsumexp(dim=-1)
+        next_v = einops.einsum(self.T, v, "s a ns, ns -> s a")
+        loss1 = -(self.pi * (self.q.log_softmax(dim=-1) - self.max_ent)).mean()
+        loss2 = (self.q - self.r - GAMMA*next_v).pow(2).mean()
+        loss = loss1 + loss2 * 10
+        return loss, self.q
 
 class MattMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
@@ -1383,9 +1403,9 @@ class MattGridworld(TabularMDP):
 meg_funcs = {
     "KLDiv Meg": KLDivMeg,
     # "Titus Meg": TitusMeg,
-    "NonTab Meg": NonTabMeg,
+    "QR Meg": QRMeg,
     # "NonTab Meg Hard": lambda pi, T, mu, device, suppress, atol: NonTabMeg(pi, T, mu=mu, device=device, atol=atol, soft=False, suppress=suppress),
-    "Real Meg": lambda pi, T, mu, device, suppress, atol: MattMeg(pi, T, mu=mu, device=device, atol=0.01),
+    "Real Meg": lambda pi, T, mu, device, suppress, atol: MattMeg(pi, T, mu=mu, device=device, atol=atol),
 }
 
 
@@ -1607,10 +1627,10 @@ def vMDP():
 
 
 if __name__ == "__main__":
-    timing()
+    # timing()
     # cust_mpd()
     # random_mdp()
-    # main()
+    main()
     # gridworld_analysis()
     # vMDP()
     # try_hard_adv_train()
