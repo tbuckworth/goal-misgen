@@ -220,7 +220,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(67584),
-        "val_epoch": 300,
+        "val_epoch": 200,
         "mini_batch_size": 2048,
         "n_val_envs": 16,
         "n_envs": int(64 + 16),
@@ -322,10 +322,10 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # run_tags_for_files({"Test": None}, cartpole_dirs, ignore_errors=False)
 
-    # run_tags_for_files({"Cartpole_Meg": None}, reversed(cartpole_dirs), ignore_errors=False)
+    run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_Meg_KL0": None}, new_maze_dirs + maze_dirs, ignore_errors=True)
+    # run_tags_for_files({"Maze_Meg_KL0": None}, new_maze_dirs + maze_dirs, ignore_errors=True)
     #
     # run_tags_for_files({"Ascent_Meg_KL8_gamma":None}, local_unique_ascent_dirs, ignore_errors=True)
     # #
