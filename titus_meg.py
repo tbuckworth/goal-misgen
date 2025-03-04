@@ -1,6 +1,8 @@
+import copy
 import re
 import time
 from abc import ABC
+from pickle import DEFAULT_PROTOCOL
 
 import pandas as pd
 import torch
@@ -759,7 +761,7 @@ class MegFunc(ABC):
     no_optimizer = False
     name = "Unnamed"
     convergence_type = None
-    use_scheduler=None
+    use_scheduler = None
 
     def __init__(self, pi, T, mu=None, n_iterations: int = 10000, lr=1e-2, print_losses=False, device="cpu",
                  suppress=False, atol=1e-5,
@@ -781,7 +783,8 @@ class MegFunc(ABC):
         self.use_scheduler = use_scheduler
         self.optimizer = torch.optim.Adam(self.param_list, lr=lr)
         if self.use_scheduler:
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_iterations, eta_min=0)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_iterations,
+                                                                        eta_min=0)
 
         self.max_ent = np.log(1 / self.n_actions)
         self.converged = self.meg = self.log_pi_soft_less_max_ent = None
@@ -822,11 +825,11 @@ class MegFunc(ABC):
                     print(f'{self.name} Meg converged in {i} iterations.')
                 self.converged = True
                 meg, da = self.calculate_meg(q)
-                return meg, time.time()-start
+                return meg, time.time() - start
         print(f'{self.name} Meg did not converge in {i} iterations')
         self.converged = False
         meg, da = self.calculate_meg(q)
-        return meg, time.time()-start
+        return meg, time.time() - start
 
     def check_convergence(self, old_params, old_meg, meg):
         # return torch.allclose(old_meg, meg, atol=self.atol)
@@ -965,12 +968,13 @@ class KLDivMeg(MegFunc):
             raise NotImplementedError(f'{self.convergence_type} is not implemented. Meg/Q only.')
         return torch.allclose(old_meg, meg, atol=self.atol)
 
+
 class QRMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
                  atol=1e-5, state_based=True, soft=True, convergence_type="Q", use_scheduler=False):
         n_states, n_actions, _ = T.shape
         self.q = torch.randn((n_states, n_actions), requires_grad=True, device=device)
-        self.r = torch.randn((n_states,n_actions), requires_grad=True, device=device)
+        self.r = torch.randn((n_states, n_actions), requires_grad=True, device=device)
         self.param_list = [self.q, self.r]
         self.name = "QR Meg"
         self.convergence_type = convergence_type
@@ -981,9 +985,10 @@ class QRMeg(MegFunc):
         v = self.q.logsumexp(dim=-1)
         next_v = einops.einsum(self.T, v, "s a ns, ns -> s a")
         loss1 = -(self.pi * (self.q.log_softmax(dim=-1) - self.max_ent)).mean()
-        loss2 = (self.q - self.r - GAMMA*next_v).pow(2).mean()
+        loss2 = (self.q - self.r - GAMMA * next_v).pow(2).mean()
         loss = loss1 + loss2 * 10
         return loss, self.q
+
 
 class MattMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
@@ -1005,7 +1010,7 @@ class MattMeg(MegFunc):
 
     def calculate_loss(self):
         Q, pi_soft = soft_value_iteration(self.U, self.T, self.beta, GAMMA, self.Q, device=self.device,
-                                               atol=self.atol)
+                                          atol=self.atol)
         self.Q.copy_(Q)
         self.d_pi = state_occupancy(self.pi, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
         d_pi_soft = state_occupancy(pi_soft, self.T, GAMMA, self.mu, d=self.d_pi, device=self.device)
@@ -1209,8 +1214,8 @@ class AscenderLong(TabularMDP):
             T[i + 1, 1, i + 2] = p
             T[i + 1, 0, i] = p
 
-            T[i + 1, 1, i] = 1-p
-            T[i + 1, 0, i + 2] = 1-p
+            T[i + 1, 1, i] = 1 - p
+            T[i + 1, 0, i + 2] = 1 - p
 
         T[(0, -1, -2), :, -1] = 1  # /n_actions
 
@@ -1310,6 +1315,51 @@ class OneStepOther(TabularMDP):
         self.inconsistent = TabularPolicy("Inconsistent", inconsistent_pi)
         self.custom_policies = [self.consistent, self.inconsistent]
         super().__init__(n_states, n_actions, T, R, mu, gamma, "One Step Other")
+
+
+class DogSatMat(TabularMDP):
+    def __init__(self, gamma=GAMMA):
+        # The _ sat on the _
+        # actions are dog/cat/mat/floor.
+        chars = "_DCMF"
+        states = {}
+        counter = 0
+        for c0 in chars:
+            for c2 in chars:
+                states[c0 + c2] = counter
+                counter += 1
+        n_states = len(states)
+        n_actions = (len(chars)-1)*2
+        T = torch.zeros(n_states, n_actions, n_states)
+
+        for k, v in states.items():
+            for char_idx in [0, 1]:
+                for a_idx, action in enumerate(chars[1:]):
+                    if k[char_idx] == "_":
+                        next_state = [c for c in k]
+                        next_state[char_idx] = action
+                        ns_idx = states[''.join(next_state)]
+                    else:
+                        ns_idx = v
+                    a_idx = len(chars[1:])*(char_idx)+a_idx
+                    T[v, a_idx, ns_idx] = 1
+
+        R = torch.zeros(n_states)
+        for k in ["DM","CM"]:
+            R[states[k]] = 9
+        for k in ["DF","CF"]:
+            R[states[k]] = 1
+
+
+        mu = torch.zeros(n_states)
+        mu[states["__"]] = 1
+
+        llm_pi = torch.zeros(n_states, n_actions)
+
+
+        self.llm = TabularPolicy("LLM", llm_pi)
+        self.custom_policies = [self.llm]
+        super().__init__(n_states, n_actions, T, R, mu, gamma, "Dog Sat Mat")
 
 
 class RandMDP(TabularMDP):
@@ -1438,8 +1488,10 @@ def random_mdp():
     for i in range(100):
         RandMDP().calc_megs(verbose=True, time_it=False, atol=1e-4)
 
+
 def timing():
     csv_file = "data/meg_timings_stochastic.csv"
+
     def get_stats(MegConstructor, policy, env, atol, convergence_type, use_scheduler, seed):
         learner = MegConstructor(policy.pi, env.T, env.mu, device=env.device, suppress=True, atol=atol,
                                  n_iterations=100000,
@@ -1456,6 +1508,7 @@ def timing():
                  "atol": atol,
                  "seed": seed,
                  "n_states": env.n_states}]
+
     outputs = []
     policy_name = "Hard Smax"
     for atol in [1e-3, 1e-5]:
@@ -1476,9 +1529,8 @@ def timing():
     plot_timings(csv_file)
 
 
-
 def plot_timings(csv_dir):
-    save_dir = re.sub(r"\.csv",".png", csv_dir)
+    save_dir = re.sub(r"\.csv", ".png", csv_dir)
     # Load the CSV file
     df = pd.read_csv(csv_dir)
 
