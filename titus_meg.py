@@ -1323,8 +1323,14 @@ class DogSatMat(TabularMDP):
         # actions are dog/cat/mat/floor.
         chars = "_DCMF"
         states = {}
+        actions = {}
         counter = 0
+        act_counter = 0
         for c0 in chars:
+            actions[f"_{c0}"] = act_counter
+            act_counter += 1
+            actions[f"{c0}_"] = act_counter
+            act_counter += 1
             for c2 in chars:
                 states[c0 + c2] = counter
                 counter += 1
@@ -1333,16 +1339,14 @@ class DogSatMat(TabularMDP):
         T = torch.zeros(n_states, n_actions, n_states)
 
         for k, v in states.items():
-            for char_idx in [0, 1]:
-                for a_idx, action in enumerate(chars[1:]):
-                    if k[char_idx] == "_":
-                        next_state = [c for c in k]
-                        next_state[char_idx] = action
-                        ns_idx = states[''.join(next_state)]
-                    else:
-                        ns_idx = v
-                    a_idx = len(chars[1:])*(char_idx)+a_idx
-                    T[v, a_idx, ns_idx] = 1
+            for action, a_idx in actions.items():
+                if k[char_idx] == "_":
+                    next_state = [c for c in k]
+                    next_state[char_idx] = action
+                    ns_idx = states[''.join(next_state)]
+                else:
+                    ns_idx = v
+                T[v, a_idx, ns_idx] = 1
 
         R = torch.zeros(n_states)
         for k in ["DM","CM"]:
