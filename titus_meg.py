@@ -1325,7 +1325,7 @@ class DogSatMat(TabularMDP):
         states = {}
         actions = {}
         counter = 0
-        act_counter = 0
+        act_counter = -1
         for c0 in chars:
             actions[f"_{c0}"] = act_counter
             act_counter += 1
@@ -1335,32 +1335,40 @@ class DogSatMat(TabularMDP):
                 states[c0 + c2] = counter
                 counter += 1
         n_states = len(states)
-        n_actions = (len(chars)-1)*2
+        n_actions = len(actions)
         T = torch.zeros(n_states, n_actions, n_states)
 
-        for k, v in states.items():
+        for state, s_idx in states.items():
             for action, a_idx in actions.items():
-                if k[char_idx] == "_":
-                    next_state = [c for c in k]
-                    next_state[char_idx] = action
-                    ns_idx = states[''.join(next_state)]
-                else:
-                    ns_idx = v
-                T[v, a_idx, ns_idx] = 1
+                next_state = [c for c in state]
+                if next_state[0] == '_':
+                    next_state[0] = action[0]
+                if next_state[1] == '_':
+                    next_state[1] = action[1]
+                ns_idx = states[''.join(next_state)]
+                T[s_idx, a_idx, ns_idx] = 1
 
         R = torch.zeros(n_states)
-        for k in ["DM","CM"]:
-            R[states[k]] = 9
-        for k in ["DF","CF"]:
-            R[states[k]] = 1
+        for state in ["DM","CM"]:
+            R[states[state]] = np.log(9)
+        for state in ["DF","CF"]:
+            R[states[state]] = np.log(1)
 
 
         mu = torch.zeros(n_states)
         mu[states["__"]] = 1
 
         llm_pi = torch.zeros(n_states, n_actions)
-
-
+        llm_pi[states["_M"],actions["D_"]] = 0.5
+        llm_pi[states["_M"],actions["C_"]] = 0.5
+        llm_pi[states["_F"],actions["D_"]] = 0.5
+        llm_pi[states["_F"],actions["C_"]] = 0.5
+        llm_pi[states["D_"],actions["_M"]] = 0.9
+        llm_pi[states["D_"],actions["_F"]] = 0.1
+        llm_pi[states["C_"],actions["_M"]] = 0.9
+        llm_pi[states["C_"],actions["_F"]] = 0.1
+        flt = llm_pi.sum(dim=-1)==0
+        llm_pi[flt] = 1/n_actions
         self.llm = TabularPolicy("LLM", llm_pi)
         self.custom_policies = [self.llm]
         super().__init__(n_states, n_actions, T, R, mu, gamma, "Dog Sat Mat")
@@ -1613,12 +1621,13 @@ def plot_timings(csv_dir):
 
 def main():
     envs = [
-        CustMDP(),
-        OneStepOther(),
-        OneStep(),
-        DiffParents(),
-        AscenderLong(n_states=6),
-        MattGridworld(),
+        DogSatMat(),
+        # CustMDP(),
+        # OneStepOther(),
+        # OneStep(),
+        # DiffParents(),
+        # AscenderLong(n_states=6),
+        # MattGridworld(),
     ]
     # envs = [MattGridworld()]
     envs = {e.name: e for e in envs}
