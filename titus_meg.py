@@ -915,7 +915,7 @@ class NonTabMeg(MegFunc):
 
 
 class KLDivMeg(MegFunc):
-    def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
+    def __init__(self, pi, T, mu=None, n_iterations=20000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
                  atol=1e-5, state_based=True, soft=True, convergence_type="Q", use_scheduler=False):
         n_states, n_actions, _ = T.shape
         self.g = torch.randn((n_states, n_actions), requires_grad=True, device=device)
@@ -968,6 +968,39 @@ class KLDivMeg(MegFunc):
             raise NotImplementedError(f'{self.convergence_type} is not implemented. Meg/Q only.')
         return torch.allclose(old_meg, meg, atol=self.atol)
 
+class EIRLMeg(MegFunc):
+    def __init__(self, pi, T, mu=None, n_iterations=20000, lr=1e-1, print_losses=False, device="cpu",
+                 suppress=False,
+                 atol=1e-5,
+                 state_based=False, soft=True):
+        self.consistency_coef = 10.
+        n_states, n_actions, _ = T.shape
+        self.learned_log_pi = torch.randn((n_states, n_actions), requires_grad=True, device=device)
+        self.learned_reward = torch.randn((n_states, 1), requires_grad=True, device=device)
+        self.learned_value = torch.randn((n_states,), requires_grad=True, device=device)
+
+        self.param_list = [self.learned_log_pi, self.learned_reward, self.learned_value]
+        self.name = "Next State EIRL"
+        super().__init__(pi, T, mu, n_iterations, lr, print_losses, device, suppress, atol, state_based,
+                         soft)
+
+    def calculate_loss(self):
+        log_pi_theta = self.learned_log_pi.log_softmax(dim=-1)
+        actor_adv = log_pi_theta
+        if not self.soft:
+            # Adding entropy makes it hard advantage
+            actor_adv = log_pi_theta - (log_pi_theta.exp() * log_pi_theta).sum(dim=-1).unsqueeze(dim=-1)
+
+        next_value = einops.einsum(self.T, self.learned_value, "s a ns, ns -> s a")
+        reward_hat = einops.einsum(self.T, self.learned_reward.squeeze(), "s a ns, ns -> s a")
+        q_hat = reward_hat + GAMMA * next_value
+
+        reward_adv = q_hat - self.learned_value.unsqueeze(-1)
+
+        loss1 = -(self.pi * log_pi_theta).mean()
+        loss2 = (actor_adv - reward_adv).pow(2).mean()
+        loss = loss1 + loss2 * self.consistency_coef
+        return loss, self.learned_log_pi
 
 class QRMeg(MegFunc):
     def __init__(self, pi, T, mu=None, n_iterations=10000, lr=1e-1, print_losses=False, device="cpu", suppress=False,
@@ -1464,8 +1497,9 @@ class MattGridworld(TabularMDP):
 
 meg_funcs = {
     "KLDiv Meg": KLDivMeg,
+    'EIRL Meg': EIRLMeg,
     # "Titus Meg": TitusMeg,
-    "QR Meg": QRMeg,
+    # "QR Meg": QRMeg,
     # "NonTab Meg Hard": lambda pi, T, mu, device, suppress, atol: NonTabMeg(pi, T, mu=mu, device=device, atol=atol, soft=False, suppress=suppress),
     "Real Meg": lambda pi, T, mu, device, suppress, atol: MattMeg(pi, T, mu=mu, device=device, atol=atol),
 }
@@ -1621,13 +1655,13 @@ def plot_timings(csv_dir):
 
 def main():
     envs = [
-        DogSatMat(),
+        # DogSatMat(),
         # CustMDP(),
         # OneStepOther(),
         # OneStep(),
         # DiffParents(),
-        # AscenderLong(n_states=6),
-        # MattGridworld(),
+        AscenderLong(n_states=6),
+        MattGridworld(),
     ]
     # envs = [MattGridworld()]
     envs = {e.name: e for e in envs}
