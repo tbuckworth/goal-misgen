@@ -171,12 +171,12 @@ def loadtemp():
             print(run.config["logdir"])
 
 
-def load_all():
+def load_all(tag):
     # Fetch runs from a project
     api = wandb.Api()
     project_name = "goal-misgen"
     runs = api.runs(f"ic-ai-safety/{project_name}",
-                    filters={"$and": [{"tags": "canon misgen2", "state": "finished"}]}
+                    filters={"$and": [{"tags": tag, "state": "finished"}]}
                     )
 
     # Collect and filter data
@@ -194,9 +194,86 @@ def load_all():
 
             all_data.append(df)
 
-    final = pd.concat(all_data).reset_index(drop=True)
-    final.to_csv("data/dist_metrics_full.csv", index=False)
-    print(final)
+    all = pd.concat(all_data).reset_index(drop=True)
+    all.to_csv("data/dist_metrics_full.csv", index=False)
+    print(all)
+    nflt = all["Norm"] == "l2_norm"
+    dflt = all["Metric"] == "l2_dist"
+
+    final = all[np.bitwise_and(nflt, dflt)]
+
+    # Create a figure
+    plt.figure()
+
+    # Loop through each unique environment in the 'Env' column
+    for env in final['Env'].unique():
+        # Filter the dataframe for the current environment
+        df_env = final[final['Env'] == env]
+
+        # Define x and y
+        x = df_env['val_mean_episode_rewards']
+        y = df_env['Distance']
+
+        # Scatter plot for this environment
+        plt.scatter(x, y, label=env)
+
+        # Compute the line of best fit using numpy.polyfit
+        coeffs = np.polyfit(x, y, 1)  # linear fit: degree 1
+        slope, intercept = coeffs
+        # Predicted y values
+        y_pred = slope * x + intercept
+
+        # Compute R^2
+        ss_res = np.sum((y - y_pred) ** 2)
+        ss_tot = np.sum((y - np.mean(y)) ** 2)
+        r2 = 1 - ss_res / ss_tot
+
+        # Sort x for plotting the line
+        x_sorted = np.sort(x)
+        y_fit = slope * x_sorted + intercept
+
+        # Plot the line of best fit, adding R^2 to the label
+        plt.plot(x_sorted, y_fit, label=f'{env} (R²={r2:.2f})')
+
+    # Label the axes
+    plt.xlabel('Mean Deployment Environment Episode Rewards')
+    plt.ylabel('Distance')
+    plt.legend()
+    plt.show()
+
+    for norm in all["Norm"].unique():
+        for dist in all["Metric"].unique():
+            nflt = all["Norm"] == norm
+            dflt = all["Metric"] == dist
+
+            final = all[np.bitwise_and(nflt, dflt)]
+            # stacking:
+            # Extract the actual rewards and distances.
+            df_actual = final[['Env', 'mean_episode_rewards', 'Distance']].copy()
+            df_actual = df_actual[df_actual['Env']=="Train"]
+
+            # Extract the validation rewards and distances, renaming the reward column.
+            df_val = final[['Env', 'val_mean_episode_rewards', 'Distance']].copy()
+            df_val = df_val.rename(columns={'val_mean_episode_rewards': 'mean_episode_rewards'})
+            df_val = df_val[df_val['Env']=='Valid']
+
+            # Stack the two DataFrames vertically.
+            df_stacked = pd.concat([df_actual, df_val], ignore_index=True)
+
+            # Optional: display the first few rows to check the result.
+            print(df_stacked.head())
+
+            plt.figure()
+
+            # Option 1: Plot all points together
+            plt.scatter(df_stacked['mean_episode_rewards'], df_stacked['Distance'], alpha=0.7)
+
+            plt.xlabel('Mean Episode Rewards')
+            plt.ylabel('Distance')
+            plt.title(f'{norm} {dist} - Mean Episode Rewards vs Distance')
+            plt.show()
+
+
 
 def load_meg(tags):
     api = wandb.Api()
@@ -495,7 +572,8 @@ def get_summary():
 
 
 if __name__ == "__main__":
-    load_meg(["Ascent_Meg_KL5"])
+    load_all("Coinrun_Soft_Inf")
+    # load_meg(["Ascent_Meg_KL5"])
     # get_summary()
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",
