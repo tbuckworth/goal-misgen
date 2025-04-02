@@ -101,15 +101,20 @@ new_maze_dirs = [
 ]
 
 maze_dirs_apr25 = [
-    "logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50/model_80019456.pth", # rand.region = 1
+    "logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50/model_80019456.pth",  # rand.region = 1
 ]
 
 coinrun_dirs = [
     "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",  # random_percent = 0
     "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",  # random_percent = 10
-    "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
-    "logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033", # rp = 0, levels = 1000 (still running, so uncomment)
-    "logs/train/coinrun/coinrun/2025-01-24__15-30-53__seed_6033", # rp = 0, levels = 2000 (still running, uncomment)
+    # "logs/train/coinrun/coinrun/2025-01-22__09-43-00__seed_6033", # random_percent = 0, levels = 500
+    "logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033",  # rp = 0, levels = 1000 (still running, so uncomment)
+    "logs/train/coinrun/coinrun/2025-01-24__15-30-53__seed_6033",  # rp = 0, levels = 2000 (still running, uncomment)
+]
+
+new_coinrun_dirs = [
+    "logs/train/coinrun/coinrun/2025-01-28__11-36-54__seed_42", # rand_percent = 0
+    "logs/train/coinrun/coinrun/2025-01-28__11-36-54__seed_0", # rand_percent = 0
 ]
 
 # generalising_ascender = [
@@ -224,7 +229,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(67584),
-        "val_epoch": 100,
+        "val_epoch": 300,
         "mini_batch_size": 2048,
         "n_val_envs": 16,
         "n_envs": int(64 + 16),
@@ -273,9 +278,6 @@ def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
 
             print(e)
             pass
-
-
-
 
 
 def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
@@ -329,8 +331,8 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
+    # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
     #
     # run_tags_for_files({"Ascent_Meg_KL8_gamma":None}, local_unique_ascent_dirs, ignore_errors=True)
     # #
-    # # run_tags_for_files({"Coinrun_Soft_Inf": None}, coinrun_dirs, ignore_errors=True)
+    run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
