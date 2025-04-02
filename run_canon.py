@@ -100,6 +100,10 @@ new_maze_dirs = [
     "logs/train/maze_aisc/maze1/2024-11-25__15-29-49__seed_42/model_200015872.pth",  # rand.region = 0 #problem
 ]
 
+maze_dirs_apr25 = [
+    "logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50/model_80019456.pth", # rand.region = 1
+]
+
 coinrun_dirs = [
     "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",  # random_percent = 0
     "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",  # random_percent = 10
@@ -220,7 +224,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(67584),
-        "val_epoch": 200,
+        "val_epoch": 100,
         "mini_batch_size": 2048,
         "n_val_envs": 16,
         "n_envs": int(64 + 16),
@@ -233,14 +237,14 @@ def hp_run(model_file, tag_dict, tag):
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
         "infinite_value": True,
-        "meg": True,
+        "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
         "adjust_logprob_mean": False,
         "use_valid_env": True,
         "meg_version": "kldiv",
-        "pirc": False,
-        "trusted_policy_name": "self",
+        "pirc": True,
+        "trusted_policy_name": "uniform",
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
@@ -322,10 +326,10 @@ def run_tags_for_files_threaded(tag_dict, model_files, ignore_errors=True):
 if __name__ == '__main__':
     # run_tags_for_files({"Test": None}, cartpole_dirs, ignore_errors=False)
 
-    run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    # run_tags_for_files({"Maze_Meg_KL0": None}, new_maze_dirs + maze_dirs, ignore_errors=True)
+    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
     #
     # run_tags_for_files({"Ascent_Meg_KL8_gamma":None}, local_unique_ascent_dirs, ignore_errors=True)
     # #

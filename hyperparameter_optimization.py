@@ -217,7 +217,7 @@ def ppo():
     bounds = {}
     #     "rew_lr": [0.0001, 0.05],
     # }
-    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric = "summary.mean_episode_rewards")
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.mean_episode_rewards")
 
 
 def canonicaliser():
@@ -247,7 +247,6 @@ def canonicaliser():
         # "num_timesteps": [int(1e7), int(2e7)],
     }
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards", abs=True)
-
 
 
 if __name__ == "__main__":
