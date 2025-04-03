@@ -150,6 +150,7 @@ class Canonicaliser(BaseAgent):
         for d in [self.logvaldir, self.logmegdir]:
             if not os.path.exists(d):
                 os.makedirs(d)
+        self.logger.extend_metrics(["is_return","pdwis_return","is_return_v","pdwis_return_v"])
 
     def predict_subject_adv(self, obs, act, hidden_state, done, subject_policy):
         with torch.no_grad():
@@ -257,7 +258,7 @@ class Canonicaliser(BaseAgent):
             if self.storage_valid is not None:
                 rew_batch_v, done_batch_v = self.storage_valid.fetch_log_data()
             else:
-                rew_batch_v = done_batch_v = None
+                rew_batch_v = done_batch_v = is_return_v = pdwis_return_v = None
             self.logger.feed(rew_batch, done_batch, rew_batch_v, done_batch_v)
             self.logger.dump(summary)
             if self.anneal_lr:
@@ -311,13 +312,21 @@ class Canonicaliser(BaseAgent):
                 df_valid["Env"] = "Valid"
                 comb = pd.concat([df_train, df_valid])
                 pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
-                wandb.log({
+                is_return = self.storage_trusted.compute_importance_sampling_estimate(self.gamma)
+                pdwis_return = self.storage_trusted.compute_pdwis_estimate(self.gamma)
+                is_return_v = self.storage_trusted_val.compute_importance_sampling_estimate(self.gamma)
+                pdwis_return_v = self.storage_trusted_val.compute_pdwis_estimate(self.gamma)
+        wandb.log({
                     "distances": wandb.Table(dataframe=comb),
                     "distances_pivoted": wandb.Table(dataframe=pivoted_df),
                     "L2_L2_Train": dt,
                     "L2_L2_Valid": dv,
                     "Meg_Train": meg_train,
                     "Meg_Valid": meg_valid,
+                    "IS_Train": is_return,
+                    "IS_Valid": is_return_v,
+                    "PDWIS_Train": pdwis_return,
+                    "PDWIS_Valid": pdwis_return_v,
                 })
 
         self.env.close()
