@@ -297,10 +297,10 @@ class Canonicaliser(BaseAgent):
         })
 
         # Remove:
-        is_return, pdwis_return = self.storage_trusted.compute_off_policy_estimates(self.gamma)
+        is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
 
         if self.pirc:
-            with torch.no_grad():
+            with (torch.no_grad()):
                 if self.print_ascent_rewards:
                     print("Train Env Rew:")
                 df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model,
@@ -314,20 +314,25 @@ class Canonicaliser(BaseAgent):
                 df_valid["Env"] = "Valid"
                 comb = pd.concat([df_train, df_valid])
                 pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
-                is_return, pdwis_return = self.storage_trusted.compute_off_policy_estimates(self.gamma)
-                is_return_v, pdwis_return_v = self.storage_trusted.compute_off_policy_estimates(self.gamma)
-        wandb.log({
-                    "distances": wandb.Table(dataframe=comb),
-                    "distances_pivoted": wandb.Table(dataframe=pivoted_df),
-                    "L2_L2_Train": dt,
-                    "L2_L2_Valid": dv,
-                    "Meg_Train": meg_train,
-                    "Meg_Valid": meg_valid,
-                    "IS_Train": is_return,
-                    "IS_Valid": is_return_v,
-                    "PDWIS_Train": pdwis_return,
-                    "PDWIS_Valid": pdwis_return_v,
-                })
+                is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
+                is_return_v, pdwis_return_v, _ = self.storage_trusted_val.compute_off_policy_estimates(self.gamma)
+                _, _, actual_return = self.storage.compute_off_policy_estimates(self.gamma)
+                _, _, actual_return_v = self.storage_valid.compute_off_policy_estimates(self.gamma)
+
+            wandb.log({
+                "distances": wandb.Table(dataframe=comb),
+                "distances_pivoted": wandb.Table(dataframe=pivoted_df),
+                "L2_L2_Train": dt,
+                "L2_L2_Valid": dv,
+                "Meg_Train": meg_train,
+                "Meg_Valid": meg_valid,
+                "IS_Train": is_return,
+                "IS_Valid": is_return_v,
+                "PDWIS_Train": pdwis_return,
+                "PDWIS_Valid": pdwis_return_v,
+                "Return_Train": actual_return,
+                "Return_Valid": actual_return_v,
+            })
 
         self.env.close()
         if self.env_valid is not None:

@@ -307,9 +307,10 @@ class Storage():
 
     def compute_off_policy_estimates(self, gamma):
         """
-        Computes both the off-policy evaluation estimates using:
+        Computes the off-policy evaluation estimates using:
           - Importance Sampling (IS)
           - Per-Decision Weighted Importance Sampling (PDWIS)
+          - Behavioural policy return
 
         Accounts for misaligned episodes stored in deques.
 
@@ -319,65 +320,65 @@ class Storage():
           - self.log_prob_eval_policy: Log probabilities under the target policy (shape: [num_steps, num_envs])
           - self.done_batch: Boolean tensor indicating terminal steps (shape: [num_steps, num_envs])
           - self.step: Number of steps recorded (<= self.num_steps)
-          - self.gamma: Discount factor
+          - gamma: Discount factor (can be provided as an argument)
 
         Returns:
-          A tuple (IS_estimate, PDWIS_estimate)
+          A tuple (IS_estimate, PDWIS_estimate, Behaviour_policy_return)
         """
+        # Use self.step if available, otherwise fallback to self.num_steps.
         T = self.step or self.num_steps
         num_steps, num_envs = self.rew_batch[:T].shape
-        device = self.rew_batch.device
 
         # For IS: store importance-weighted discounted return per complete episode.
         is_episode_estimates = []
+        # For behavioural policy: store discounted return per complete episode.
+        behavior_episode_returns = []
 
         # For PDWIS: accumulate numerator and denominator per relative time step (across all complete episodes)
-        pdwis_numerators = {}  # key: relative time step (t_episode), value: sum_i (w_t * r_t * gamma^t)
-        pdwis_denoms = {}  # key: relative time step (t_episode), value: sum_i (w_t)
+        pdwis_numerators = {}  # key: relative time step, value: sum_i (w_t * r_t * gamma^t)
+        pdwis_denoms = {}  # key: relative time step, value: sum_i (w_t)
 
         # Loop over each environment (each column)
         for env in range(num_envs):
-            # Initialize counters for the current episode in this environment.
-            t_episode = 0  # relative time step index within the episode
-            cumulative_log_weight = 0.0  # cumulative log importance weight for the episode
-            discounted_return = 0.0  # discounted sum of rewards for the episode (for IS)
-            gamma_power = 1.0  # gamma^t for the current step
+            t_episode = 0  # Relative time index within the episode.
+            cumulative_log_weight = 0.0  # Cumulative log importance weight for the episode.
+            discounted_return = 0.0  # Discounted sum of rewards for the episode (for IS & behavioural return).
+            gamma_power = 1.0  # Tracks gamma^t for the current step.
 
             for t in range(num_steps):
-                # Check if this step is the beginning of a new episode.
+                # If this is the first step or a new episode starts, reset counters.
                 if t == 0 or self.done_batch[t - 1, env]:
-                    # Reset counters for new episode.
                     t_episode = 0
                     cumulative_log_weight = 0.0
                     discounted_return = 0.0
                     gamma_power = 1.0
 
                 # Update cumulative importance weight (in log space)
-                log_diff = (self.log_prob_eval_policy[t, env] - self.log_prob_act_batch[t, env])
+                log_diff = self.log_prob_eval_policy[t, env] - self.log_prob_act_batch[t, env]
                 cumulative_log_weight += log_diff
-                weight = cumulative_log_weight.exp()
+                weight = cumulative_log_weight.exp()  # Convert log weight to weight.
 
-                # Get reward at this step and current discount.
+                # Get the reward at this step and current discount.
                 reward = self.rew_batch[t, env].item()
                 discount = gamma_power
 
                 # --- PDWIS accumulation ---
-                # Accumulate weighted reward * discount for this relative time step.
                 pdwis_numerators[t_episode] = pdwis_numerators.get(t_episode, 0.0) + weight * reward * discount
                 pdwis_denoms[t_episode] = pdwis_denoms.get(t_episode, 0.0) + weight
 
-                # --- IS accumulation ---
+                # --- IS and behavioural return accumulation ---
                 discounted_return += discount * reward
 
-                # Update gamma multiplier and relative time step.
+                # Update for the next step.
                 gamma_power *= gamma
                 t_episode += 1
 
-                # If this step ends an episode, finalize the IS contribution.
+                # If this step ends an episode, finalize the episode's contributions.
                 if self.done_batch[t, env]:
                     episode_weight = cumulative_log_weight.exp()
                     is_episode_estimates.append(episode_weight * discounted_return)
-                    # (Counters will be reset at the next step if a new episode starts.)
+                    behavior_episode_returns.append(discounted_return)
+                    # Counters will be reset automatically at the next step if a new episode begins.
 
         # Compute final IS estimate: average over complete episodes.
         if len(is_episode_estimates) > 0:
@@ -393,17 +394,22 @@ class Storage():
                 denom = pdwis_denoms.get(t_episode, 0.0)
                 if denom > 0:
                     pdwis_estimate += pdwis_numerators[t_episode] / denom
-                # If no episodes contributed at this relative time, skip.
         else:
             pdwis_estimate = 0.0
 
-        # Return the two estimates as a tuple.
+        # Compute the average behavioural policy return (over complete episodes).
+        if len(behavior_episode_returns) > 0:
+            behaviour_return = sum(behavior_episode_returns) / len(behavior_episode_returns)
+        else:
+            behaviour_return = 0.0
+
+        # Convert to scalar floats if they are torch.Tensors.
         if isinstance(is_estimate, torch.Tensor):
             is_estimate = is_estimate.item()
         if isinstance(pdwis_estimate, torch.Tensor):
             pdwis_estimate = pdwis_estimate.item()
 
-        return is_estimate, pdwis_estimate
+        return is_estimate, pdwis_estimate, behaviour_return
 
     def get_returns(self, gamma=0.99):
         """
