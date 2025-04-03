@@ -167,6 +167,77 @@ class Storage():
             done_batch = self.done_batch.numpy()
         return rew_batch, done_batch
 
+    def compute_importance_sampling_estimate(self, gamma):
+        """
+        Computes the off-policy evaluation estimate using importance sampling.
+
+        Assumes:
+          - self.rew_batch: Tensor of rewards (shape: [num_steps, num_envs])
+          - self.log_prob_act_batch: Log probabilities under the behaviour policy (shape: [num_steps, num_envs])
+          - self.log_prob_eval_policy: Log probabilities under the target policy (shape: [num_steps, num_envs])
+          - self.step: Number of steps recorded (<= self.num_steps)
+        """
+        T = self.step  # actual number of steps recorded in the batch
+        device = self.rew_batch.device
+
+        # Create a discount vector: [1, gamma, gamma^2, ..., gamma^(T-1)]
+        discounts = gamma ** torch.arange(T, dtype=torch.float32, device=device)
+
+        # Compute per-environment discounted returns over T steps
+        returns = (self.rew_batch[:T] * discounts.unsqueeze(1)).sum(dim=0)
+
+        # Compute log importance weights for each environment: sum_t [log π(a_t|s_t) - log β(a_t|s_t)]
+        log_imp_weights = (self.log_prob_eval_policy[:T] - self.log_prob_act_batch[:T]).sum(dim=0)
+        imp_weights = torch.exp(log_imp_weights)
+
+        # The final IS estimate is the average of (importance weight * return) over all environments
+        is_estimate = (imp_weights * returns).mean()
+
+        return is_estimate
+
+    def compute_pdwis_estimate(self, gamma):
+        """
+        Computes the off-policy evaluation estimate using Per-Decision Weighted Importance Sampling (PDWIS).
+
+        Assumes:
+          - self.rew_batch: Tensor of rewards (shape: [num_steps, num_envs])
+          - self.log_prob_act_batch: Log probabilities under the behaviour policy (shape: [num_steps, num_envs])
+          - self.log_prob_eval_policy: Log probabilities under the target policy (shape: [num_steps, num_envs])
+          - self.step: Number of steps recorded (<= self.num_steps)
+          - self.gamma: Discount factor
+        """
+
+        T = self.step  # Actual number of steps recorded in the batch
+        device = self.rew_batch.device
+
+        # Create a discount vector: [1, gamma, gamma^2, ..., gamma^(T-1)]
+        discounts = gamma ** torch.arange(T, dtype=torch.float32, device=device)  # Shape: [T]
+
+        # Compute cumulative log importance weights for each time step:
+        # diff_log has shape [T, num_envs] representing log π_eval - log β at each step.
+        diff_log = self.log_prob_eval_policy[:T] - self.log_prob_act_batch[:T]
+        # Cumulative log weights: each entry is sum_{j=0}^t (log π_eval - log β)
+        cum_log_weights = torch.cumsum(diff_log, dim=0)  # Shape: [T, num_envs]
+        # Convert log weights to weights
+        weights = torch.exp(cum_log_weights)  # Shape: [T, num_envs]
+
+        # For each time step, compute the per-decision estimate:
+        #   ratio[t] = (sum_i [w[t,i] * rew_batch[t,i] * discounts[t]]) / (sum_i w[t,i])
+        per_decision_estimates = []
+        for t in range(T):
+            numerator = (weights[t] * self.rew_batch[t] * discounts[t]).sum()
+            denominator = weights[t].sum()
+            # Guard against division by zero
+            if denominator > 0:
+                per_decision_estimate_t = numerator / denominator
+            else:
+                per_decision_estimate_t = 0.0
+            per_decision_estimates.append(per_decision_estimate_t)
+
+        # The final PDWIS estimate is the sum over time steps
+        pdwis_estimate = sum(per_decision_estimates)
+        return pdwis_estimate
+
     def get_returns(self, gamma=0.99):
         """
         Computes the discounted return for each complete episode (i.e. an episode that
