@@ -296,6 +296,9 @@ class Canonicaliser(BaseAgent):
             "val_mean_returns": np.mean(self.storage_valid.get_returns(self.gamma)),
         })
 
+        # Remove:
+        is_return, pdwis_return = self.storage_trusted.compute_off_policy_estimates(self.gamma)
+
         if self.pirc:
             with torch.no_grad():
                 if self.print_ascent_rewards:
@@ -311,10 +314,8 @@ class Canonicaliser(BaseAgent):
                 df_valid["Env"] = "Valid"
                 comb = pd.concat([df_train, df_valid])
                 pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
-                is_return = self.storage_trusted.compute_importance_sampling_estimate(self.gamma)
-                pdwis_return = self.storage_trusted.compute_pdwis_estimate(self.gamma)
-                is_return_v = self.storage_trusted_val.compute_importance_sampling_estimate(self.gamma)
-                pdwis_return_v = self.storage_trusted_val.compute_pdwis_estimate(self.gamma)
+                is_return, pdwis_return = self.storage_trusted.compute_off_policy_estimates(self.gamma)
+                is_return_v, pdwis_return_v = self.storage_trusted.compute_off_policy_estimates(self.gamma)
         wandb.log({
                     "distances": wandb.Table(dataframe=comb),
                     "distances_pivoted": wandb.Table(dataframe=pivoted_df),
