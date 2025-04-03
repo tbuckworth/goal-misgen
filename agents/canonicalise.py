@@ -150,7 +150,6 @@ class Canonicaliser(BaseAgent):
         for d in [self.logvaldir, self.logmegdir]:
             if not os.path.exists(d):
                 os.makedirs(d)
-        self.logger.extend_metrics(["is_return","pdwis_return","is_return_v","pdwis_return_v"])
 
     def predict_subject_adv(self, obs, act, hidden_state, done, subject_policy):
         with torch.no_grad():
