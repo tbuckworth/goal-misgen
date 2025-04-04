@@ -103,8 +103,8 @@ new_maze_dirs = [
 maze_dirs_apr25 = [
     # already run - put back in:
     # "logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50/model_80019456.pth",  # rand.region = 1
-    "logs/train/maze/maze1/2025-04-03__12-27-33__seed_118/model_120061952", # rand.region = 0
-    "logs/train/maze_aisc/maze1/2025-04-03__18-22-05__seed_51/model_80019456", # rand.region = 3
+    "logs/train/maze/maze1/2025-04-03__12-27-33__seed_118/model_120061952.pth", # rand.region = 0
+    "logs/train/maze_aisc/maze1/2025-04-03__18-22-05__seed_51/model_80019456.pth", # rand.region = 3
     # Still training: "logs/train/maze_aisc/maze1/2025-04-04__07-43-53__seed_1993", # rand.region = 10
 ]
 
