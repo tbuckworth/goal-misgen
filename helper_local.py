@@ -139,6 +139,13 @@ def create_venv_render(args, hyperparameters, is_valid=False):
     venv = ScaledFloatFrame(venv)
     return venv
 
+def get_goal_gen_policy(env_name):
+    if env_name in ["maze_aisc","maze"]:
+        model_file = "logs/train/maze_aisc/maze1/2024-11-25__15-28-05__seed_42/model_200015872.pth"
+    else:
+        raise NotImplementedError("Have only done this for maze so far")
+    # TODO: actually load policy in?
+    return model_file
 
 class DictToArgs:
     def __init__(self, input_dict):
@@ -316,3 +323,15 @@ def group_by(tensor, acts, group_labels, venv):
     # Convert result to a PyTorch tensor
     result_tensor = torch.stack(result, dim=-1)
     return result_tensor, new_acts
+
+
+def load_tempered_policy(env_name, device, hyperparameters, venv):
+    model_file = get_goal_gen_policy(env_name)
+    # TODO: load in a high temp policy
+    model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
+    model.device = device
+    policy.device = device
+    # load policy
+    policy.load_state_dict(torch.load(model_file, map_location=device)["model_state_dict"])
+    return policy
+

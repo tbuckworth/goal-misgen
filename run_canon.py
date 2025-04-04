@@ -233,7 +233,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(4096*4),#int(67584),
-        "val_epoch": 0,
+        "val_epoch": 100,
         "mini_batch_size": 2048,
         "n_val_envs": 2,#16,
         "n_envs": 8,#int(64 + 16),
@@ -243,7 +243,7 @@ def hp_run(model_file, tag_dict, tag):
         "seed": seed,
         "hidden_dims": [256, 256, 256, 256],
 
-        "load_value_models": True,
+        "load_value_models": False,
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
         "infinite_value": True,
@@ -254,7 +254,7 @@ def hp_run(model_file, tag_dict, tag):
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
-        "trusted_policy_name": "uniform",
+        "trusted_policy_name": "tempered_gen",
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
@@ -337,7 +337,7 @@ if __name__ == '__main__':
 
     # # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
-    run_tags_for_files({"Maze_Imp_Sampling": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
+    run_tags_for_files({"new maze tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
     # run_tags_for_files({"Ascent_Meg_KL8_gamma":None}, local_unique_ascent_dirs, ignore_errors=True)

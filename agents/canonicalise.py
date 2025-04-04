@@ -300,8 +300,8 @@ class Canonicaliser(BaseAgent):
         # is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
 
         if self.pirc:
-            is_return, pdwis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
             is_return_v, pdwis_return_v, trusted_return_v, trusted_reward_v = self.storage_trusted_val.compute_off_policy_estimates()
+            is_return, pdwis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
             is_act, pdwis_act, actual_return, actual_reward = self.storage.compute_off_policy_estimates()
             is_act_v, pdwis_act_v, actual_return_v, actual_reward_v = self.storage_valid.compute_off_policy_estimates()
             with (torch.no_grad()):

@@ -76,6 +76,8 @@ class Storage():
                 if logp_eval_policy is not None:
                     self.episode_is_ests += self.is_estimate[done].tolist()
                     self.episode_pdwis_ests += self.pdwis_estimate[done].tolist()
+                    if (self.pdwis_estimate[done].round(decimals=3)>0).any():
+                        print("look")
             self.disc_batch *= gamma
             self.t += 1
             self.disc_batch[done] = 1.

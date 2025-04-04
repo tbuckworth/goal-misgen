@@ -249,6 +249,7 @@ cartpole-canon:
     trusted_policy_name: uniform
     meg_ground_next: True
     consistency_coef: 10.
+    trusted_temp: 5.
 
 
 trusted-value:

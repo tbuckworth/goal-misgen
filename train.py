@@ -1,5 +1,4 @@
 import copy
-import re
 
 from common.env.procgen_wrappers import *
 from common.logger import Logger
@@ -14,7 +13,8 @@ import torch
 
 from discrete_env.stacked_env import StackedEnv
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
-    create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv, get_model_with_largest_checkpoint
+    create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv, get_model_with_largest_checkpoint, \
+    load_tempered_policy
 
 try:
     import wandb
@@ -204,6 +204,9 @@ def train(args):
                                                 input_dims=len(env.observation_space.shape))
         elif trusted_policy_name == "self":
             trusted_policy = policy
+        elif trusted_policy_name == "tempered_gen":
+            policy = load_tempered_policy(env_name, device, hyperparameters, env)
+            policy.T = hyperparameters.get("trusted_temp", 5)
         else:
             raise NotImplementedError
 

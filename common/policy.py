@@ -18,6 +18,7 @@ class CategoricalPolicy(nn.Module):
         action_size: number of the categorical actions
         """ 
         super(CategoricalPolicy, self).__init__()
+        self.T = 1.
         self.embedder = embedder
         self.action_size = action_size
         # small scale weight-initialization in policy enhances the stability        
@@ -35,7 +36,7 @@ class CategoricalPolicy(nn.Module):
         hidden = self.embedder(x)
         if self.recurrent:
             hidden, hx = self.gru(hidden, hx, masks)
-        logits = self.fc_policy(hidden)
+        logits = self.fc_policy(hidden)/self.T
         log_probs = F.log_softmax(logits, dim=1)
         p = Categorical(logits=log_probs)
         v = self.fc_value(hidden).reshape(-1)
@@ -48,7 +49,7 @@ class CategoricalPolicy(nn.Module):
     
     def forward_with_embedding(self, x):
         hidden = self.embedder(x)
-        logits = self.fc_policy(hidden)
+        logits = self.fc_policy(hidden)/self.T
         log_probs = F.log_softmax(logits, dim=1)
         p = Categorical(logits=log_probs)
         v = self.fc_value(hidden).reshape(-1)
