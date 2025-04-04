@@ -29,12 +29,14 @@ class Storage():
         self.adv_batch = torch.zeros(self.num_steps, self.num_envs)
         self.disc_batch = torch.ones(self.num_envs)
         self.cum_returns = torch.zeros(self.num_envs)
+        self.cum_rewards = torch.zeros(self.num_envs)
         self.cum_log_imp_weights = torch.zeros(self.num_envs)
         self.is_estimate = torch.zeros(self.num_envs)
         self.pdwis_estimate = torch.zeros(self.num_envs)
         self.t = torch.zeros(self.num_envs)
         self.cliw_hist = [{} for _ in range(self.num_envs)]
         self.episode_returns = []
+        self.episode_rewards = []
         self.episode_is_ests = []
         self.episode_pdwis_ests = []
         self.info_batch = deque(maxlen=self.num_steps)
@@ -50,36 +52,42 @@ class Storage():
         self.log_prob_act_batch[self.step] = torch.from_numpy(log_prob_act.copy())
         self.value_batch[self.step] = torch.from_numpy(value.copy())
         self.info_batch.append(info)
-        if gamma is not None and logp_eval_policy is not None:
+        if gamma is not None:
             disc_rew = self.disc_batch * rew
             self.cum_returns += disc_rew
-            self.cum_log_imp_weights += (logp_eval_policy - log_prob_act)
-            self.is_estimate += self.cum_log_imp_weights.exp() * disc_rew
-            # PDWIS:
-            for i, (t,cum_liw) in enumerate(zip(self.t, self.cum_log_imp_weights)):
-                self.cliw_hist[i].update({t:cum_liw.item()})
-            norm_weights = []
-            for i,t in enumerate(self.t):
-                norm = np.exp([d[t] for d in self.cliw_hist if t in d.keys()]).mean() + 1e-8
-                norm_weights.append(self.cum_log_imp_weights[i].exp()/norm)
-            # normalized_weights = self.cum_log_imp_weights.exp() / (sum(self.cum_log_imp_weights.exp()) + 1e-8)
-            normalized_weights = torch.tensor(norm_weights)
-            self.pdwis_estimate += normalized_weights * disc_rew
+            self.cum_rewards += rew
+            if logp_eval_policy is not None:
+                self.cum_log_imp_weights += (logp_eval_policy - log_prob_act)
+                self.is_estimate += self.cum_log_imp_weights.exp() * disc_rew
+                # PDWIS:
+                for i, (t,cum_liw) in enumerate(zip(self.t, self.cum_log_imp_weights)):
+                    self.cliw_hist[i].update({int(t.item()):cum_liw.item()})
+                norm_weights = []
+                for i,t in enumerate(self.t):
+                    key = int(t.item())
+                    norm = np.exp([d[key] for d in self.cliw_hist if key in d.keys()]).mean() + 1e-8
+                    norm_weights.append(self.cum_log_imp_weights[i].exp()/norm)
+                # normalized_weights = self.cum_log_imp_weights.exp() / (sum(self.cum_log_imp_weights.exp()) + 1e-8)
+                normalized_weights = torch.tensor(norm_weights)
+                self.pdwis_estimate += normalized_weights * disc_rew
             if done.any():
-                self.episode_returns.append(self.cum_returns[done].tolist())
-                self.episode_is_ests.append(self.is_estimate[done].tolist())
-                self.episode_pdwis_ests.append(self.pdwis_estimate[done].tolist())
+                self.episode_rewards += self.cum_rewards[done].tolist()
+                self.episode_returns += self.cum_returns[done].tolist()
+                if logp_eval_policy is not None:
+                    self.episode_is_ests += self.is_estimate[done].tolist()
+                    self.episode_pdwis_ests += self.pdwis_estimate[done].tolist()
             self.disc_batch *= gamma
             self.t += 1
             self.disc_batch[done] = 1.
             self.cum_returns[done] = 0.
+            self.cum_rewards[done] = 0.
             self.cum_log_imp_weights[done] = 0.
             self.is_estimate[done] = 0.
+            self.pdwis_estimate[done] = 0.
             self.t[done] = 0
 
         if logp_eval_policy is not None:
             self.log_prob_eval_policy[self.step] = torch.from_numpy(logp_eval_policy.copy())
-            self.accumulate_importance_samling_estimates(gamma)
         if probs is not None:
             self.subject_probs[self.step] = torch.from_numpy(probs.copy())
         self.step = (self.step + 1) % self.num_steps
@@ -345,8 +353,8 @@ class Storage():
         final_estimate = sum(pdwis_estimates)
         return final_estimate
 
-    def compute_off_policy_estimates(self, gamma):
-        return np.mean(self.episode_is_ests), np.mean(self.episode_pdwis_ests), np.mean(self.episode_returns)
+    def compute_off_policy_estimates(self):
+        return np.mean(self.episode_is_ests), np.mean(self.episode_pdwis_ests), np.mean(self.episode_returns), np.mean(self.episode_rewards)
         """
         Computes the off-policy evaluation estimates using:
           - Importance Sampling (IS)
@@ -488,12 +496,6 @@ class Storage():
                     episode_return = 0.0
                     discount = 1.0
         return np.array(returns)
-
-    def accumulate_importance_samling_estimates(self, gamma):
-        assert gamma, "gamma required for importance sampling"
-
-
-
 
 class LirlStorage(Storage):
     def __init__(self, *args, **kwargs):

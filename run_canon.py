@@ -232,12 +232,12 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(80000),#int(67584),
+        "num_timesteps": int(4096*4),#int(67584),
         "val_epoch": 0,
         "mini_batch_size": 2048,
-        "n_val_envs": 16,
-        "n_envs": int(64 + 16),
-        "n_steps": 256,#1000
+        "n_val_envs": 2,#16,
+        "n_envs": 8,#int(64 + 16),
+        "n_steps": 4096,#256,#1000
         "num_levels": 10000,
         "distribution_mode": "hard",
         "seed": seed,

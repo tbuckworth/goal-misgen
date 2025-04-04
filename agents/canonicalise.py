@@ -297,9 +297,13 @@ class Canonicaliser(BaseAgent):
         })
 
         # Remove:
-        is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
+        # is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
 
         if self.pirc:
+            is_return, pdwis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
+            is_return_v, pdwis_return_v, trusted_return_v, trusted_reward_v = self.storage_trusted_val.compute_off_policy_estimates()
+            is_act, pdwis_act, actual_return, actual_reward = self.storage.compute_off_policy_estimates()
+            is_act_v, pdwis_act_v, actual_return_v, actual_reward_v = self.storage_valid.compute_off_policy_estimates()
             with (torch.no_grad()):
                 if self.print_ascent_rewards:
                     print("Train Env Rew:")
@@ -314,10 +318,7 @@ class Canonicaliser(BaseAgent):
                 df_valid["Env"] = "Valid"
                 comb = pd.concat([df_train, df_valid])
                 pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
-                is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
-                is_return_v, pdwis_return_v, _ = self.storage_trusted_val.compute_off_policy_estimates(self.gamma)
-                _, _, actual_return = self.storage.compute_off_policy_estimates(self.gamma)
-                _, _, actual_return_v = self.storage_valid.compute_off_policy_estimates(self.gamma)
+
 
             wandb.log({
                 "distances": wandb.Table(dataframe=comb),
@@ -345,7 +346,7 @@ class Canonicaliser(BaseAgent):
             if subject_policy is not None:
                 logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
-            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs)
+            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs, self.gamma)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
