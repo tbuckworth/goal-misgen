@@ -101,7 +101,8 @@ new_maze_dirs = [
 ]
 
 maze_dirs_apr25 = [
-    "logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50/model_80019456.pth",  # rand.region = 1
+    # already run - put back in:
+    # "logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50/model_80019456.pth",  # rand.region = 1
     "logs/train/maze/maze1/2025-04-03__12-27-33__seed_118/model_120061952", # rand.region = 0
     "logs/train/maze_aisc/maze1/2025-04-03__18-22-05__seed_51/model_80019456", # rand.region = 3
     # Still training: "logs/train/maze_aisc/maze1/2025-04-04__07-43-53__seed_1993", # rand.region = 10
@@ -231,12 +232,12 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(80000),# int(67584),
-        "val_epoch": 0,
+        "num_timesteps": int(67584),#int(80000),
+        "val_epoch": 100,
         "mini_batch_size": 2048,
         "n_val_envs": 16,
         "n_envs": int(64 + 16),
-        "n_steps": 1000,
+        "n_steps": 256,#1000
         "num_levels": 10000,
         "distribution_mode": "hard",
         "seed": seed,
@@ -335,8 +336,8 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
-    run_tags_for_files({"Maze_Imp_Sampling": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
+    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
+    # run_tags_for_files({"Maze_Imp_Sampling": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
     # run_tags_for_files({"Ascent_Meg_KL8_gamma":None}, local_unique_ascent_dirs, ignore_errors=True)
