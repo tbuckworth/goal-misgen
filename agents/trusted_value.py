@@ -192,7 +192,7 @@ class TrustedValue(BaseAgent):
             val_losses_valid = []
 
             for sample in generator:
-                obs_batch, nobs_batch, _, done_batch, _, _, return_batch, _, rew_batch, _ = sample
+                obs_batch, nobs_batch, _, done_batch, _, _, return_batch, _, rew_batch, _, _, _ = sample
                 value_batch = value_model(obs_batch).squeeze()
                 if self.td_lmbda:
                     target = return_batch
@@ -204,7 +204,7 @@ class TrustedValue(BaseAgent):
                 val_losses.append(value_loss.item())
 
             for sample in generator_valid:
-                obs_batch_val, nobs_batch_val, _, done_batch_val, _, _, return_batch_val, _, rew_batch_val, _ = sample
+                obs_batch_val, nobs_batch_val, _, done_batch_val, _, _, return_batch_val, _, rew_batch_val, _, _, _ = sample
                 with torch.no_grad():
                     value_batch_val = value_model(obs_batch_val).squeeze()
                     if self.td_lmbda:
