@@ -145,8 +145,10 @@ def create_venv_render(args, hyperparameters, is_valid=False):
     return venv
 
 def get_goal_gen_policy(env_name):
-    if env_name in ["maze_aisc","maze"]:
+    if env_name in ["maze_aisc", "maze"]:
         model_file = "logs/train/maze_aisc/maze1/2024-11-25__15-28-05__seed_42/model_200015872.pth"
+    elif env_name == "coinrun":
+        model_file = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth"
     else:
         raise NotImplementedError("Have only done this for maze so far")
     # TODO: actually load policy in?

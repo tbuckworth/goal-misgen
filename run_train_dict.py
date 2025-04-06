@@ -7,7 +7,7 @@ if __name__ == '__main__':
         "architecture": "impala",
         "distribution_mode": "hard",
         "seed": 1080,
-        "env_name": "maze_aisc",
+        "env_name": "coinrun",
         "exp_name": "value",
         "param_name": "trusted-value",
         "wandb_tags": ["trusted value"],
@@ -17,6 +17,7 @@ if __name__ == '__main__':
         "n_val_envs": 128,
         "n_envs": 256 + 128,#shouldn't we use longer n_steps?
         "trusted_policy_name": "tempered_gen",
+        "td_lmbda": False,
     }
     # hparams = {
     #     # "num_levels": 100000,
