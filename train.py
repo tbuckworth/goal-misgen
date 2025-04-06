@@ -161,11 +161,12 @@ def train(args):
         hyperparameters.update(ppo_lirl_params)
     canon_params = {}
     if algo in ['canon', 'trusted-value', 'trusted-value-unlimited']:
+        trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if not ppo_value:
             if hyperparameters.get("load_value_models", False):
                 valdir = hyperparameters.get("value_dir", None)
-                value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training", valdir)
-                value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation", valdir)
+                value_cfg, value_dir = get_value_dir_and_config_for_env(env_name, "Training", valdir, trusted_policy_name)
+                value_cfg_valid, value_dir_valid = get_value_dir_and_config_for_env(env_name, "Validation", valdir, trusted_policy_name)
                 hidden_dims = value_cfg.get("hidden_dims", [32])
                 if valdir is None:
                     hyperparameters["value_dir"] = value_dir
@@ -193,7 +194,6 @@ def train(args):
         else:
             q_model = q_model_val = None
 
-        trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if trusted_policy_name == "uniform":
             trusted_policy = UniformPolicy(policy.action_size, device, input_dims=len(env.observation_space.shape))
         elif trusted_policy_name == "gen":

@@ -275,6 +275,7 @@ trusted-value:
     n_val_envs: 64
     save_pics_ascender: False
     td_lmbda: True
+    trusted_policy_name: uniform
 
 
 ascent-crafted:

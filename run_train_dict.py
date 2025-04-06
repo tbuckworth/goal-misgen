@@ -2,6 +2,22 @@ from helper_local import get_model_with_largest_checkpoint
 from hyperparameter_optimization import run_next_hyperparameters
 
 if __name__ == '__main__':
+    hparams = {
+        "num_levels": 100000,
+        "architecture": "impala",
+        "distribution_mode": "hard",
+        "seed": 1080,
+        "env_name": "maze_aisc",
+        "exp_name": "value",
+        "param_name": "trusted-value",
+        "wandb_tags": ["trusted value"],
+        "use_wandb": True,
+        "val_epoch": 1000,
+        "mini_batch_size": 2048,
+        "n_val_envs": 128,
+        "n_envs": 256 + 128,#shouldn't we use longer n_steps?
+        "trusted_policy_name": "tempered_gen",
+    }
     # hparams = {
     #     # "num_levels": 100000,
     #     "architecture": "mlpmodel",
@@ -25,21 +41,21 @@ if __name__ == '__main__':
     #     "hidden_dims": [256, 256, 256, 256],
     #     "save_pics_ascender": False,
     # }
-    hparams = {
-        "algo": "ppo-tracked",
-        "exp_name": "cartpole",
-        "env_name": "cartpole",
-        "param_name": "cartpole-mlp-tracked",
-        "num_timesteps": 200000000,
-        # "num_levels": 10000,
-        "num_checkpoints": 5,
-        # "distribution_mode": "easy",
-        "seed": 6033,
-        # "random_percent": 0,
-        "use_wandb": True,
-        "meg_coef": 0.,
-        "pirc_coef": .1,
-        # "entropy_coef": -1.,
-        # "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-02-03__17-05-59__seed_6033"),
-    }
+    # hparams = {
+    #     "algo": "ppo-tracked",
+    #     "exp_name": "cartpole",
+    #     "env_name": "cartpole",
+    #     "param_name": "cartpole-mlp-tracked",
+    #     "num_timesteps": 200000000,
+    #     # "num_levels": 10000,
+    #     "num_checkpoints": 5,
+    #     # "distribution_mode": "easy",
+    #     "seed": 6033,
+    #     # "random_percent": 0,
+    #     "use_wandb": True,
+    #     "meg_coef": 0.,
+    #     "pirc_coef": .1,
+    #     # "entropy_coef": -1.,
+    #     # "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-02-03__17-05-59__seed_6033"),
+    # }
     run_next_hyperparameters(hparams)

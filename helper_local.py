@@ -19,7 +19,7 @@ from common.model import NatureModel, ImpalaModel, MlpModel
 from common.policy import CategoricalPolicy, CraftedTorchPolicy
 
 
-def get_value_dir_and_config_for_env(env_name, env_type, logdir=None):
+def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_policy_name="uniform"):
     assert env_type in ["Training","Validation"], f"{env_type} is not a valid type. Must be either 'Training' or 'Validation'"
     if logdir is None:
         if env_name == "ascent":
@@ -30,11 +30,16 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None):
             logdir = "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080"
             # raise NotImplementedError("Need to train value for coinrun")
         elif env_name == "maze" or env_name == "maze_aisc":
-            # N.B. Training did look a bit funny
-            # logdir = "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080"
-            # value original:
-            logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
-            # raise NotImplementedError("Need to train value for maze")
+            if trusted_policy_name=="uniform":
+                # N.B. Training did look a bit funny
+                # logdir = "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080"
+                # value original:
+                logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
+                # raise NotImplementedError("Need to train value for maze")
+            elif trusted_policy_name=="tempered_gen":
+                raise NotImplementedError("Put the logdir here!")
+            else:
+                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "cartpole":
             # 400 epochs, converged to 0.5 loss, seems legit...
             logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
