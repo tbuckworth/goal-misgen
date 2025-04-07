@@ -344,4 +344,4 @@ if __name__ == '__main__':
     # run_tags_for_files({"Ascent_Meg_KL8_gamma":None}, local_unique_ascent_dirs, ignore_errors=True)
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
-    run_tags_for_files({"new coinrun tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=False)
+    run_tags_for_files({"new coinrun tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
