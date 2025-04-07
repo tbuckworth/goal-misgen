@@ -165,8 +165,7 @@ def get_goal_gen_policy(env_name):
         model_file = "logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
     else:
         raise NotImplementedError("Have only done this for maze so far")
-    # TODO: actually load policy in?
-    return model_file
+    return get_model_with_largest_checkpoint(model_file)
 
 class DictToArgs:
     def __init__(self, input_dict):
