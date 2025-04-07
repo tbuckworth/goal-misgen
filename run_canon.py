@@ -232,12 +232,12 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(256*80),#int(67584),
+        "num_timesteps": int(2048*40),#int(67584),
         "val_epoch": 300,
         "mini_batch_size": 2048,
-        "n_val_envs": 16,
-        "n_envs": int(64 + 16),
-        "n_steps": 256,#256,#1000
+        "n_val_envs": 8,
+        "n_envs": int(32 + 8),
+        "n_steps": 2048,#256,#1000
         "num_levels": 10000,
         "distribution_mode": "hard",
         "seed": seed,
@@ -250,7 +250,7 @@ def hp_run(model_file, tag_dict, tag):
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
-        "adjust_logprob_mean": False,
+        "adjust_logprob_mean": True,#NORMALLY FALSE!
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
@@ -341,7 +341,9 @@ if __name__ == '__main__':
     # run_tags_for_files({"new maze tempered corrected": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    run_tags_for_files({"new ascent tempered":None}, unique_ascent_dirs, ignore_errors=True)
+    # run_tags_for_files({"new ascent tempered":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole tempered":None}, cartpole_dirs, ignore_errors=True)
+
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
     # run_tags_for_files({"new coinrun tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
