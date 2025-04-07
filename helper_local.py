@@ -26,14 +26,17 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
             if trusted_policy_name == "uniform":
                 logdir = "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080"
             elif trusted_policy_name == "tempered_gen":
-                # logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
-                logdir = None#"logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033"
+                logdir = "logs/train/ascent/value/2025-04-07__15-46-20__seed_1080"
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "coinrun":
-            # Training looked ok
-            logdir = "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080"
-            # raise NotImplementedError("Need to train value for coinrun")
+            if trusted_policy_name == "uniform":
+                # Training looked ok
+                logdir = "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080"
+            elif trusted_policy_name == "tempered_gen":
+                logdir = "logs/train/coinrun/value/2025-04-07__15-17-23__seed_1080"
+            else:
+                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "maze" or env_name == "maze_aisc":
             if trusted_policy_name=="uniform":
                 # N.B. Training did look a bit funny
@@ -42,7 +45,8 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
                 logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
                 # raise NotImplementedError("Need to train value for maze")
             elif trusted_policy_name=="tempered_gen":
-                logdir = "logs/train/maze_aisc/value/2025-04-06__13-49-55__seed_1080"
+                # logdir = "logs/train/maze_aisc/value/2025-04-06__13-49-55__seed_1080"
+                logdir = "logs/train/maze_aisc/value/2025-04-07__15-16-55__seed_1080"
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "cartpole":
@@ -50,7 +54,7 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
                 # 400 epochs, converged to 0.5 loss, seems legit...
                 logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
             elif trusted_policy_name == "tempered_gen":
-                logdir = None#"logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
+                logdir = "logs/train/cartpole/value/2025-04-07__15-47-33__seed_1080"
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         else:
