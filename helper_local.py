@@ -23,8 +23,13 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
     assert env_type in ["Training","Validation"], f"{env_type} is not a valid type. Must be either 'Training' or 'Validation'"
     if logdir is None:
         if env_name == "ascent":
-            logdir = "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080"
-            # logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
+            if trusted_policy_name == "uniform":
+                logdir = "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080"
+            elif trusted_policy_name == "tempered_gen":
+                # logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
+                logdir = "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033"
+            else:
+                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "coinrun":
             # Training looked ok
             logdir = "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080"
