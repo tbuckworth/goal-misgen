@@ -27,7 +27,7 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
                 logdir = "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080"
             elif trusted_policy_name == "tempered_gen":
                 # logdir = "logs/train/ascent/value/2024-11-22__20-20-55__seed_4846"
-                logdir = "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033"
+                logdir = None#"logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033"
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "coinrun":
@@ -50,7 +50,7 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
                 # 400 epochs, converged to 0.5 loss, seems legit...
                 logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
             elif trusted_policy_name == "tempered_gen":
-                logdir = "logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
+                logdir = None#"logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         else:
@@ -159,6 +159,10 @@ def get_goal_gen_policy(env_name):
         model_file = "logs/train/maze_aisc/maze1/2024-11-25__15-28-05__seed_42/model_200015872.pth"
     elif env_name == "coinrun":
         model_file = "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth"
+    elif env_name == "ascent":
+        model_file = "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033"
+    elif env_name == "cartpole":
+        model_file = "logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
     else:
         raise NotImplementedError("Have only done this for maze so far")
     # TODO: actually load policy in?
