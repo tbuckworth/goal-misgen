@@ -31,14 +31,15 @@ class Storage():
         self.cum_returns = torch.zeros(self.num_envs)
         self.cum_rewards = torch.zeros(self.num_envs)
         self.cum_log_imp_weights = torch.zeros(self.num_envs)
-        self.is_estimate = torch.zeros(self.num_envs)
-        self.pdwis_estimate = torch.zeros(self.num_envs)
+        self.pdis_estimate = torch.zeros(self.num_envs)
+        # self.pdwis_estimate = torch.zeros(self.num_envs)
         self.t = torch.zeros(self.num_envs)
         self.cliw_hist = [{} for _ in range(self.num_envs)]
         self.episode_returns = []
         self.episode_rewards = []
         self.episode_is_ests = []
-        self.episode_pdwis_ests = []
+        self.episode_pdis_ests = []
+        # self.episode_pdwis_ests = []
         self.info_batch = deque(maxlen=self.num_steps)
         self.step = 0
         # self.disc_batch[self.step] = 1.
@@ -59,34 +60,35 @@ class Storage():
             self.cum_rewards += rew
             if logp_eval_policy is not None:
                 self.cum_log_imp_weights += (logp_eval_policy - log_prob_act)
-                self.is_estimate += self.cum_log_imp_weights.exp() * disc_rew
-                # PDWIS:
-                for i, (t, cum_liw) in enumerate(zip(self.t, self.cum_log_imp_weights)):
-                    self.cliw_hist[i].update({int(t.item()): cum_liw.item()})
-                norm_weights = []
-                for i, t in enumerate(self.t):
-                    key = int(t.item())
-                    norm = np.exp([d[key] for d in self.cliw_hist if key in d.keys()]).mean() + 1e-8
-                    norm_weights.append(self.cum_log_imp_weights[i].exp() / norm)
-                # normalized_weights = self.cum_log_imp_weights.exp() / (sum(self.cum_log_imp_weights.exp()) + 1e-8)
-                normalized_weights = torch.tensor(norm_weights)
-                self.pdwis_estimate += normalized_weights * disc_rew
+                self.pdis_estimate += self.cum_log_imp_weights.exp() * disc_rew
+                # # PDWIS:
+                # for i, (t, cum_liw) in enumerate(zip(self.t, self.cum_log_imp_weights)):
+                #     self.cliw_hist[i].update({int(t.item()): cum_liw.item()})
+                # norm_weights = []
+                # for i, t in enumerate(self.t):
+                #     key = int(t.item())
+                #     norm = np.exp([d[key] for d in self.cliw_hist if key in d.keys()]).mean() + 1e-8
+                #     norm_weights.append(self.cum_log_imp_weights[i].exp() / norm)
+                # # normalized_weights = self.cum_log_imp_weights.exp() / (sum(self.cum_log_imp_weights.exp()) + 1e-8)
+                # normalized_weights = torch.tensor(norm_weights)
+                # self.pdwis_estimate += normalized_weights * disc_rew
             if done.any():
                 self.episode_rewards += self.cum_rewards[done].tolist()
                 self.episode_returns += self.cum_returns[done].tolist()
                 if logp_eval_policy is not None:
-                    self.episode_is_ests += self.is_estimate[done].tolist()
-                    self.episode_pdwis_ests += self.pdwis_estimate[done].tolist()
-                    if (self.pdwis_estimate[done].round(decimals=3) > 0).any():
-                        print("look")
+                    self.episode_is_ests += (self.cum_log_imp_weights.exp() * self.cum_returns)[done].tolist()
+                    self.episode_pdis_ests += self.pdis_estimate[done].tolist()
+                    # self.episode_pdwis_ests += self.pdwis_estimate[done].tolist()
+                    # if (self.pdwis_estimate[done].round(decimals=3) > 0).any():
+                    #     print("look")
             self.disc_batch *= gamma
             self.t += 1
             self.disc_batch[done] = 1.
             self.cum_returns[done] = 0.
             self.cum_rewards[done] = 0.
             self.cum_log_imp_weights[done] = 0.
-            self.is_estimate[done] = 0.
-            self.pdwis_estimate[done] = 0.
+            self.pdis_estimate[done] = 0.
+            # self.pdwis_estimate[done] = 0.
             self.t[done] = 0
 
         if logp_eval_policy is not None:
@@ -218,7 +220,7 @@ class Storage():
         return rew_batch, done_batch
 
     def compute_off_policy_estimates(self):
-        return np.mean(self.episode_is_ests), np.mean(self.episode_pdwis_ests), np.mean(self.episode_returns), np.mean(
+        return np.mean(self.episode_is_ests), np.mean(self.episode_pdis_ests), np.mean(self.episode_returns), np.mean(
             self.episode_rewards)
 
     def get_returns(self, gamma=0.99):

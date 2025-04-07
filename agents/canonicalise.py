@@ -300,10 +300,10 @@ class Canonicaliser(BaseAgent):
         # is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
 
         if self.pirc:
-            is_return_v, pdwis_return_v, trusted_return_v, trusted_reward_v = self.storage_trusted_val.compute_off_policy_estimates()
-            is_return, pdwis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
-            is_act, pdwis_act, actual_return, actual_reward = self.storage.compute_off_policy_estimates()
-            is_act_v, pdwis_act_v, actual_return_v, actual_reward_v = self.storage_valid.compute_off_policy_estimates()
+            is_return_v, pdis_return_v, trusted_return_v, trusted_reward_v = self.storage_trusted_val.compute_off_policy_estimates()
+            is_return, pdis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
+            is_act, pdis_act, actual_return, actual_reward = self.storage.compute_off_policy_estimates()
+            is_act_v, pdis_act_v, actual_return_v, actual_reward_v = self.storage_valid.compute_off_policy_estimates()
             with (torch.no_grad()):
                 if self.print_ascent_rewards:
                     print("Train Env Rew:")
@@ -329,8 +329,8 @@ class Canonicaliser(BaseAgent):
                 "Meg_Valid": meg_valid,
                 "IS_Train": is_return,
                 "IS_Valid": is_return_v,
-                "PDWIS_Train": pdwis_return,
-                "PDWIS_Valid": pdwis_return_v,
+                "PDIS_Train": pdis_return,
+                "PDIS_Valid": pdis_return_v,
                 "Return_Train": actual_return,
                 "Return_Valid": actual_return_v,
             })
