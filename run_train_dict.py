@@ -14,8 +14,9 @@ if __name__ == '__main__':
         "use_wandb": True,
         "val_epoch": 1000,
         "mini_batch_size": 2048,
-        "n_val_envs": 128,
-        "n_envs": 256 + 128,#shouldn't we use longer n_steps?
+        "n_val_envs": 4,
+        "n_envs": 16 + 4,#shouldn't we use longer n_steps?
+        "n_steps": 2048,
         "trusted_policy_name": "tempered_gen",
         "td_lmbda": False,
     }
