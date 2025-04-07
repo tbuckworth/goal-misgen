@@ -48,7 +48,7 @@ if __name__ == '__main__':
         "trusted_policy": "tempered_gen",
         "trusted_temp": 7,
     }
-    Ascent:
+    # Ascent:
     hparams = {
         # "num_levels": 100000,
         "architecture": "mlpmodel",
