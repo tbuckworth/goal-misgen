@@ -41,8 +41,13 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "cartpole":
-            # 400 epochs, converged to 0.5 loss, seems legit...
-            logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
+            if trusted_policy_name == "uniform":
+                # 400 epochs, converged to 0.5 loss, seems legit...
+                logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
+            elif trusted_policy_name == "tempered_gen":
+                logdir = "logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
+            else:
+                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         else:
             raise NotImplementedError(f"{env_name} is not a recognised environment")
     elif logdir == "ppo":
