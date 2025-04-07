@@ -37,7 +37,7 @@ def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_po
                 logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
                 # raise NotImplementedError("Need to train value for maze")
             elif trusted_policy_name=="tempered_gen":
-                raise NotImplementedError("Put the logdir here!")
+                logdir = "logs/train/maze_aisc/value/2025-04-06__13-49-55__seed_1080"
             else:
                 raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
         elif env_name == "cartpole":
