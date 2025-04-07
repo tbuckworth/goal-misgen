@@ -226,6 +226,7 @@ def get_hyperparameters(param_name):
 
 
 def get_config(logdir, pathname="config.npy"):
+    logdir = logdir if os.path.isdir(logdir) else os.path.dirname(logdir)
     return np.load(os.path.join(logdir, pathname), allow_pickle='TRUE').item()
 
 
@@ -347,8 +348,9 @@ def group_by(tensor, acts, group_labels, venv):
 
 def load_tempered_policy(env_name, device, hyperparameters, venv):
     model_file = get_goal_gen_policy(env_name)
+    cfg = get_config(model_file)
     # TODO: load in a high temp policy
-    model, policy = initialize_policy(device, hyperparameters, venv, venv.observation_space.shape)
+    model, policy = initialize_policy(device, cfg, venv, venv.observation_space.shape)
     model.device = device
     policy.device = device
     # load policy
