@@ -205,8 +205,8 @@ def train(args):
         elif trusted_policy_name == "self":
             trusted_policy = policy
         elif trusted_policy_name == "tempered_gen":
-            policy = load_tempered_policy(env_name, device, hyperparameters, env)
-            policy.T = hyperparameters.get("trusted_temp", 5)
+            trusted_policy = load_tempered_policy(env_name, device, hyperparameters, env)
+            trusted_policy.T = hyperparameters.get("trusted_temp", 5)
         else:
             raise NotImplementedError
 

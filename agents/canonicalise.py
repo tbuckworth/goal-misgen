@@ -333,6 +333,8 @@ class Canonicaliser(BaseAgent):
                 "PDIS_Valid": pdis_return_v,
                 "Return_Train": actual_return,
                 "Return_Valid": actual_return_v,
+                "Trusted_Return_Train": trusted_return,
+                "Trusted_Return_Valid": trusted_return_v,
             })
 
         self.env.close()

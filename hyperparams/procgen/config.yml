@@ -205,7 +205,8 @@ ascent-canon:
     infinite_value: True
     meg_version: direct
     pirc: True
-    trusted_policy_name: uniform
+    trusted_policy: uniform
+    trusted_temp: 2.
 
 cartpole-canon:
     algo: canon
@@ -246,10 +247,10 @@ cartpole-canon:
     infinite_value: True
     meg_version: direct
     pirc: True
-    trusted_policy_name: uniform
+    trusted_policy: uniform
     meg_ground_next: True
     consistency_coef: 10.
-    trusted_temp: 5.
+    trusted_temp: 2.
 
 
 trusted-value:
@@ -275,7 +276,8 @@ trusted-value:
     n_val_envs: 64
     save_pics_ascender: False
     td_lmbda: True
-    trusted_policy_name: uniform
+    trusted_policy: uniform
+    trusted_temp: 2.
 
 
 ascent-crafted:

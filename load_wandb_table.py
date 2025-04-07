@@ -572,9 +572,10 @@ def get_summary():
 
 
 if __name__ == "__main__":
-    load_all("Coinrun_Soft_Inf")
+    # load_all("Coinrun_Soft_Inf")
     # load_meg(["Ascent_Meg_KL5"])
-    # get_summary()
+    tag = "new maze tempered loaded"
+    load_summary(env=tag, tag=tag)
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",
     #         }

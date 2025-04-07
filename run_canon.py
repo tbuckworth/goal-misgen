@@ -233,7 +233,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(4096*4),#int(67584),
-        "val_epoch": 100,
+        "val_epoch": 0,
         "mini_batch_size": 2048,
         "n_val_envs": 2,#16,
         "n_envs": 8,#int(64 + 16),
@@ -254,7 +254,8 @@ def hp_run(model_file, tag_dict, tag):
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
-        "trusted_policy_name": "tempered_gen",
+        "trusted_policy": "tempered_gen",
+        "trusted_temp": 7,
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
