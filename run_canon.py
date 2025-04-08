@@ -342,9 +342,9 @@ if __name__ == '__main__':
     # run_tags_for_files({"new maze double tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    # run_tags_for_files({"new ascent double tempered":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new ascent double tempered":None}, unique_ascent_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
 
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
-    run_tags_for_files({"new coinrun double tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
+    # run_tags_for_files({"new coinrun double tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
