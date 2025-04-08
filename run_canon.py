@@ -239,6 +239,7 @@ def hp_run(model_file, tag_dict, tag):
         "n_envs": int(256 + 128),
         "n_steps": 256,#256,#1000
         "num_levels": 10000,
+        "learning_rate": 5e-3,
         "distribution_mode": "hard",
         "seed": seed,
         "hidden_dims": [256, 256, 256, 256],
@@ -342,7 +343,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"new maze double tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    run_tags_for_files({"new ascent tempered4":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"lr test":None}, unique_ascent_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
 
     # #
