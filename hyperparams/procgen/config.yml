@@ -230,6 +230,7 @@ cartpole-canon:
     architecture: mlpmodel
     recurrent: False
     hid_dims: [256, 256, 256, 256]
+    hidden_dims: [256, 256, 256, 256]
     final_relu: False
     anneal_lr: False
     dense_rewards: False
