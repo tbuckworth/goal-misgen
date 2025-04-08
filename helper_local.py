@@ -220,6 +220,7 @@ def initialize_policy(device, hyperparameters, env, observation_shape):
     else:
         raise NotImplementedError
     policy.to(device)
+    policy.T = hyperparameters.get("subject_temp", 1.)
     return model, policy
 
 

@@ -207,6 +207,8 @@ ascent-canon:
     pirc: True
     trusted_policy: uniform
     trusted_temp: 2.
+    subject_temp: 5.
+
 
 cartpole-canon:
     algo: canon
@@ -251,6 +253,7 @@ cartpole-canon:
     meg_ground_next: True
     consistency_coef: 10.
     trusted_temp: 2.
+    subject_temp: 5.
 
 
 trusted-value:
@@ -278,6 +281,7 @@ trusted-value:
     td_lmbda: True
     trusted_policy: uniform
     trusted_temp: 2.
+    subject_temp: 5.
 
 
 ascent-crafted:

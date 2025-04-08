@@ -256,6 +256,7 @@ def hp_run(model_file, tag_dict, tag):
         "pirc": True,
         "trusted_policy": "tempered_gen",
         "trusted_temp": 7,
+        "subject_temp": 5,
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
@@ -338,12 +339,12 @@ if __name__ == '__main__':
 
     # # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
-    # run_tags_for_files({"new maze tempered corrected": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
+    # run_tags_for_files({"new maze double tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    # run_tags_for_files({"new ascent tempered":None}, unique_ascent_dirs, ignore_errors=True)
-    run_tags_for_files({"new cartpole tempered":None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"new ascent double tempered":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
 
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
-    # run_tags_for_files({"new coinrun tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
+    # run_tags_for_files({"new coinrun double tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
