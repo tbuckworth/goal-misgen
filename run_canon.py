@@ -256,7 +256,7 @@ def hp_run(model_file, tag_dict, tag):
         "pirc": True,
         "trusted_policy": "tempered_gen",
         "trusted_temp": 7,
-        "subject_temp": 5,
+        # "subject_temp": 5,
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
@@ -342,7 +342,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"new maze double tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    run_tags_for_files({"new ascent double tempered2":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new ascent tempered2":None}, unique_ascent_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
 
     # #
