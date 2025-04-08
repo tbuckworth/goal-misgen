@@ -233,7 +233,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(2048*40),#int(67584),
-        "val_epoch": 300,
+        "val_epoch": 1500,
         "mini_batch_size": 2048,
         "n_val_envs": 8,
         "n_envs": int(32 + 8),
@@ -342,7 +342,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"new maze double tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    run_tags_for_files({"new ascent tempered2":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new ascent tempered3":None}, unique_ascent_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
 
     # #
