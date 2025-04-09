@@ -388,6 +388,13 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
 
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
+    # Example threshold date (change as needed)
+    threshold_date = pd.to_datetime("2025-03-01")
+
+    # Create masks for data points
+    mask_after = df['timestamp'] > threshold_date
+    mask_before = ~mask_after
+
     # Alternative
     x_metric = val_rewards  # val_rpl also interesting
     y_train = train_distance  # if not use_ratio else ratio
@@ -395,8 +402,18 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     if meg_adj:
         y_train = train_dist_meg
         y_valid = val_dist_meg
-    ax1 = df.plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=y_train)
-    df.plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=y_valid)
+    # ax1 = df.plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=y_train)
+    # df.plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=y_valid)
+    ax1 = df[mask_before].plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=f"{y_train} (before)")
+    # Points after the threshold as crosses
+    df[mask_after].plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', ax=ax1, marker='x',
+                                label=f"{y_train} (after)")
+
+    # Plot validation data points
+    df[mask_before].plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=f"{y_valid} (before)")
+    df[mask_after].plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, marker='x',
+                                label=f"{y_valid} (after)")
+
 
     for y_metric, color, linestyle in zip([y_train, y_valid], ['b', 'r'], [':', '--']):
         # PLOT:
@@ -497,6 +514,7 @@ def pull_data_for_tags(exclude_crafted, meg_adj, min_train_reward, tags, train_d
         row[val_len] = run.summary.val_mean_episode_len
         row["architecture"] = run.config["architecture"]
         row["tags"] = run.config["wandb_tags"][0]
+        row["timestamp"] = pd.to_datetime(run.summary["_timestamp"],unit="s")
         if meg_adj:
             try:
                 row[train_meg] = run.summary["Meg_Train"]
@@ -575,6 +593,7 @@ if __name__ == "__main__":
     # load_all("Coinrun_Soft_Inf")
     # load_meg(["Ascent_Meg_KL5"])
     tag = "new maze tempered loaded"
+    tag = "Maze_VOrig_Soft_Inf"
     load_summary(env=tag, tag=tag)
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",

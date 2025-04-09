@@ -232,14 +232,14 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(384*256),#int(67584),
-        "val_epoch": 3000,
+        "num_timesteps": int(67584),#int(67584),
+        "val_epoch": 300,
         "mini_batch_size": 2048,
-        "n_val_envs": 128,
-        "n_envs": int(256 + 128),
-        "n_steps": 256,#256,#1000
+        "n_val_envs": 2,
+        "n_envs": int(64 + 2),
+        "n_steps": 256,
         "num_levels": 10000,
-        "learning_rate": 5e-3,
+        "learning_rate": 5e-4,
         "distribution_mode": "hard",
         "seed": seed,
         "hidden_dims": [256, 256, 256, 256],
@@ -255,8 +255,8 @@ def hp_run(model_file, tag_dict, tag):
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
-        "trusted_policy": "tempered_gen",
-        "trusted_temp": 7,
+        "trusted_policy": "uniform",
+        # "trusted_temp": 7,
         # "subject_temp": 5,
         "meg_ground_next": True,
         "consistency_coef": 10.,
@@ -339,11 +339,11 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
+    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"new maze double tempered": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    run_tags_for_files({"lr test":None}, local_unique_ascent_dirs, ignore_errors=False)
+    # run_tags_for_files({"lr test":None}, local_unique_ascent_dirs, ignore_errors=False)
     # run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
 
     # #
