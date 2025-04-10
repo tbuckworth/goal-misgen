@@ -343,7 +343,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"new maze tempered mean": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    run_tags_for_files({"new ascent uniform no inf":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
 
     # #
