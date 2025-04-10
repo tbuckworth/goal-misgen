@@ -210,7 +210,6 @@ def get_seed(model_file):
 
 def hp_run(model_file, tag_dict, tag):
     seed = get_seed(model_file)
-    run_next_hyperparameters(hparams)
     hparams = {
         # "model_file": model_file,
         "model_file": get_model_with_largest_checkpoint(model_file),
@@ -262,6 +261,7 @@ def hp_run(model_file, tag_dict, tag):
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
+    run_next_hyperparameters(hparams)
 
 
 def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
