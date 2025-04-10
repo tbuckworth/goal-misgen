@@ -210,6 +210,7 @@ def get_seed(model_file):
 
 def hp_run(model_file, tag_dict, tag):
     seed = get_seed(model_file)
+    run_next_hyperparameters(hparams)
     hparams = {
         # "model_file": model_file,
         "model_file": get_model_with_largest_checkpoint(model_file),
@@ -247,7 +248,7 @@ def hp_run(model_file, tag_dict, tag):
         "load_value_models": True,
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
-        "infinite_value": True,
+        "infinite_value": False, #TODO: NOTE THIS CHANGED
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
@@ -261,7 +262,6 @@ def hp_run(model_file, tag_dict, tag):
         "meg_ground_next": True,
         "consistency_coef": 10.,
     }
-    run_next_hyperparameters(hparams)
 
 
 def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
@@ -339,11 +339,11 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
+    # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"new maze tempered mean": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=False)
 
     #
-    # run_tags_for_files({"lr test":None}, local_unique_ascent_dirs, ignore_errors=False)
+    run_tags_for_files({"new ascent uniform no inf":None}, unique_ascent_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
 
     # #
