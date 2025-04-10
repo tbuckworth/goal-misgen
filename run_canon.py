@@ -232,12 +232,12 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(67584),#int(67584),
+        "num_timesteps": int((128+16)*2048),#int(67584),
         "val_epoch": 300,
         "mini_batch_size": 2048,
-        "n_val_envs": 2,
-        "n_envs": int(64 + 2),
-        "n_steps": 256,
+        "n_val_envs": 16,
+        "n_envs": int(128 + 16),
+        "n_steps": 2048,
         "num_levels": 10000,
         "learning_rate": 5e-4,
         "distribution_mode": "hard",
@@ -344,7 +344,7 @@ if __name__ == '__main__':
 
     #
     # run_tags_for_files({"lr test":None}, local_unique_ascent_dirs, ignore_errors=False)
-    # run_tags_for_files({"new cartpole double tempered":None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
 
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
