@@ -256,8 +256,8 @@ def hp_run(model_file, tag_dict, tag):
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
-        "trusted_policy": "uniform",
-        # "trusted_temp": 7,
+        "trusted_policy": "tempered_gen",
+        "trusted_temp": 7,
         # "subject_temp": 5,
         "meg_ground_next": True,
         "consistency_coef": 10.,
@@ -349,7 +349,7 @@ if __name__ == '__main__':
 
     #
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
-    run_tags_for_files({"new cartpole uniform target mean":None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole tempered target mean":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole target mean old val":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
 
