@@ -38,11 +38,13 @@ class TrustedValue(BaseAgent):
                  n_val_envs=0,
                  save_pics_ascender=False,
                  td_lmbda=True,
+                 update_frequently=True,
                  **kwargs):
 
         super(TrustedValue, self).__init__(env, policy, logger, storage, device,
                                            n_checkpoints, env_valid, storage_valid)
 
+        self.update_frequently = update_frequently
         self.td_lmbda = td_lmbda
         self.save_pics_ascender = save_pics_ascender
         if n_val_envs >= n_envs:
@@ -168,7 +170,7 @@ class TrustedValue(BaseAgent):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
-        grad_accumulation_cnt = 1
+        # grad_accumulation_cnt = 1
 
         value_model.train()
         e = 0
@@ -199,9 +201,12 @@ class TrustedValue(BaseAgent):
                 else:
                     next_value_batch = value_model(nobs_batch).squeeze()
                     target = rew_batch + self.gamma * next_value_batch * (1 - done_batch)
-                value_loss = nn.MSELoss()(target, value_batch)
+                value_loss = nn.MSELoss()(target.detach(), value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
+                if self.update_frequently:
+                    value_optimizer.step()
+                    value_optimizer.zero_grad()
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, _, done_batch_val, _, _, return_batch_val, _, rew_batch_val, _, _, _ = sample
@@ -214,9 +219,10 @@ class TrustedValue(BaseAgent):
                         target = rew_batch_val + self.gamma * next_value_batch_val * (1 - done_batch_val)
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
                 val_losses_valid.append(value_loss_val.item())
-            value_optimizer.step()
-            value_optimizer.zero_grad()
-            grad_accumulation_cnt += 1
+            if not self.update_frequently:
+                value_optimizer.step()
+                value_optimizer.zero_grad()
+            # grad_accumulation_cnt += 1
 
             mean_val_loss = np.mean(val_losses_valid)
             wandb.log({
