@@ -244,7 +244,7 @@ def hp_run(model_file, tag_dict, tag):
         "seed": seed,
         "hidden_dims": [256, 256, 256, 256],
 
-        "load_value_models": True,
+        "load_value_models": False,
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
         "update_frequently": True,
