@@ -341,8 +341,8 @@ if __name__ == '__main__':
     # # model_files = maze_dirs + new_maze_dirs
     # run_tags_for_files({"Maze_VOrig_Soft_Inf": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft": None}, maze_dirs , ignore_errors=True)
-    run_tags_for_files({"Maze_VOrig_Soft": None}, new_maze_dirs, ignore_errors=True)
-    # run_tags_for_files({"Maze_VOrig_Soft": None}, maze_dirs_apr25, ignore_errors=True)
+    # run_tags_for_files({"Maze_VOrig_Soft": None}, new_maze_dirs, ignore_errors=True)
+    run_tags_for_files({"Maze_VOrig_Soft": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft": None}, maze_dirs + new_maze_dirs + maze_dirs_apr25, ignore_errors=True)
 
     #
