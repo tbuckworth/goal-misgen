@@ -232,11 +232,11 @@ def hp_run(model_file, tag_dict, tag):
         "wandb_tags": [tag],  # "pre-trained-value"],  # "coinrun misgen3"],
         "num_checkpoints": 1,
         "use_wandb": True,
-        "num_timesteps": int(4096*12),
-        "val_epoch": 300,
+        "num_timesteps": int(4096*24),
+        "val_epoch": 100,
         "mini_batch_size": 2048,
-        "n_val_envs": 4,
-        "n_envs": int(8 + 4),
+        "n_val_envs": 8,
+        "n_envs": int(16 + 8),
         "n_steps": 4096,
         "num_levels": 10000,
         "learning_rate": 5e-4,
@@ -345,11 +345,12 @@ if __name__ == '__main__':
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs , ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, new_maze_dirs, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
-    run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
+    # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
 
     #
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
     # run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole target mean":None}, cartpole_dirs, ignore_errors=True)
 
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
