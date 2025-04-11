@@ -221,7 +221,7 @@ class Storage():
 
     def compute_off_policy_estimates(self):
         return np.mean(self.episode_is_ests), np.mean(self.episode_pdis_ests), np.mean(self.episode_returns), np.mean(
-            self.episode_rewards), np.len(self.episode_rewards)
+            self.episode_rewards), len(self.episode_rewards)
 
     def get_returns(self, gamma=0.99):
         """
