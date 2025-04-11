@@ -351,9 +351,9 @@ if __name__ == '__main__':
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
     # run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole target mean":None}, cartpole_dirs, ignore_errors=True)
-    # run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
 
-    run_tags_for_files({"test":None}, unique_ascent_dirs, ignore_errors=False)
+    # run_tags_for_files({"test":None}, unique_ascent_dirs, ignore_errors=False)
     # #
     # run_tags_for_files({"Coinrun_Soft_Inf": None}, new_coinrun_dirs, ignore_errors=True)
     # run_tags_for_files({"new coinrun double tempered": None}, coinrun_dirs + new_coinrun_dirs, ignore_errors=True)
