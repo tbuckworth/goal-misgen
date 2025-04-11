@@ -233,7 +233,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(4096*24),
-        "val_epoch": 10,
+        "val_epoch": 100,
         "mini_batch_size": 2048,
         "n_val_envs": 8,
         "n_envs": int(16 + 8),
