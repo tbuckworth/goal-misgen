@@ -64,7 +64,7 @@ def main(logp, rew, canon_logp, canon_true_r):
     torch.corrcoef(torch.stack((val_batch, val_batch_logp)))[0,1]
 
 
-def new_thing(target, value_batch):
+def new_thing(target, value_batch, done_batch):
     import matplotlib.pyplot as plt
     plt.scatter(
         x=target.detach().cpu().numpy(),
@@ -75,6 +75,7 @@ def new_thing(target, value_batch):
     elwiseloss = (target-value_batch)**2
     flt = elwiseloss < 1
     (flt).sum()
+    flt = done_batch.bool()
     plt.scatter(
         x=target[~flt].detach().cpu().numpy(),
         y=value_batch[~flt].detach().cpu().numpy(),
@@ -84,4 +85,3 @@ def new_thing(target, value_batch):
         y = value_batch[flt].detach().cpu().numpy(),
     )
     plt.show()
-    next_value_batch
