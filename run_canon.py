@@ -261,6 +261,7 @@ def hp_run(model_file, tag_dict, tag):
         # "subject_temp": 5,
         "meg_ground_next": True,
         "consistency_coef": 10.,
+        "use_min_val_loss": False,
     }
     run_next_hyperparameters(hparams)
 

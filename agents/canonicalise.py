@@ -71,7 +71,7 @@ class Canonicaliser(BaseAgent):
                  pirc=True,
                  meg_ground_next=True,
                  consistency_coef=10.,
-                 use_min_val_loss=True,
+                 use_min_val_loss=False,
                  update_frequently=False,
                  **kwargs):
 
