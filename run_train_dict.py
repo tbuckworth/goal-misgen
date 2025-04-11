@@ -47,8 +47,8 @@ if __name__ == '__main__':
         "hidden_dims": [256, 256, 256, 256],
         "save_pics_ascender": False,
         "update_frequently": True,
-        "trusted_policy": "uniform",
-        # "trusted_temp": 7,
+        "trusted_policy": "tempered_gen",
+        "trusted_temp": 7,
     }
     run_next_hyperparameters(hparams)
     # Ascent:
@@ -73,8 +73,8 @@ if __name__ == '__main__':
         "td_lmbda": False,
         "hidden_dims": [16, 16],
         "save_pics_ascender": False,
-        "trusted_policy": "uniform",
-        # "trusted_temp": 7,
+        "trusted_policy": "tempered_gen",
+        "trusted_temp": 7,
     }
     # hparams = {
     #     "algo": "ppo-tracked",
