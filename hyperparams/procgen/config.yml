@@ -285,6 +285,7 @@ trusted-value:
     trusted_policy: uniform
     trusted_temp: 2.
     subject_temp: 5.
+    update_frequently: True
 
 
 ascent-crafted:
