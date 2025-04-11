@@ -303,10 +303,10 @@ class Canonicaliser(BaseAgent):
         # is_return, pdwis_return, _ = self.storage_trusted.compute_off_policy_estimates(self.gamma)
 
         if self.pirc:
-            is_return_v, pdis_return_v, trusted_return_v, trusted_reward_v = self.storage_trusted_val.compute_off_policy_estimates()
-            is_return, pdis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
-            is_act, pdis_act, actual_return, actual_reward = self.storage.compute_off_policy_estimates()
-            is_act_v, pdis_act_v, actual_return_v, actual_reward_v = self.storage_valid.compute_off_policy_estimates()
+            is_return_v, pdis_return_v, trusted_return_v, trusted_reward_v, n_eps_v = self.storage_trusted_val.compute_off_policy_estimates()
+            is_return, pdis_return, trusted_return, trusted_reward, n_eps = self.storage_trusted.compute_off_policy_estimates()
+            is_act, pdis_act, actual_return, actual_reward, _ = self.storage.compute_off_policy_estimates()
+            is_act_v, pdis_act_v, actual_return_v, actual_reward_v, _ = self.storage_valid.compute_off_policy_estimates()
             if self.use_min_val_loss:
                 try:
                     self.value_model.load_state_dict(torch.load(train_file)["model_state_dict"])
@@ -347,6 +347,8 @@ class Canonicaliser(BaseAgent):
                 "Return_Valid": actual_return_v,
                 "Trusted_Return_Train": trusted_return,
                 "Trusted_Return_Valid": trusted_return_v,
+                "Trusted_Episodes_Train": n_eps,
+                "Trusted_Episodes_Valid": n_eps_v,
             })
 
         self.env.close()
