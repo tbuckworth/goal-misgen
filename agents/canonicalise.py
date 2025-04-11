@@ -70,10 +70,13 @@ class Canonicaliser(BaseAgent):
                  meg_version="direct",
                  pirc=True,
                  meg_ground_next=True,
-                 consistency_coef=10., **kwargs):
+                 consistency_coef=10.,
+                 use_min_val_loss=True,
+                 **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.use_min_val_loss = use_min_val_loss
         self.consistency_coef = consistency_coef
         self.meg_ground_next = meg_ground_next
         self.pirc = pirc
@@ -279,9 +282,9 @@ class Canonicaliser(BaseAgent):
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
         if self.pirc:
-            self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training",
+            train_file = self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training",
                                 "logits")
-            self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val,
+            valid_file = self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val,
                                 "Validation", "logits")
 
         if self.meg:
@@ -304,6 +307,15 @@ class Canonicaliser(BaseAgent):
             is_return, pdis_return, trusted_return, trusted_reward = self.storage_trusted.compute_off_policy_estimates()
             is_act, pdis_act, actual_return, actual_reward = self.storage.compute_off_policy_estimates()
             is_act_v, pdis_act_v, actual_return_v, actual_reward_v = self.storage_valid.compute_off_policy_estimates()
+            if self.use_min_val_loss:
+                try:
+                    self.value_model.load_state_dict(torch.load(train_file)["model_state_dict"])
+                    self.value_model_val.load_state_dict(torch.load(valid_file)["model_state_dict"])
+                except Exception as e:
+                    print("Trouble loading min val loss weights - maybe there aren't enough validation envs?\n"
+                          "Will continue with latest weights. Here's the Exception:")
+                    print(e)
+
             with (torch.no_grad()):
                 if self.print_ascent_rewards:
                     print("Train Env Rew:")
@@ -358,9 +370,12 @@ class Canonicaliser(BaseAgent):
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
 
     def optimize_value(self, storage, value_model, value_optimizer, env_type, rew_type="reward"):
+        min_val_loss = np.inf
+        last_save = 0
         logdir = os.path.join(self.logvaldir, env_type, rew_type)
         if not os.path.exists(logdir):
             os.makedirs(logdir)
+        model_file = logdir + '/model_min_val_loss.pth'
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -430,20 +445,24 @@ class Canonicaliser(BaseAgent):
                 val_losses_valid.append(value_loss_val.item())
             value_optimizer.step()
             value_optimizer.zero_grad()
+            mean_val_loss = np.mean(val_losses_valid)
             # grad_accumulation_cnt += 1
             # if e == self.val_epoch - 1:
             #     plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
-            if e > ((checkpoint_cnt + 1) * save_every) or e == self.val_epoch - 1:
+            if e > 30 and mean_val_loss < min_val_loss and (e-last_save)>5:
                 print("Saving model.")
-                torch.save({'model_state_dict': self.policy.state_dict(),
-                            'optimizer_state_dict': self.optimizer.state_dict()},
-                           logdir + '/model_' + str(e) + '.pth')
+                torch.save({'model_state_dict': value_model.state_dict(),
+                            'optimizer_state_dict': value_optimizer.state_dict()},
+                           model_file)
                 checkpoint_cnt += 1
+                min_val_loss = mean_val_loss
+                last_save = e
             wandb.log({
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/value_loss_{rew_type}_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{rew_type}_{env_type}': np.mean(val_losses_valid),
             })
+        return model_file
 
     def optimize_meg(self, storage, q_model, optimizer, env_type):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch

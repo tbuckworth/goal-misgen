@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
-from imitation.scripts.config.train_rl import train_rl_ex
+# from imitation.scripts.config.train_rl import train_rl_ex
 from matplotlib import pyplot as plt
 from scipy import stats
+from scipy.stats import linregress
 
 try:
     import wandb
@@ -70,6 +71,85 @@ run_names = [
     "dulcet-snow-1215",
     "devoted-frog-1269",
 ]
+
+
+
+def plot_env_data(df):
+    """
+    Create a figure with one row per unique env_name and three columns:
+      1) PIRC (plots L2_L2_Train and L2_L2_Valid vs Return_Valid),
+      2) Importance Sampling Returns (IS_Train and IS_Valid vs Return_Valid),
+      3) Per-Decision Importance Sampling Returns (PDIS_Train and PDIS_Valid vs Return_Valid).
+
+    Each subplot has a scatter for Train (blue) and Valid (red),
+    plus a dashed best-fit line for each with R^2 and p-value in the legend.
+    """
+
+    # Ensure the dataframe has what we need.
+    needed_cols = ["env_name", "Return_Valid",
+                   "L2_L2_Train", "L2_L2_Valid",
+                   "IS_Train", "IS_Valid",
+                   "PDIS_Train", "PDIS_Valid"]
+    for col in needed_cols:
+        if col not in df.columns:
+            raise ValueError(f"Missing required column: {col}")
+
+    # Metric mappings for each column in the subplot
+    metrics = [
+        ("L2_L2_Train", "L2_L2_Valid", "PIRC Distance"),
+        ("IS_Train", "IS_Valid", "Importance Sampling Returns"),
+        ("PDIS_Train", "PDIS_Valid", "Per-Decision Importance Sampling Returns")
+    ]
+
+    envs = df["env_name"].unique()
+    fig, axes = plt.subplots(nrows=len(envs), ncols=3, figsize=(14, 4 * len(envs)), sharex=False)
+
+    # If there's only one environment, axes won't be a 2D array
+    if len(envs) == 1:
+        axes = np.array([axes])
+
+    for i, env in enumerate(envs):
+        env_data = df[df["env_name"] == env]
+
+        for j, (train_col, valid_col, title) in enumerate(metrics):
+            ax = axes[i, j]
+
+            # Extract x & y
+            x = env_data["Return_Valid"].values
+            y_train = env_data[train_col].values
+            y_valid = env_data[valid_col].values
+
+            # Scatter for Train (blue)
+            ax.scatter(x, y_train, label=None, color='blue', alpha=0.6)
+            # Fit line (Train)
+            slope, intercept, r_val, p_val, _ = linregress(x, y_train)
+            line_x = np.linspace(x.min(), x.max(), 100)
+            line_y = slope * line_x + intercept
+            ax.plot(line_x, line_y, '--', color='blue',
+                    label=f"Train $R^2$={r_val ** 2:.2f}")#, P-Val={p_val:.2g}")
+
+            # Scatter for Valid (red)
+            ax.scatter(x, y_valid, label=None, color='red', alpha=0.6)
+            # Fit line (Valid)
+            slope, intercept, r_val, p_val, _ = linregress(x, y_valid)
+            line_y = slope * line_x + intercept
+            ax.plot(line_x, line_y, '--', color='red',
+                    label=f"Valid $R^2$={r_val ** 2:.2f}, P-Val={p_val:.2g}")
+
+            # Titles and labels
+            if i == 0:
+                ax.set_title(title)
+            if j == 0:
+                ax.set_ylabel(env.capitalize())
+
+            # X-axis label
+            ax.set_xlabel("Mean Deployment Return")
+
+            ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(f"data/{'_'.join(df.tags.unique())}.png")
+    plt.show()
 
 
 def graph_wandb_res():
@@ -335,7 +415,7 @@ def load_meg(tags):
     # plt.show()
 
 
-def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, tag=None, use_ratio=False):
+def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, tag=None, use_ratio=False, date_split=False):
     env_name = env
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
@@ -388,12 +468,13 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
 
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
-    # Example threshold date (change as needed)
-    threshold_date = pd.to_datetime("2025-03-01")
+    if date_split:
+        # Example threshold date (change as needed)
+        threshold_date = pd.to_datetime("2025-03-01")
 
-    # Create masks for data points
-    mask_after = df['timestamp'] > threshold_date
-    mask_before = ~mask_after
+        # Create masks for data points
+        mask_after = df['timestamp'] > threshold_date
+        mask_before = ~mask_after
 
     # Alternative
     x_metric = val_rewards  # val_rpl also interesting
@@ -402,17 +483,19 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     if meg_adj:
         y_train = train_dist_meg
         y_valid = val_dist_meg
-    # ax1 = df.plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=y_train)
-    # df.plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=y_valid)
-    ax1 = df[mask_before].plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=f"{y_train} (before)")
-    # Points after the threshold as crosses
-    df[mask_after].plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', ax=ax1, marker='x',
-                                label=f"{y_train} (after)")
+    if not date_split:
+        ax1 = df.plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=y_train)
+        df.plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=y_valid)
+    else:
+        ax1 = df[mask_before].plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', label=f"{y_train} (before)")
+        # Points after the threshold as crosses
+        df[mask_after].plot.scatter(x=x_metric, y=y_train, alpha=0.7, color='b', ax=ax1, marker='x',
+                                    label=f"{y_train} (after)")
 
-    # Plot validation data points
-    df[mask_before].plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=f"{y_valid} (before)")
-    df[mask_after].plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, marker='x',
-                                label=f"{y_valid} (after)")
+        # Plot validation data points
+        df[mask_before].plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, label=f"{y_valid} (before)")
+        df[mask_after].plot.scatter(x=x_metric, y=y_valid, alpha=0.7, color='r', ax=ax1, marker='x',
+                                    label=f"{y_valid} (after)")
 
 
     for y_metric, color, linestyle in zip([y_train, y_valid], ['b', 'r'], [':', '--']):
@@ -504,6 +587,13 @@ def pull_data_for_tags(exclude_crafted, meg_adj, min_train_reward, tags, train_d
             continue
         if train_dist_metric not in run.summary.keys():
             continue
+        fields = ["Return_Train","Return_Valid", "IS_Train", "IS_Valid", "PDIS_Train", "PDIS_Valid", "env_name",
+                  "L2_L2_Train", "L2_L2_Valid"]
+        for field in fields:
+            if field in run.summary.keys():
+                row[field] = run.summary.get(field)
+            elif field in run.config.keys():
+                row[field] = run.config[field]
         row[train_rewards] = run.summary.mean_episode_rewards
         row[val_rewards] = run.summary.val_mean_episode_rewards
         row[train_distance] = run.summary[train_dist_metric]
@@ -585,17 +675,32 @@ def get_summary():
     tag = "Cartpole_Soft_Mean_Adjusted2"
     tag = "Maze_VOrig_Soft_Inf"
     tag = "new ascent uniform no inf"
+    tag = "new cartpole uniform"
     for tag in ["Maze_VOrig_Soft_Inf", "Cartpole_Soft_Inf_Mean_Adjusted", "Ascent_Soft_Inf2"]:
         # tag = "Maze Hard Canonicalisation"
         load_summary(env=tag, tag=tag)
 
 
+def create_all_graphs():
+    tags = ["new cartpole uniform", "new ascent uniform no inf"]
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+    meg_adj = False
+    min_train_reward = 0 # ?
+    exclude_crafted = True
+    df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
+        exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric)
+    plot_env_data(df)
+
+
+
 if __name__ == "__main__":
+    create_all_graphs()
     # load_all("Coinrun_Soft_Inf")
     # load_meg(["Ascent_Meg_KL5"])
-    tag = "new maze tempered loaded"
-    tag = "Maze_VOrig_Soft_Inf"
-    load_summary(env=tag, tag=tag)
+    # tag = "new maze tempered loaded"
+    # tag = "new ascent uniform no inf"
+    # load_summary(env=tag, tag=tag)
     # tags = {"Maze Value Original - fixed1": "Maze",
     #         "Ascent_Hard_Canon_corrected": "Ascent",
     #         }

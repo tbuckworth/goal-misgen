@@ -255,6 +255,7 @@ cartpole-canon:
     consistency_coef: 10.
     trusted_temp: 2.
     subject_temp: 5.
+    use_min_val_loss: True
 
 
 trusted-value:
