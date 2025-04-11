@@ -284,10 +284,12 @@ class Canonicaliser(BaseAgent):
             self.optimize_value(self.storage_trusted, self.value_model, self.value_optimizer, "Training")
             self.optimize_value(self.storage_trusted_val, self.value_model_val, self.value_optimizer_val, "Validation")
         if self.pirc:
-            train_file = self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp, "Training",
-                                "logits")
-            valid_file = self.optimize_value(self.storage_trusted_val, self.value_model_logp_val, self.value_optimizer_logp_val,
-                                "Validation", "logits")
+            train_file = self.optimize_value(self.storage_trusted, self.value_model_logp, self.value_optimizer_logp,
+                                             "Training",
+                                             "logits")
+            valid_file = self.optimize_value(self.storage_trusted_val, self.value_model_logp_val,
+                                             self.value_optimizer_logp_val,
+                                             "Validation", "logits")
 
         if self.meg:
             meg_train = self.optimize_meg(self.storage_trusted, self.q_model, self.q_optimizer, "Training")
@@ -333,7 +335,6 @@ class Canonicaliser(BaseAgent):
                 comb = pd.concat([df_train, df_valid])
                 pivoted_df = comb.pivot(index=["Norm", "Metric"], columns="Env", values="Distance").reset_index()
 
-
             wandb.log({
                 "distances": wandb.Table(dataframe=comb),
                 "distances_pivoted": wandb.Table(dataframe=pivoted_df),
@@ -364,7 +365,8 @@ class Canonicaliser(BaseAgent):
             if subject_policy is not None:
                 logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
-            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs, self.gamma)
+            storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs,
+                          self.gamma)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
@@ -433,6 +435,13 @@ class Canonicaliser(BaseAgent):
                     value_optimizer.step()
                     value_optimizer.zero_grad()
 
+            if e % 5 == 0 and rew_type == "logits":
+                canon_logp = target - value_batch
+                val_mod = self.value_model if env_type == "Training" else self.value_model_val
+                dist = self.pirc_sample(sample, canon_logp, term_value, val_mod)
+            else:
+                dist = None
+
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
                     old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val, probs, indices = sample
@@ -453,6 +462,7 @@ class Canonicaliser(BaseAgent):
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
                 val_losses_valid.append(value_loss_val.item())
+
             if not self.update_frequently:
                 value_optimizer.step()
                 value_optimizer.zero_grad()
@@ -460,7 +470,7 @@ class Canonicaliser(BaseAgent):
             # grad_accumulation_cnt += 1
             # if e == self.val_epoch - 1:
             #     plot_values_ascender(self.logger.logdir, obs_batch, value_batch.detach(), e)
-            if e > 30 and mean_val_loss < min_val_loss and (e-last_save)>5:
+            if e > 30 and mean_val_loss < min_val_loss and (e - last_save) > 5:
                 print("Saving model.")
                 torch.save({'model_state_dict': value_model.state_dict(),
                             'optimizer_state_dict': value_optimizer.state_dict()},
@@ -468,12 +478,30 @@ class Canonicaliser(BaseAgent):
                 checkpoint_cnt += 1
                 min_val_loss = mean_val_loss
                 last_save = e
-            wandb.log({
+            log_dict = {
                 f'Loss/value_epoch_{env_type}': e,
                 f'Loss/value_loss_{rew_type}_{env_type}': np.mean(val_losses),
                 f'Loss/value_loss_valid_{rew_type}_{env_type}': np.mean(val_losses_valid),
-            })
+            }
+            if dist is not None:
+                log_dict.update({f'Loss/l2_l2_dist_{env_type}': dist.item()})
+            wandb.log(log_dict)
         return model_file
+
+    def pirc_sample(self, sample, canon_logp, term_value, value_model):
+        distance = self.dist_funcs["l2_dist"]
+        normalize = self.norm_funcs["l2_norm"]
+
+        (obs_batch, nobs_batch, act_batch, done_batch,
+         old_log_prob_act_batch, old_value_batch, return_batch,
+         adv_batch, rew_batch, logp_eval_policy_batch, probs, indices) = sample
+        with torch.no_grad():
+            # canon_logp = target - value_batch
+            true_val = value_model(obs_batch).squeeze()
+            next_true_val = value_model(nobs_batch.squeeze())
+            canon_r = rew_batch + self.gamma * (next_true_val * (1 - done_batch) + term_value * done_batch) - true_val
+            dist = distance(normalize(canon_logp), normalize(canon_r))
+        return dist
 
     def optimize_meg(self, storage, q_model, optimizer, env_type):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
