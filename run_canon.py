@@ -244,7 +244,7 @@ def hp_run(model_file, tag_dict, tag):
         "seed": seed,
         "hidden_dims": [256, 256, 256, 256],
 
-        "load_value_models": False,
+        "load_value_models": True,
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
         "update_frequently": True,
@@ -350,8 +350,8 @@ if __name__ == '__main__':
     #
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
     # run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
-    # run_tags_for_files({"new cartpole target mean":None}, cartpole_dirs, ignore_errors=True)
-    run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole target mean old val":None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
 
     # run_tags_for_files({"test":None}, unique_ascent_dirs, ignore_errors=False)
     # #
