@@ -231,6 +231,8 @@ def get_hyperparameters(param_name):
 
 
 def get_config(logdir, pathname="config.npy"):
+    if not os.path.exists(logdir):
+        raise FileNotFoundError(f"Model file not found: '{logdir}'")
     logdir = logdir if os.path.isdir(logdir) else os.path.dirname(logdir)
     return np.load(os.path.join(logdir, pathname), allow_pickle='TRUE').item()
 

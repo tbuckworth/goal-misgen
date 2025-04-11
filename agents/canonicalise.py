@@ -72,10 +72,12 @@ class Canonicaliser(BaseAgent):
                  meg_ground_next=True,
                  consistency_coef=10.,
                  use_min_val_loss=True,
+                 update_frequently=False,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.update_frequently = update_frequently
         self.use_min_val_loss = use_min_val_loss
         self.consistency_coef = consistency_coef
         self.meg_ground_next = meg_ground_next
@@ -309,8 +311,8 @@ class Canonicaliser(BaseAgent):
             is_act_v, pdis_act_v, actual_return_v, actual_reward_v, _ = self.storage_valid.compute_off_policy_estimates()
             if self.use_min_val_loss:
                 try:
-                    self.value_model.load_state_dict(torch.load(train_file)["model_state_dict"])
-                    self.value_model_val.load_state_dict(torch.load(valid_file)["model_state_dict"])
+                    self.value_model_logp.load_state_dict(torch.load(train_file)["model_state_dict"])
+                    self.value_model_logp_val.load_state_dict(torch.load(valid_file)["model_state_dict"])
                 except Exception as e:
                     print("Trouble loading min val loss weights - maybe there aren't enough validation envs?\n"
                           "Will continue with latest weights. Here's the Exception:")
@@ -420,10 +422,16 @@ class Canonicaliser(BaseAgent):
                     term_value = self.inf_term_value() if self.infinite_value else 0
                 else:
                     raise NotImplementedError
+                # if e < self.pre_train_epochs:
+                #     target = R
+                # else:
                 target = R + self.gamma * (next_value_batch * (1 - done_batch) + term_value * done_batch)
-                value_loss = nn.MSELoss()(target, value_batch)
+                value_loss = nn.MSELoss()(target.detach(), value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
+                if self.update_frequently:
+                    value_optimizer.step()
+                    value_optimizer.zero_grad()
 
             for sample in generator_valid:
                 obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
@@ -445,8 +453,9 @@ class Canonicaliser(BaseAgent):
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
                 val_losses_valid.append(value_loss_val.item())
-            value_optimizer.step()
-            value_optimizer.zero_grad()
+            if not self.update_frequently:
+                value_optimizer.step()
+                value_optimizer.zero_grad()
             mean_val_loss = np.mean(val_losses_valid)
             # grad_accumulation_cnt += 1
             # if e == self.val_epoch - 1:

@@ -256,6 +256,7 @@ cartpole-canon:
     trusted_temp: 2.
     subject_temp: 5.
     use_min_val_loss: True
+    update_frequently: False
 
 
 trusted-value:
