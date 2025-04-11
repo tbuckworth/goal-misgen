@@ -584,6 +584,7 @@ def get_summary():
     tag = "Maze Value Original - fixed1"
     tag = "Cartpole_Soft_Mean_Adjusted2"
     tag = "Maze_VOrig_Soft_Inf"
+    tag = "new ascent uniform no inf"
     for tag in ["Maze_VOrig_Soft_Inf", "Cartpole_Soft_Inf_Mean_Adjusted", "Ascent_Soft_Inf2"]:
         # tag = "Maze Hard Canonicalisation"
         load_summary(env=tag, tag=tag)
