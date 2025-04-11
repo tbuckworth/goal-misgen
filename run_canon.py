@@ -345,12 +345,12 @@ if __name__ == '__main__':
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs , ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, new_maze_dirs, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
-    # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
+    run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
 
     #
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
     # run_tags_for_files({"new cartpole uniform":None}, cartpole_dirs, ignore_errors=True)
-    run_tags_for_files({"new cartpole target mean old val":None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"new cartpole target mean old val":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
 
     # run_tags_for_files({"test":None}, unique_ascent_dirs, ignore_errors=False)
