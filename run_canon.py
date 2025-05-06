@@ -108,6 +108,10 @@ maze_dirs_apr25 = [
     "logs/train/maze_aisc/maze1/2025-04-04__07-43-53__seed_1993", # rand.region = 10
 ]
 
+maze_test = [
+    "logs/train/maze_aisc/maze1/2025-04-03__18-22-05__seed_51/model_80019456.pth"
+]
+
 coinrun_dirs = [
     "logs/train/coinrun/coinrun/2024-10-05__17-20-34__seed_6033/model_200015872.pth",  # random_percent = 0
     "logs/train/coinrun/coinrun/2024-10-05__18-06-44__seed_6033/model_200015872.pth",  # random_percent = 10
@@ -248,11 +252,11 @@ def hp_run(model_file, tag_dict, tag):
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": True,
         "update_frequently": True,
-        "infinite_value": False, #TODO: NOTE THIS CHANGED
+        "infinite_value": True, #TODO: NOTE THIS CHANGED
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
-        "adjust_logprob_mean": True,#NORMALLY FALSE!
+        "adjust_logprob_mean": False,#NORMALLY FALSE!
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
@@ -347,9 +351,12 @@ if __name__ == '__main__':
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
 
+    run_tags_for_files({"test tempered target infinite": None}, maze_test, ignore_errors=True)
+
+
     #
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
-    run_tags_for_files({"new cartpole tempered target mean":None}, cartpole_dirs, ignore_errors=True)
+    # run_tags_for_files({"new cartpole tempered target mean":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole target mean old val":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
 
