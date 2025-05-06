@@ -260,7 +260,7 @@ def hp_run(model_file, tag_dict, tag):
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
-        "trusted_policy": "tempered_gen",
+        "trusted_policy": "uniform",
         "trusted_temp": 7,
         # "subject_temp": 5,
         "meg_ground_next": True,
@@ -351,7 +351,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
 
-    run_tags_for_files({"test tempered target infinite": None}, maze_test, ignore_errors=True)
+    run_tags_for_files({"test uniform target infinite": None}, maze_test, ignore_errors=True)
 
 
     #
