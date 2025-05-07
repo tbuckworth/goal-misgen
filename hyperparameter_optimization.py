@@ -271,7 +271,7 @@ def canon_search():
         "num_levels": 10000,
         "learning_rate": 5e-4,
         "distribution_mode": "hard",
-        "seed": seed,
+        "seed": [500, 32, 111, 0, 6033],
         "hidden_dims": [64, 64],
         "load_value_models": [True, False],
         "value_dir": None,
