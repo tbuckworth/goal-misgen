@@ -166,7 +166,7 @@ class Canonicaliser(BaseAgent):
             logp_eval_policy = dist.log_prob(act)
             if not self.soft_adv:
                 if self.centered_logprobs:
-                    return (logp_eval_policy - dist.probs.log().mean(dim=-1)).cpu().numpy()
+                    return (logp_eval_policy - dist.probs.log().mean(dim=-1)).cpu().numpy(), dist.probs.cpu().numpy()
                 # converting log pi to implied hard advantage func:
                 logp_exp = (dist.probs * dist.probs.log()).sum(dim=-1)
                 return (logp_eval_policy - logp_exp).cpu().numpy(), dist.probs.cpu().numpy()
