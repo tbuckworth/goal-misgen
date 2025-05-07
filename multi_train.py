@@ -29,7 +29,7 @@ def run_canon(_, model_files, tag):
            "--tag",
            tag,
            "--model_files",
-           " ".join(model_files)
+           '"' + " ".join(model_files) + '"'
            ]
     subprocess.run(cmd)
 
