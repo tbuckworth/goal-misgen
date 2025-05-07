@@ -30,11 +30,11 @@ def scatter(canon_logp, canon_true_r, straight=False, title=""):
 normalize = norm_funcs["l2_norm"]
 
 def main(logp, rew, canon_logp, canon_true_r):
-    env_name = "Cartpole"
+    env_name = "Ascent"
     scatter(logp, rew, straight=True,
             title=f'{env_name} Evaluation environment')
     scatter(canon_logp, canon_true_r, straight=True,
-            title=f'{env_name} Canonicalised, Evaluation environment')
+            title=f'{env_name} Canonicalised, Training environment')
     scatter(normalize(canon_logp), normalize(canon_true_r),straight=True,
             title=f'{env_name} Canonicalised, Normalized, Evaluation environment')
 

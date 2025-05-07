@@ -498,7 +498,7 @@ class Canonicaliser(BaseAgent):
         with torch.no_grad():
             # canon_logp = target - value_batch
             true_val = value_model(obs_batch).squeeze()
-            next_true_val = value_model(nobs_batch.squeeze())
+            next_true_val = value_model(nobs_batch).squeeze()
             # canon_r = rew_batch + self.gamma * (next_true_val * (1 - done_batch) + term_value * done_batch) - true_val
             canon_r = rew_batch + self.gamma * (next_true_val * (1 - done_batch)) - true_val
             dist = distance(normalize(canon_logp), normalize(canon_r))
