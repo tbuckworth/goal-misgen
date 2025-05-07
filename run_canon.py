@@ -261,6 +261,8 @@ def hp_run(model_file, tag_dict, tag):
 
 
 def run_tags_for_files(tag_dict, model_files, ignore_errors=True):
+    if not isinstance(model_files, list):
+        model_files = model_files.split(" ")
     for tag in tag_dict.keys():
         for model_file in model_files:
             if not ignore_errors:
