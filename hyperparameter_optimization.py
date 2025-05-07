@@ -16,7 +16,7 @@ try:
 except ImportError:
     pass
 
-from helper_local import DictToArgs, add_training_args
+from helper_local import DictToArgs, add_training_args, get_seed, get_model_with_largest_checkpoint
 
 
 def get_wandb_performance(hparams, project="Cartpole", id_tag="sa_rew", opt_metric="summary.mean_episode_rewards",
@@ -249,5 +249,52 @@ def canonicaliser():
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards", abs=True)
 
 
+def canon_search():
+    model_file = "logs/train/ascent/Ascent/2024-11-19__12-38-59__seed_42/model_10027008.pth"
+    seed = get_seed(model_file)
+    fixed = {
+        "model_file": model_file,
+        "epoch": 0,
+        "algo": "canon",
+        "env_name": "get",
+        "exp_name": "canon",
+        "param_name": "cartpole-canon",
+        "wandb_tags": ["ast0"],  # "pre-trained-value"],  # "coinrun misgen3"],
+        "num_checkpoints": 1,
+        "use_wandb": True,
+        "num_timesteps": int(256 * 24),
+        "val_epoch": 50,
+        "mini_batch_size": 2048,
+        "n_val_envs": 8,
+        "n_envs": int(16 + 8),
+        "n_steps": 256,
+        "num_levels": 10000,
+        "learning_rate": 5e-4,
+        "distribution_mode": "hard",
+        "seed": seed,
+        "hidden_dims": [64, 64],
+        "load_value_models": [True, False],
+        "value_dir": None,
+        "soft_canonicalisation": [True, False],
+        "update_frequently": True,
+        "infinite_value": [True, False],
+        "meg": False,
+        "remove_duplicate_actions": True,
+        "centered_logprobs": [False, True],
+        "adjust_logprob_mean": [False, True],
+        "use_valid_env": True,
+        "meg_version": "kldiv",
+        "pirc": True,
+        "trusted_policy": ["uniform", "tempered_gen"],
+        "trusted_temp": 7,
+        # "subject_temp": 5,
+        "meg_ground_next": True,
+        "consistency_coef": 10.,
+        "use_min_val_loss": False,
+    }
+    bounds = {}
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards")
+
+
 if __name__ == "__main__":
-    ppo()
+    canon_search()

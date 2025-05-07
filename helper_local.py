@@ -368,3 +368,10 @@ def load_tempered_policy(env_name, device, hyperparameters, venv):
     policy.load_state_dict(torch.load(model_file, map_location=device)["model_state_dict"])
     return policy
 
+
+def get_seed(model_file):
+    try:
+        return int(re.search(r"seed_(\d+)", model_file).group(1))
+    except Exception as e:
+        print("seed not found, using 42")
+        return 42

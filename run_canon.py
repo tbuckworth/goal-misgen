@@ -1,6 +1,4 @@
-import re
-
-from helper_local import get_model_with_largest_checkpoint
+from helper_local import get_model_with_largest_checkpoint, get_seed
 from hyperparameter_optimization import run_next_hyperparameters
 from load_wandb_table import load_summary, load_meg
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -204,14 +202,6 @@ cartpole_value_networks = {
 }
 
 
-def get_seed(model_file):
-    try:
-        return int(re.search(r"seed_(\d+)", model_file).group(1))
-    except Exception as e:
-        print("seed not found, using 42")
-        return 42
-
-
 def hp_run(model_file, tag_dict, tag):
     seed = get_seed(model_file)
     hparams = {
@@ -237,7 +227,7 @@ def hp_run(model_file, tag_dict, tag):
         "num_checkpoints": 1,
         "use_wandb": True,
         "num_timesteps": int(4096*24),
-        "val_epoch": 100,
+        "val_epoch": 50,
         "mini_batch_size": 2048,
         "n_val_envs": 8,
         "n_envs": int(16 + 8),
@@ -351,7 +341,8 @@ if __name__ == '__main__':
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs + maze_dirs_apr25, ignore_errors=True)
 
-    run_tags_for_files({"test uniform target infinite": None}, maze_test, ignore_errors=True)
+    # run_tags_for_files({"test uniform target infinite": None}, maze_test, ignore_errors=True)
+    run_tags_for_files({"test ascent":None}, local_unique_ascent_dirs[:1], ignore_errors=False)
 
 
     #
