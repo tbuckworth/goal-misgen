@@ -280,7 +280,7 @@ def canon_search():
         "infinite_value": [False],
         "meg": False,
         "remove_duplicate_actions": True,
-        "centered_logprobs": [True],
+        "centered_logprobs": [False],
         "adjust_logprob_mean": [True],
         "use_valid_env": True,
         "meg_version": "kldiv",

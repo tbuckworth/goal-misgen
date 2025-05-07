@@ -240,13 +240,13 @@ def hp_run(model_file, tag_dict, tag):
 
         "load_value_models": True,
         "value_dir": tag_dict[tag],
-        "soft_canonicalisation": True,
+        "soft_canonicalisation": False,
         "update_frequently": True,
-        "infinite_value": True, #TODO: NOTE THIS CHANGED
+        "infinite_value": False,
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
-        "adjust_logprob_mean": False,#NORMALLY FALSE!
+        "adjust_logprob_mean": True,
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,

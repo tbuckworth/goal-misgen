@@ -6,7 +6,7 @@ import multiprocessing
 
 import numpy as np
 
-from run_canon import coinrun_dirs, cartpole_dirs
+from run_canon import coinrun_dirs, cartpole_dirs, unique_ascent_dirs
 
 
 def run_script(_):
@@ -40,8 +40,8 @@ def main():
 
     n = int(sys.argv[1])  # Number of parallel processes
 
-    tag = "Cartpole_Soft_Inf"
-    model_files = [x.tolist() for x in np.array_split(cartpole_dirs, n)]
+    tag = "Ascent_Hard_Mean_Adj_Target"
+    model_files = [x.tolist() for x in np.array_split(unique_ascent_dirs, n)]
     args = [(i, model_files[i], tag) for i in range(n)]
     # Verify that the venv's python exists
 
@@ -65,4 +65,4 @@ def hp():
         pool.starmap(run_script, args)
 
 if __name__ == "__main__":
-    hp()
+    main()
