@@ -252,9 +252,15 @@ def train(args):
         checkpoint = torch.load(value_dir)
         agent.value_model.load_state_dict(checkpoint["model_state_dict"])
         agent.value_optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        checkpoint = torch.load(value_dir_valid)
-        agent.value_model_val.load_state_dict(checkpoint["model_state_dict"])
-        agent.value_optimizer_val.load_state_dict(checkpoint["optimizer_state_dict"])
+        checkpoint_val = torch.load(value_dir_valid)
+        agent.value_model_val.load_state_dict(checkpoint_val["model_state_dict"])
+        agent.value_optimizer_val.load_state_dict(checkpoint_val["optimizer_state_dict"])
+        if hyperparameters.get("pre_trained_value_encoder", False):
+            if isinstance(agent.value_model_logp, ImpalaValueModel):
+                agent.value_model_logp.load_state_dict(checkpoint["model_state_dict"])
+                agent.value_model_logp.fix_encoder_reset_rest(agent.value_optimizer_logp)
+                agent.value_model_logp_val.load_state_dict(checkpoint_val["model_state_dict"])
+                agent.value_model_logp_val.fix_encoder_reset_rest(agent.value_optimizer_logp_val)
         if ppo_value:
             agent.value_model = ValuePolicyWrapper(agent.value_model)
             agent.value_model_val = ValuePolicyWrapper(agent.value_model_val)

@@ -390,3 +390,21 @@ class ImpalaValueModel(MLPLayers):
         if self.final_layers is None:
             return h
         return (fl(h) for fl in self.final_layers)
+
+    def fix_encoder_reset_rest(self, opt=None):
+        # Freeze encoder weights
+        for p in self.model.parameters():
+            p.requires_grad = False
+
+        # Re-initialise MLP layers
+        self.layers.apply(xavier_uniform_init)
+
+        # Re-initialise any final heads
+        if self.final_layers is not None:
+            for head in self.final_layers:
+                head.apply(orthogonal_init)
+        if opt is None:
+            return
+        for group in opt.param_groups:
+            group['params'] = [p for p in group['params'] if p.requires_grad]
+        opt.state.clear()
