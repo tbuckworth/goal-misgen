@@ -132,8 +132,11 @@ def train(args):
     ## STORAGE ##
     #############
     print('INITIALIZING STORAGE...')
+    pre_trained_value_encoder = hyperparameters.get("pre_trained_value_encoder", False)
+    is_impala = hyperparameters.get("architecture", "impala")=="impala"
+    storage_override = (256,) if (pre_trained_value_encoder and is_impala) else None
     storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps,
-                                                                                      observation_shape, algo, act_shape)
+                                                                                      observation_shape, algo, act_shape, storage_override)
 
     ppo_value = True if hyperparameters.get("value_dir", None) == "ppo" else False
     if ppo_value:
@@ -256,11 +259,14 @@ def train(args):
         agent.value_model_val.load_state_dict(checkpoint_val["model_state_dict"])
         agent.value_optimizer_val.load_state_dict(checkpoint_val["optimizer_state_dict"])
         if hyperparameters.get("pre_trained_value_encoder", False):
-            if isinstance(agent.value_model_logp, ImpalaValueModel):
-                agent.value_model_logp.load_state_dict(checkpoint["model_state_dict"])
-                agent.value_model_logp.fix_encoder_reset_rest(agent.value_optimizer_logp)
-                agent.value_model_logp_val.load_state_dict(checkpoint_val["model_state_dict"])
-                agent.value_model_logp_val.fix_encoder_reset_rest(agent.value_optimizer_logp_val)
+            if isinstance(agent.value_model, ImpalaValueModel):
+                agent.encoder = agent.value_model.model
+                agent.encoder_val = agent.value_model_val.model
+
+                # agent.value_model_logp.load_state_dict(checkpoint["model_state_dict"])
+                # agent.value_model_logp.fix_encoder_reset_rest(agent.value_optimizer_logp)
+                # agent.value_model_logp_val.load_state_dict(checkpoint_val["model_state_dict"])
+                # agent.value_model_logp_val.fix_encoder_reset_rest(agent.value_optimizer_logp_val)
         if ppo_value:
             agent.value_model = ValuePolicyWrapper(agent.value_model)
             agent.value_model_val = ValuePolicyWrapper(agent.value_model_val)
@@ -297,10 +303,14 @@ def construct_value_models(device, hyperparameters, observation_shape, hidden_di
     return model_constructor, value_model, value_model_val
 
 
-def get_value_constructor(hyperparameters, observation_shape, hidden_dims):
+def get_value_constructor(hyperparameters, observation_shape, hidden_dims, encoder_output_dim=None):
     architecture = hyperparameters.get("architecture")
+    use_encoder = hyperparameters.get("pre_trained_value_encoder", False)
     if architecture == "impala":
-        return lambda x: ImpalaValueModel(observation_shape[0], hidden_dims, x)
+        if not use_encoder:
+            return lambda x: ImpalaValueModel(observation_shape[0], hidden_dims, x)
+        # 256 is the output_dim of an ImpalaModel
+        return lambda x: MlpModelNoFinalRelu(256, hidden_dims + [x])
     return lambda x: MlpModelNoFinalRelu(observation_shape[0], hidden_dims + [x])
 
 
@@ -325,13 +335,14 @@ def create_logdir(model_file, env_name, exp_name, get_latest_model, listdir, see
     return logdir
 
 
-def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo, act_shape):
+def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo, act_shape, storage_override=None):
     hidden_state_dim = model.output_dim
     storage_cons = Storage
     if algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited', 'ppo-tracked']:
         storage_cons = LirlStorage
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
+    observation_shape = (storage_override or observation_shape)
     storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
     storage_trusted_val = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
 

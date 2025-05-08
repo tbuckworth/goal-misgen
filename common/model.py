@@ -71,7 +71,7 @@ class MlpModelNoFinalRelu(nn.Module):
             self.final_layers = nn.ModuleList([orthogonal_init(nn.Linear(hidden_dims[-1], k)) for k in self.output_dim])
         else:
             self.final_layers = None
-
+        self.input_dims = input_dims
         # Hidden layers
         hidden_dims = [input_dims] + hidden_dims
         layers = []

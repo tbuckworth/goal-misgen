@@ -73,6 +73,8 @@ class Canonicaliser(BaseAgent):
                  consistency_coef=10.,
                  use_min_val_loss=False,
                  update_frequently=False,
+                 encoder=None,
+                 encoder_val=None,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
@@ -155,6 +157,8 @@ class Canonicaliser(BaseAgent):
         for d in [self.logvaldir, self.logmegdir]:
             if not os.path.exists(d):
                 os.makedirs(d)
+        self.encoder = encoder
+        self.encoder_val = encoder_val
 
     def predict_subject_adv(self, obs, act, hidden_state, done, subject_policy):
         with torch.no_grad():
@@ -226,7 +230,7 @@ class Canonicaliser(BaseAgent):
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
         self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
-                              self.trusted_policy, self.policy)
+                              self.trusted_policy, self.policy, self.encoder)
         # Need to re-do this, so it's fresh for the env data collection:
         obs = self.env.reset()
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
@@ -237,7 +241,7 @@ class Canonicaliser(BaseAgent):
         hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done_v = np.zeros(self.n_envs)
         self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
-                              self.trusted_policy, self.policy)
+                              self.trusted_policy, self.policy, self.encoder_val)
         # Need to re-do this, so it's fresh for the valid env data collection:
         obs_v = self.env_valid.reset()
         hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
@@ -358,19 +362,25 @@ class Canonicaliser(BaseAgent):
         if self.env_valid is not None:
             self.env_valid.close()
 
-    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None, subject_policy=None):
+    def collect_rollouts(self, done, hidden_state, obs, storage, env, policy=None, subject_policy=None, encoder=None):
         logp_eval_policy = probs = None
         for _ in range(self.n_steps):
             act, log_prob_act, value, next_hidden_state = self.predict(obs, hidden_state, done, policy)
             if subject_policy is not None:
                 logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
+            if encoder is not None:
+                with torch.no_grad():
+                    obs = encoder(obs)
             storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs,
                           self.gamma)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
         _, _, last_val, hidden_state = self.predict(obs, hidden_state, done, policy)
+        if encoder is not None:
+            with torch.no_grad():
+                obs = encoder(obs)
         storage.store_last(obs, hidden_state, last_val)
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
