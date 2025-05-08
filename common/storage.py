@@ -9,7 +9,7 @@ class Storage():
     def __init__(self, obs_shape, hidden_state_size, num_steps, num_envs, device, act_shape):
         self.obs_shape = obs_shape
         self.act_shape = act_shape
-        self.hidden_state_size = hidden_state_size
+        self.hidden_state_size = hidden_state_size if isinstance(hidden_state_size, tuple) else (hidden_state_size,)
         self.num_steps = num_steps
         self.num_envs = num_envs
         self.device = device
@@ -17,7 +17,7 @@ class Storage():
 
     def reset(self):
         self.obs_batch = torch.zeros(self.num_steps + 1, self.num_envs, *self.obs_shape)
-        self.hidden_states_batch = torch.zeros(self.num_steps + 1, self.num_envs, self.hidden_state_size)
+        self.hidden_states_batch = torch.zeros(self.num_steps + 1, self.num_envs, *self.hidden_state_size)
         self.act_batch = torch.zeros(self.num_steps, self.num_envs)
         self.rew_batch = torch.zeros(self.num_steps, self.num_envs)
         self.done_batch = torch.zeros(self.num_steps, self.num_envs)
