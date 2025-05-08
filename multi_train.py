@@ -31,7 +31,7 @@ def run_canon(_, model_files, tag):
            "--model_files",
            *model_files,
            ]
-    subprocess.run(cmd)
+    subprocess.run(cmd, cwd=base_dir)
 
 def main():
     if len(sys.argv) < 2:
