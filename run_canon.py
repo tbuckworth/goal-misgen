@@ -239,6 +239,7 @@ def hp_run(model_file, tag_dict, tag):
         "hidden_dims": [256, 256, 256, 256],
 
         "load_value_models": True,
+        "pre_trained_value_encoder": True,
         "value_dir": tag_dict[tag],
         "soft_canonicalisation": False,
         "update_frequently": True,

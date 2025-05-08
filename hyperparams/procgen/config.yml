@@ -257,6 +257,7 @@ cartpole-canon:
     subject_temp: 5.
     use_min_val_loss: False
     update_frequently: False
+    pre_trained_value_encoder: False
 
 
 trusted-value:
