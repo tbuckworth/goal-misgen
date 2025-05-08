@@ -369,9 +369,7 @@ class Canonicaliser(BaseAgent):
             if subject_policy is not None:
                 logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
-            if encoder is not None:
-                with torch.no_grad():
-                    obs = encoder(obs)
+            obs = self.maybe_encode(obs, encoder)
             storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs,
                           self.gamma)
             obs = next_obs
@@ -839,3 +837,8 @@ class Canonicaliser(BaseAgent):
 
     def inf_term_value(self):
         return (1 / (1 - self.gamma)) * np.log(self.n_actions)
+
+    def maybe_encode(self, obs, encoder):
+        if encoder is None:
+            return obs
+

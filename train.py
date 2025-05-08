@@ -294,18 +294,20 @@ def create_stacked_env(args, hyperparameters, pct_ood):
 
 
 def construct_value_models(device, hyperparameters, observation_shape, hidden_dims):
-    model_constructor = get_value_constructor(hyperparameters, observation_shape, hidden_dims)
+    model_constructor = get_value_constructor(hyperparameters, observation_shape, hidden_dims, False)
     # This is a crazy amount of GPU, shall we think about doing something about all this?
     value_model = model_constructor(1)
     value_model_val = model_constructor(1)
     value_model.to(device)
     value_model_val.to(device)
+    model_constructor = get_value_constructor(hyperparameters, observation_shape, hidden_dims, True)
     return model_constructor, value_model, value_model_val
 
 
-def get_value_constructor(hyperparameters, observation_shape, hidden_dims, encoder_output_dim=None):
+def get_value_constructor(hyperparameters, observation_shape, hidden_dims, use_encoder=False):
     architecture = hyperparameters.get("architecture")
-    use_encoder = hyperparameters.get("pre_trained_value_encoder", False)
+    if use_encoder:
+        use_encoder = hyperparameters.get("pre_trained_value_encoder", False)
     if architecture == "impala":
         if not use_encoder:
             return lambda x: ImpalaValueModel(observation_shape[0], hidden_dims, x)
