@@ -301,7 +301,8 @@ class LirlStorage(Storage):
                 self.device)
             probs = torch.FloatTensor(self.subject_probs[:, valid_envs:]).reshape(-1, *self.act_shape)[indices].to(
                 self.device)
-
+            hidden_batch = torch.FloatTensor(self.hidden_states_batch[:-1, valid_envs:]).reshape(-1, *self.hidden_state_size)[indices].to(self.device)
+            next_h_batch = torch.FloatTensor(self.hidden_states_batch[1:, valid_envs:]).reshape(-1, *self.hidden_state_size)[indices].to(self.device)
         else:
             obs_batch = torch.FloatTensor(self.obs_batch[:-1, :valid_envs]).reshape(-1, *self.obs_shape)[indices].to(
                 self.device)
@@ -319,8 +320,11 @@ class LirlStorage(Storage):
                 self.device)
             probs = torch.FloatTensor(self.subject_probs[:, :valid_envs]).reshape(-1, *self.act_shape)[indices].to(
                 self.device)
+            hidden_batch = torch.FloatTensor(self.hidden_states_batch[:-1, :valid_envs]).reshape(-1, *self.hidden_state_size)[indices].to(self.device)
+            next_h_batch = torch.FloatTensor(self.hidden_states_batch[1:, valid_envs:]).reshape(-1, *self.hidden_state_size)[indices].to(self.device)
         # todo make this a dict:
-        yield obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch, rew_batch, log_prob_eval_policy, probs, indices
+        yield (obs_batch, nobs_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch,
+               rew_batch, log_prob_eval_policy, probs, indices, hidden_batch, next_h_batch)
 
     def store_meg(self, elementwise_meg, indices, valid_envs=0):
         n = self.num_envs - valid_envs

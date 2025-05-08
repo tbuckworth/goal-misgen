@@ -344,7 +344,7 @@ def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo, 
         storage_cons = LirlStorage
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
-    observation_shape = (storage_override or observation_shape)
+    hidden_state_dim = (storage_override or hidden_state_dim)
     storage_trusted = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
     storage_trusted_val = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
 

@@ -369,14 +369,14 @@ class Canonicaliser(BaseAgent):
             if subject_policy is not None:
                 logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
-            obs = self.maybe_encode(obs, encoder)
+            hidden_state = self.maybe_encode(obs, encoder) or hidden_state
             storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs,
                           self.gamma)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
         _, _, last_val, hidden_state = self.predict(obs, hidden_state, done, policy)
-        obs = self.maybe_encode(obs, encoder)
+        hidden_state = self.maybe_encode(obs, encoder) or hidden_state
         storage.store_last(obs, hidden_state, last_val)
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
@@ -419,9 +419,13 @@ class Canonicaliser(BaseAgent):
             for sample in generator:
                 (obs_batch, nobs_batch, act_batch, done_batch,
                  old_log_prob_act_batch, old_value_batch, return_batch,
-                 adv_batch, rew_batch, logp_eval_policy_batch, probs, indices) = sample
-                value_batch = value_model(obs_batch).squeeze()
-                next_value_batch = value_model(nobs_batch).squeeze()
+                 adv_batch, rew_batch, logp_eval_policy_batch, probs, indices, hidden_batch, next_h_batch) = sample
+                if self.encoder is not None:
+                    value_batch = value_model(hidden_batch).squeeze()
+                    next_value_batch = value_model(next_h_batch).squeeze()
+                else:
+                    value_batch = value_model(obs_batch).squeeze()
+                    next_value_batch = value_model(nobs_batch).squeeze()
                 if rew_type == "reward":
                     R = rew_batch
                     term_value = 0
@@ -449,11 +453,18 @@ class Canonicaliser(BaseAgent):
                 dist = None
 
             for sample in generator_valid:
-                obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val, logp_eval_policy_batch_val, probs, indices = sample
+                (obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
+                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val,
+                 logp_eval_policy_batch_val, probs, indices, hidden_batch_val, next_h_batch_val) = sample
                 with torch.no_grad():
-                    value_batch_val = value_model(obs_batch_val).squeeze()
-                    next_value_batch_val = value_model(nobs_batch_val).squeeze()
+                    if self.encoder is not None:
+                        value_batch_val = value_model(hidden_batch_val).squeeze()
+                        next_value_batch_val = value_model(next_h_batch_val).squeeze()
+                    else:
+                        value_batch_val = value_model(obs_batch_val).squeeze()
+                        next_value_batch_val = value_model(nobs_batch_val).squeeze()
+                    # value_batch_val = value_model(obs_batch_val).squeeze()
+                    # next_value_batch_val = value_model(nobs_batch_val).squeeze()
                     if rew_type == "reward":
                         R = rew_batch_val
                         term_value = 0
@@ -500,7 +511,7 @@ class Canonicaliser(BaseAgent):
 
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, probs, indices) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, probs, indices, hidden_batch, next_h_batch) = sample
         with torch.no_grad():
             true_val = value_model(obs_batch).squeeze()
             next_true_val = value_model(nobs_batch).squeeze()
@@ -575,7 +586,7 @@ class Canonicaliser(BaseAgent):
     def meg_v1(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices, hidden_batch, next_h_batch) = sample
         if self.meg_ground_next:
             obs = nobs_batch
         else:
@@ -603,7 +614,7 @@ class Canonicaliser(BaseAgent):
     def meg_v2_direct(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices, hidden_batch, next_h_batch) = sample
         if self.meg_ground_next:
             obs = nobs_batch
             flt = (1 - done_batch).unsqueeze(dim=-1)
@@ -629,7 +640,7 @@ class Canonicaliser(BaseAgent):
         raise NotImplementedError
         # (obs_batch, nobs_batch, act_batch, done_batch,
         #  old_log_prob_act_batch, old_value_batch, return_batch,
-        #  adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
+        #  adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices, next_h_batch) = sample
         # obs = nobs_batch
         # if not valid:
         #     adv = logp_eval_policy_batch - (pi_subject * pi_subject.log()).sum(dim=-1)
@@ -651,7 +662,7 @@ class Canonicaliser(BaseAgent):
     def kl_div_meg(self, losses, max_ent, q_model, sample, valid=False):
         (obs_batch, nobs_batch, act_batch, done_batch,
          old_log_prob_act_batch, old_value_batch, return_batch,
-         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices) = sample
+         adv_batch, rew_batch, logp_eval_policy_batch, pi_subject, indices, hidden_batch, next_h_batch) = sample
 
         def generate_loss_meg():
             q_value_batch, _ = q_model(obs_batch)
@@ -692,7 +703,7 @@ class Canonicaliser(BaseAgent):
                                                            recurrent=recurrent)
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _, _ = sample
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _, _,_, next_h_batch = sample
                 mask_batch = (1 - done_batch)
                 dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
@@ -739,7 +750,7 @@ class Canonicaliser(BaseAgent):
         return summary
 
     def sample_next_data(self, sample):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, _, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, _, _, _, _, next_h_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         value = self.value_model(obs_batch)
         next_value = self.value_model(nobs_batch)
@@ -785,7 +796,7 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _ = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _, hidden_batch , next_h_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
             try:
@@ -793,12 +804,19 @@ class Canonicaliser(BaseAgent):
             except Exception as e:
                 pass
 
+
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
         # logp_batch = dist.log_prob(act_batch)
 
-        val_batch_logp = value_model_logp(obs_batch).squeeze()
-        next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
+        if self.encoder is not None:
+            val_batch_logp = value_model_logp(hidden_batch).squeeze()
+            next_val_batch_logp = value_model_logp(next_h_batch).squeeze()
+        else:
+            val_batch_logp = value_model_logp(obs_batch).squeeze()
+            next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
+        # val_batch_logp = value_model_logp(obs_batch).squeeze()
+        # next_val_batch_logp = value_model_logp(nobs_batch).squeeze()
         # N.B. This is for uniform policy, but probably makes sense for any policy.
         # term_value = (1 / (1 - self.gamma)) * np.log(dist.logits.shape[-1])
         term_value = self.inf_term_value() if self.infinite_value else 0
@@ -838,7 +856,7 @@ class Canonicaliser(BaseAgent):
 
     def maybe_encode(self, obs, encoder):
         if encoder is None:
-            return obs
+            return False
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(device=self.device)
             x = encoder(obs)
