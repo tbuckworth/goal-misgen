@@ -8,5 +8,5 @@ if __name__ == '__main__':
     parser.add_argument('--tag', type=str, default='Test', help='Unique Identifier Wandb Tag')
     args = parser.parse_args()
 
-    run_tags_for_files({args.tag: None}, args.model_files.split(" "), ignore_errors=True)
+    run_tags_for_files({args.tag: None}, args.model_files, ignore_errors=True)
 
