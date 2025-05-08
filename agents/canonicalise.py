@@ -376,9 +376,7 @@ class Canonicaliser(BaseAgent):
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
         _, _, last_val, hidden_state = self.predict(obs, hidden_state, done, policy)
-        if encoder is not None:
-            with torch.no_grad():
-                obs = encoder(obs)
+        obs = self.maybe_encode(obs, encoder)
         storage.store_last(obs, hidden_state, last_val)
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
@@ -841,4 +839,9 @@ class Canonicaliser(BaseAgent):
     def maybe_encode(self, obs, encoder):
         if encoder is None:
             return obs
+        with torch.no_grad():
+            obs = torch.FloatTensor(obs).to(device=self.device)
+            x = encoder(obs)
+            return x.cpu().numpy()
+
 
