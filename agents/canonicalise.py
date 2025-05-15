@@ -227,24 +227,24 @@ class Canonicaliser(BaseAgent):
         checkpoint_cnt = 0
         # Collect supervised data for unshifted env
         obs = self.env.reset()
-        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        shp = (self.n_envs, *self.storage.hidden_state_size) if isinstance(self.storage.hidden_state_size, tuple) else (
+            self.n_envs, self.storage.hidden_state_size)
+        hidden_state = np.zeros(shp)
         done = np.zeros(self.n_envs)
         self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
                               self.trusted_policy, self.policy, self.encoder)
         # Need to re-do this, so it's fresh for the env data collection:
         obs = self.env.reset()
-        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
 
         # Collect supervised data for shifted env
         obs_v = self.env_valid.reset()
-        hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        hidden_state_v = np.zeros(shp)
         done_v = np.zeros(self.n_envs)
         self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
                               self.trusted_policy, self.policy, self.encoder_val)
         # Need to re-do this, so it's fresh for the valid env data collection:
         obs_v = self.env_valid.reset()
-        hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done_v = np.zeros(self.n_envs)
 
         # Traditional PPO:
@@ -369,14 +369,14 @@ class Canonicaliser(BaseAgent):
             if subject_policy is not None:
                 logp_eval_policy, probs = self.predict_subject_adv(obs, act, hidden_state, done, subject_policy)
             next_obs, rew, done, info = env.step(act)
-            hidden_state = self.maybe_encode(obs, encoder) or hidden_state
+            hidden_state = self.maybe_encode(obs, encoder, hidden_state)
             storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy, probs,
                           self.gamma)
             obs = next_obs
             hidden_state = next_hidden_state
         value_batch = storage.value_batch[:self.n_steps]
         _, _, last_val, hidden_state = self.predict(obs, hidden_state, done, policy)
-        hidden_state = self.maybe_encode(obs, encoder) or hidden_state
+        hidden_state = self.maybe_encode(obs, encoder, hidden_state)
         storage.store_last(obs, hidden_state, last_val)
         # Compute advantage estimates
         storage.compute_estimates(self.gamma, self.lmbda, self.use_gae, self.normalize_adv)
@@ -454,7 +454,7 @@ class Canonicaliser(BaseAgent):
 
             for sample in generator_valid:
                 (obs_batch_val, nobs_batch_val, act_batch_val, done_batch_val, \
-                    old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val,
+                 old_log_prob_act_batch_val, old_value_batch_val, return_batch_val, adv_batch_val, rew_batch_val,
                  logp_eval_policy_batch_val, probs, indices, hidden_batch_val, next_h_batch_val) = sample
                 with torch.no_grad():
                     if self.encoder is not None:
@@ -703,7 +703,7 @@ class Canonicaliser(BaseAgent):
                                                            recurrent=recurrent)
             for sample in generator:
                 obs_batch, nobs_batch, act_batch, done_batch, \
-                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _, _,_, next_h_batch = sample
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch, _, _, _, _, _, next_h_batch = sample
                 mask_batch = (1 - done_batch)
                 dist_batch, value_batch, _ = self.policy(obs_batch, None, mask_batch)
 
@@ -796,14 +796,13 @@ class Canonicaliser(BaseAgent):
         return pd.DataFrame(data), d
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
-        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _, hidden_batch , next_h_batch = sample
+        obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _, hidden_batch, next_h_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
         if self.remove_duplicate_actions:
             try:
                 dist, act_batch = remove_duplicate_actions(dist, act_batch.to(torch.int32), self.env)
             except Exception as e:
                 pass
-
 
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
@@ -854,12 +853,10 @@ class Canonicaliser(BaseAgent):
     def inf_term_value(self):
         return (1 / (1 - self.gamma)) * np.log(self.n_actions)
 
-    def maybe_encode(self, obs, encoder):
+    def maybe_encode(self, obs, encoder, hidden_state):
         if encoder is None:
-            return False
+            return hidden_state
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(device=self.device)
             x = encoder(obs)
             return x.cpu().numpy()
-
-

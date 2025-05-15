@@ -172,7 +172,7 @@ class Storage():
                 obs_batch = torch.FloatTensor(self.obs_batch[:-1, idxes]).reshape(-1, *self.obs_shape).to(self.device)
                 # [0:1] instead of [0] to keep two-dimensional array
                 hidden_state_batch = torch.FloatTensor(self.hidden_states_batch[0:1, idxes]).reshape(-1,
-                                                                                                     self.hidden_state_size).to(
+                                                                                                     *self.hidden_state_size).to(
                     self.device)
                 act_batch = torch.FloatTensor(self.act_batch[:, idxes]).reshape(-1).to(self.device)
                 done_batch = torch.FloatTensor(self.done_batch[:, idxes]).reshape(-1).to(self.device)
@@ -187,7 +187,7 @@ class Storage():
             raise NotImplementedError("Storage has not implemented valid. see LirlStorage for implementation")
         obs_batch = torch.FloatTensor(self.obs_batch[:-1]).reshape(-1, *self.obs_shape)[indices].to(self.device)
         hidden_state_batch = torch.FloatTensor(self.hidden_states_batch[:-1]).reshape(-1,
-                                                                                      self.hidden_state_size).to(
+                                                                                      *self.hidden_state_size).to(
             self.device)
         act_batch = torch.FloatTensor(self.act_batch).reshape(-1)[indices].to(self.device)
         done_batch = torch.FloatTensor(self.done_batch).reshape(-1)[indices].to(self.device)
