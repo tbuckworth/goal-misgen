@@ -241,13 +241,13 @@ def hp_run(model_file, tag_dict, tag):
         "load_value_models": True,
         "pre_trained_value_encoder": True,
         "value_dir": tag_dict[tag],
-        "soft_canonicalisation": False,
+        "soft_canonicalisation": True,
         "update_frequently": True,
-        "infinite_value": False,
+        "infinite_value": True,
         "meg": False,
         "remove_duplicate_actions": True,
         "centered_logprobs": False,
-        "adjust_logprob_mean": True,
+        "adjust_logprob_mean": False,
         "use_valid_env": True,
         "meg_version": "kldiv",
         "pirc": True,
@@ -338,7 +338,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Hard_Target_Mean_Adj_Pre": None}, maze_dirs_apr25, ignore_errors=False)
+    run_tags_for_files({"Maze_VOrig_Soft_Inf_Pre": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs , ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, new_maze_dirs, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
