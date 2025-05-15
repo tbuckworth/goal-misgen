@@ -66,4 +66,4 @@ def hp():
         pool.starmap(run_script, args)
 
 if __name__ == "__main__":
-    main()
+    hp()

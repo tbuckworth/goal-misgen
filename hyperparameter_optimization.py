@@ -190,8 +190,8 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": 'cartpole',
-        "exp_name": 'cartpole',
+        "env_name": ['mountain_car', 'acrobot', 'cartpole_swing'],
+        "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
         "num_timesteps": int(5e7),
@@ -204,7 +204,7 @@ def ppo():
         "entropy_coef": [0, 0.02, 0.1, 0.2],
         "l1_coef": 0,
         "anneal_lr": False,
-        "reward_termination": 495,
+        # "reward_termination": 495,
         "train_pct_ood": [0, 0, 0, 0, 0.01, 0.1, 0.25, 0.5],
         # "hid_dims": [],
         # "dense_rewards": False,
@@ -297,4 +297,4 @@ def canon_search():
 
 
 if __name__ == "__main__":
-    canon_search()
+    ppo()
