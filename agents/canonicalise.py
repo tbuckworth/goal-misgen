@@ -227,8 +227,7 @@ class Canonicaliser(BaseAgent):
         checkpoint_cnt = 0
         # Collect supervised data for unshifted env
         obs = self.env.reset()
-        shp = (self.n_envs, *self.storage.hidden_state_size) if isinstance(self.storage.hidden_state_size, tuple) else (
-            self.n_envs, self.storage.hidden_state_size)
+        shp = (self.n_envs, *self.storage.hidden_state_size)
         hidden_state = np.zeros(shp)
         done = np.zeros(self.n_envs)
         self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,

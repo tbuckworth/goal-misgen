@@ -198,24 +198,24 @@ class PPO_Lirl(BaseAgent):
         save_every = num_timesteps // self.num_checkpoints
         checkpoint_cnt = 0
         obs = self.env.reset()
-        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        hidden_state = np.zeros((self.n_envs, *self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
         self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
                               self.trusted_policy)
         # Need to re-do this, so it's fresh for the env data collection:
         obs = self.env.reset()
-        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        hidden_state = np.zeros((self.n_envs, *self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
 
         if self.env_valid is not None:
             obs_v = self.env_valid.reset()
-            hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
+            hidden_state_v = np.zeros((self.n_envs, *self.storage.hidden_state_size))
             done_v = np.zeros(self.n_envs)
             self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
                                   self.trusted_policy)
             # Need to re-do this, so it's fresh for the valid env data collection:
             obs_v = self.env_valid.reset()
-            hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
+            hidden_state_v = np.zeros((self.n_envs, *self.storage.hidden_state_size))
             done_v = np.zeros(self.n_envs)
 
         while self.t < num_timesteps:

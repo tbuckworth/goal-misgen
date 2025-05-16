@@ -234,12 +234,12 @@ class BPO(BaseAgent):
         save_every = num_timesteps // self.num_checkpoints
         checkpoint_cnt = 0
         obs = self.env.reset()
-        hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
+        hidden_state = np.zeros((self.n_envs, *self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
 
         if self.env_valid is not None:
             obs_v = self.env_valid.reset()
-            hidden_state_v = np.zeros((self.n_envs, self.storage.hidden_state_size))
+            hidden_state_v = np.zeros((self.n_envs, *self.storage.hidden_state_size))
             done_v = np.zeros(self.n_envs)
 
         while self.t < num_timesteps:
