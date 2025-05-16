@@ -34,6 +34,21 @@ def load_ppo_value_models(env_name, env, observation_shape, device, val_type):
     return policy, get_model_with_largest_checkpoint(value_dir)
 
 
+def get_rew_term(env_name):
+    if env_name == "cartpole" or env_name == "cartpole_swing":
+        return 495
+    if env_name == "mountain_car":
+        return -100
+    if env_name == "acrobot":
+        return -100
+    if env_name == "coinrun":
+        return 9.9
+    if env_name == "maze" or env_name == "maze_aisc":
+        return 9.9
+    else:
+        raise NotImplementedError(f"reward termination not implemented for {env_name}")
+
+
 def train(args):
     exp_name = args.exp_name
     env_name = args.env_name
@@ -238,6 +253,12 @@ def train(args):
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
 
     hyperparameters.update(canon_params)
+
+    rew_term = hyperparameters.get("reward_termination", None)
+    if rew_term is not None:
+        if isinstance(rew_term, str) and rew_term=="get":
+            hyperparameters["reward_termination"] = get_rew_term(env_name)
+
 
     ###########
     ## AGENT ##
