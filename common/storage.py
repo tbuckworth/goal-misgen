@@ -20,6 +20,7 @@ class Storage():
         self.hidden_states_batch = torch.zeros(self.num_steps + 1, self.num_envs, *self.hidden_state_size)
         self.act_batch = torch.zeros(self.num_steps, self.num_envs)
         self.rew_batch = torch.zeros(self.num_steps, self.num_envs)
+        self.rew_backup = torch.zeros(self.num_steps, self.num_envs)
         self.done_batch = torch.zeros(self.num_steps, self.num_envs)
         self.log_prob_act_batch = torch.zeros(self.num_steps, self.num_envs)
         self.log_prob_eval_policy = torch.zeros(self.num_steps, self.num_envs)
@@ -45,15 +46,18 @@ class Storage():
         # self.disc_batch[self.step] = 1.
 
     def store(self, obs, hidden_state, act, rew, done, info, log_prob_act, value, logp_eval_policy=None, probs=None,
-              gamma=None):
+              gamma=None, entropy=None):
         self.obs_batch[self.step] = torch.from_numpy(obs.copy())
         self.hidden_states_batch[self.step] = torch.from_numpy(hidden_state.copy())
         self.act_batch[self.step] = torch.from_numpy(act.copy())
         self.rew_batch[self.step] = torch.from_numpy(rew.copy())
+        self.rew_backup[self.step] = torch.from_numpy(rew.copy())
         self.done_batch[self.step] = torch.from_numpy(done.copy())
         self.log_prob_act_batch[self.step] = torch.from_numpy(log_prob_act.copy())
         self.value_batch[self.step] = torch.from_numpy(value.copy())
         self.info_batch.append(info)
+        if entropy is not None:
+            self.rew_batch[self.step] += torch.from_numpy(entropy.copy())
         if gamma is not None:
             disc_rew = self.disc_batch * rew
             self.cum_returns += disc_rew
@@ -198,7 +202,7 @@ class Storage():
         yield obs_batch, hidden_state_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch
 
     def fetch_log_data(self):
-        return self.rew_batch.numpy(), self.done_batch.numpy()
+        return self.rew_backup.numpy(), self.done_batch.numpy()
         # Don't know why we were bothering with this?
         if 'env_reward' in self.info_batch[0][0]:
             rew_batch = []
