@@ -201,7 +201,7 @@ def ppo():
         "mirror_env": False,
         "use_valid_env": False,
         "anneal_temp": False,
-        "entropy_coef": [0, 0.02, 0.1, 0.2],
+        # "entropy_coef": [0, 0.02, 0.1, 0.2],
         "l1_coef": 0,
         "anneal_lr": False,
         "reward_termination": "get",
