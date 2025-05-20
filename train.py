@@ -45,6 +45,8 @@ def get_rew_term(env_name):
         return 9.9
     if env_name == "maze" or env_name == "maze_aisc":
         return 9.9
+    if env_name == "ascent":
+        return 9.9
     else:
         raise NotImplementedError(f"reward termination not implemented for {env_name}")
 
