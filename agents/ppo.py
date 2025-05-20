@@ -186,8 +186,9 @@ class PPO(BaseAgent):
             for _ in range(self.n_steps):
                 act, log_prob_act, value, next_hidden_state, entropy = self.predict(obs, hidden_state, done)
                 next_obs, rew, done, info = self.env.step(act)
-                rew = rew + (entropy * self.alpha_max_ent)
-                self.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
+                self.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value, entropy=entropy*self.alpha_max_ent)
+                obs = next_obs
+                hidden_state = next_hidden_state
                 obs = next_obs
                 hidden_state = next_hidden_state
             value_batch = self.storage.value_batch[:self.n_steps]
@@ -201,10 +202,9 @@ class PPO(BaseAgent):
                 for _ in range(self.n_steps):
                     act_v, log_prob_act_v, value_v, next_hidden_state_v, entropy_v = self.predict(obs_v, hidden_state_v, done_v)
                     next_obs_v, rew_v, done_v, info_v = self.env_valid.step(act_v)
-                    rew_v = rew_v + (entropy_v * self.alpha_max_ent)
                     self.storage_valid.store(obs_v, hidden_state_v, act_v,
                                              rew_v, done_v, info_v,
-                                             log_prob_act_v, value_v)
+                                             log_prob_act_v, value_v, entropy=entropy_v*self.alpha_max_ent)
                     obs_v = next_obs_v
                     hidden_state_v = next_hidden_state_v
                 _, _, last_val_v, hidden_state_v, entropy_v = self.predict(obs_v, hidden_state_v, done_v)
