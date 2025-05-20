@@ -135,6 +135,7 @@ cartpole-mlp:
     anneal_lr: False
     train_pct_ood: 0
     reward_termination: None
+    alpha_max_ent: 0.
 
 cartpole-mlp-tracked:
     algo: ppo-tracked

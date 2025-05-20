@@ -33,13 +33,13 @@ class PPO(BaseAgent):
                  l1_coef=0.,
                  anneal_lr=True,
                  reward_termination=None,
-                 max_ent=False,
+                 alpha_max_ent=0.,
                  **kwargs):
 
         super(PPO, self).__init__(env, policy, logger, storage, device,
                                   n_checkpoints, env_valid, storage_valid)
 
-        self.max_ent = max_ent
+        self.alpha_max_ent = alpha_max_ent
         self.reward_termination = reward_termination
         self.anneal_lr = anneal_lr
         self.l1_coef = l1_coef
@@ -186,7 +186,7 @@ class PPO(BaseAgent):
             for _ in range(self.n_steps):
                 act, log_prob_act, value, next_hidden_state, entropy = self.predict(obs, hidden_state, done)
                 next_obs, rew, done, info = self.env.step(act)
-                rew = rew + (entropy if self.max_ent else 0)
+                rew = rew + (entropy * self.alpha_max_ent)
                 self.storage.store(obs, hidden_state, act, rew, done, info, log_prob_act, value)
                 obs = next_obs
                 hidden_state = next_hidden_state
@@ -201,7 +201,7 @@ class PPO(BaseAgent):
                 for _ in range(self.n_steps):
                     act_v, log_prob_act_v, value_v, next_hidden_state_v, entropy_v = self.predict(obs_v, hidden_state_v, done_v)
                     next_obs_v, rew_v, done_v, info_v = self.env_valid.step(act_v)
-                    rew_v = rew_v + (entropy_v if self.max_ent else 0)
+                    rew_v = rew_v + (entropy_v * self.alpha_max_ent)
                     self.storage_valid.store(obs_v, hidden_state_v, act_v,
                                              rew_v, done_v, info_v,
                                              log_prob_act_v, value_v)
