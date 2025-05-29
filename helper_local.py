@@ -171,8 +171,14 @@ def get_goal_gen_policy(env_name):
         model_file = "logs/train/ascent/Ascent/2024-11-19__12-41-35__seed_6033"
     elif env_name == "cartpole":
         model_file = "logs/train/cartpole/cartpole/2025-01-30__02-56-56__seed_50"
+    elif env_name == "mountain_car":
+        raise NotImplementedError("haven't found one yet for mountain car")
+    elif env_name == "acrobot":
+        raise NotImplementedError("haven't found one yet for acrobot")
+    elif env_name == "cartpole_swing":
+        raise NotImplementedError("haven't found one yet for cartpole swing")
     else:
-        raise NotImplementedError("Have only done this for maze so far")
+        raise NotImplementedError(f"Haven't setup a goal generalizing policy for {env_name} yet")
     return get_model_with_largest_checkpoint(model_file)
 
 class DictToArgs:
