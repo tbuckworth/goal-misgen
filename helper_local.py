@@ -18,69 +18,64 @@ from common.env.procgen_wrappers import VecExtractDictObs, VecNormalize, Transpo
 from common.model import NatureModel, ImpalaModel, MlpModel
 from common.policy import CategoricalPolicy, CraftedTorchPolicy
 
+value_model_dirs = {
+    "uniform": {
+        "maze": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080",
+        "maze_aisc": "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080",
+        "coinrun": "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080",
+        "ascent": "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080",
+        "cartpole": "logs/train/cartpole/value/2025-04-11__14-38-53__seed_1080",
+        "mountain_car": "logs/train/mountain_car/value/2025-05-29__11-26-10__seed_1080",
+        "acrobot": "logs/train/acrobot/value/2025-05-29__13-06-53__seed_1080",
+        "cartpole_swing": None,
+    },
+    "tempered_gen": {
+        "maze": "logs/train/maze_aisc/value/2025-04-07__15-16-55__seed_1080",
+        "maze_aisc": "logs/train/maze_aisc/value/2025-04-07__15-16-55__seed_1080",
+        "coinrun": "logs/train/coinrun/value/2025-04-07__15-17-23__seed_1080",
+        "ascent": "logs/train/ascent/value/2025-04-07__15-46-20__seed_1080",
+        "cartpole": "logs/train/cartpole/value/2025-04-11__14-41-23__seed_1080",
+        "mountain_car": None,
+        "acrobot": None,
+        "cartpole_swing": None,
+
+    }
+}
+
 
 def get_value_dir_and_config_for_env(env_name, env_type, logdir=None, trusted_policy_name="uniform"):
-    assert env_type in ["Training","Validation"], f"{env_type} is not a valid type. Must be either 'Training' or 'Validation'"
+    assert env_type in ["Training",
+                        "Validation"], f"{env_type} is not a valid type. Must be either 'Training' or 'Validation'"
     if logdir is None:
-        if env_name == "ascent":
-            if trusted_policy_name == "uniform":
-                logdir = "logs/train/ascent/value/2024-12-16__14-35-03__seed_1080"
-            elif trusted_policy_name == "tempered_gen":
-                logdir = "logs/train/ascent/value/2025-04-07__15-46-20__seed_1080"
-            else:
-                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
-        elif env_name == "coinrun":
-            if trusted_policy_name == "uniform":
-                # Training looked ok
-                logdir = "logs/train/coinrun/value/2025-01-17__11-22-07__seed_1080"
-            elif trusted_policy_name == "tempered_gen":
-                logdir = "logs/train/coinrun/value/2025-04-07__15-17-23__seed_1080"
-            else:
-                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
-        elif env_name == "maze" or env_name == "maze_aisc":
-            if trusted_policy_name=="uniform":
-                # N.B. Training did look a bit funny
-                # logdir = "logs/train/maze_aisc/value/2025-01-17__12-20-25__seed_1080"
-                # value original:
-                logdir = "logs/train/maze_aisc/value/2024-11-23__10-38-36__seed_1080"
-                # raise NotImplementedError("Need to train value for maze")
-            elif trusted_policy_name=="tempered_gen":
-                # logdir = "logs/train/maze_aisc/value/2025-04-06__13-49-55__seed_1080"
-                logdir = "logs/train/maze_aisc/value/2025-04-07__15-16-55__seed_1080"
-            else:
-                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
-        elif env_name == "cartpole":
-            if trusted_policy_name == "uniform":
-                # corrected training procedure:
-                logdir = "logs/train/cartpole/value/2025-04-11__14-38-53__seed_1080"
-                # # 400 epochs, converged to 0.5 loss, seems legit...
-                # logdir = "logs/train/cartpole/value/2025-01-29__11-04-45__seed_1080"
-            elif trusted_policy_name == "tempered_gen":
-                # corrected training procedure:
-                logdir = "logs/train/cartpole/value/2025-04-11__14-41-23__seed_1080"
-                # logdir = "logs/train/cartpole/value/2025-04-07__15-47-33__seed_1080"
-            else:
-                raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
-        else:
-            raise NotImplementedError(f"{env_name} is not a recognised environment")
+        dir_dict = value_model_dirs.get(trusted_policy_name, None)
+        if dir_dict is None:
+            raise NotImplementedError(f"Trusted policy {trusted_policy_name} not implemented")
+        logdir = dir_dict.get(env_name, None)
+        if logdir is None:
+            raise NotImplementedError(f"{env_name} has no trained value model for trusted policy {trusted_policy_name}")
     elif logdir == "ppo":
         if env_name == "maze" or env_name == "maze_aisc":
             logdir = "logs/train/maze_aisc/value/2025-01-23__custom__seed_42"
+        else:
+            raise NotImplementedError(f"PPO not implemented for {env_name} - not really sure what this code is about")
     cfg = get_config(logdir)
     return cfg, os.path.join(logdir, env_type, "model_min_val_loss.pth")
+
 
 def create_unshifted_venv(args, hyperparameters):
     args.rand_region = 0
     args.random_percent = 0
     return create_venv(args, hyperparameters, False)
 
+
 def create_shifted_venv(args, hyperparameters):
     args.rand_region = 10
     args.random_percent = 10
     if args.env_name == "coinrun":
-        #This shouldn't be true in training?
+        # This shouldn't be true in training?
         args.val_env_name = "coinrun_aisc"
     return create_venv(args, hyperparameters, True)
+
 
 def create_venv(args, hyperparameters, is_valid=False):
     constructor = get_env_constructor(args.env_name)
@@ -162,6 +157,7 @@ def create_venv_render(args, hyperparameters, is_valid=False):
     venv = ScaledFloatFrame(venv)
     return venv
 
+
 def get_goal_gen_policy(env_name):
     if env_name in ["maze_aisc", "maze"]:
         model_file = "logs/train/maze_aisc/maze1/2024-11-25__15-28-05__seed_42/model_200015872.pth"
@@ -180,6 +176,7 @@ def get_goal_gen_policy(env_name):
     else:
         raise NotImplementedError(f"Haven't setup a goal generalizing policy for {env_name} yet")
     return get_model_with_largest_checkpoint(model_file)
+
 
 class DictToArgs:
     def __init__(self, input_dict):
@@ -217,7 +214,7 @@ def initialize_policy(device, hyperparameters, env, observation_shape):
         model = DictToArgs({"output_dim": 3})
         return model, policy
     elif architecture in ['trusted-value', 'trusted-value-unlimited']:
-        #TODO:
+        # TODO:
         policy = DictToArgs({"action_size": action_space.n})
         model = DictToArgs({"output_dim": 3})
         return model, policy
@@ -293,15 +290,15 @@ def get_model_with_largest_checkpoint(folder):
 
 
 norm_funcs = {
-            "l1_norm": lambda x: x / x.abs().mean(),
-            "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
-            "linf_norm": lambda x: x / x.abs().max(),
-        }
+    "l1_norm": lambda x: x / x.abs().mean(),
+    "l2_norm": lambda x: x / x.pow(2).mean().sqrt(),
+    "linf_norm": lambda x: x / x.abs().max(),
+}
 
 dist_funcs = {
-            "l1_dist": lambda x, y: (x - y).abs().mean(),
-            "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
-        }
+    "l1_dist": lambda x, y: (x - y).abs().mean(),
+    "l2_dist": lambda x, y: (x - y).pow(2).mean().sqrt(),
+}
 
 
 def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
@@ -309,7 +306,7 @@ def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
     flt = vo[:, 1] > vo[:, 3]
     import matplotlib.pyplot as plt
     # if flt.sum() != (~flt).sum():
-    plt.scatter(vo[flt, 3].cpu().numpy(), vo[flt, 0].cpu().numpy(),label="Mirrored")
+    plt.scatter(vo[flt, 3].cpu().numpy(), vo[flt, 0].cpu().numpy(), label="Mirrored")
     plt.scatter(vo[~flt, 3].cpu().numpy(), vo[~flt, 0].cpu().numpy(), label="Standard")
     plt.ylabel("Value")
     plt.xlabel("State")
@@ -321,7 +318,8 @@ def plot_values_ascender(logdir, obs_batch, val_batch, epoch):
     # plt.scatter(vo[~flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
     # plt.scatter(vo[flt, 0].cpu().numpy(), vo[flt, 0].cpu().numpy())
     # plt.show()
-    vo = torch.concat((val_batch.unsqueeze(-1), target.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(decimals=2)
+    vo = torch.concat((val_batch.unsqueeze(-1), target.unsqueeze(-1), obs_batch), dim=-1).unique(dim=0).round(
+        decimals=2)
     flt = vo[:, 1] > vo[:, 3]
     import matplotlib.pyplot as plt
     # if flt.sum() != (~flt).sum():
@@ -338,12 +336,14 @@ def remove_duplicate_actions(dist, acts, venv):
     new_probs, new_acts = group_by(dist.probs, acts, action_names, venv)
     return Categorical(probs=new_probs), new_acts
 
+
 def match(a, b, dtype=np.int32):
     if len(a.shape) > 1:
         return np.array([match(x, b) for x in a], dtype=dtype)
     a = a.tolist()
     b = b.tolist()
     return np.array([b.index(x) for x in a if x in b], dtype=dtype)
+
 
 def group_by(tensor, acts, group_labels, venv):
     # Step 1: Create a mapping of group labels to indices
