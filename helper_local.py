@@ -381,3 +381,20 @@ def get_seed(model_file):
     except Exception as e:
         print("seed not found, using 42")
         return 42
+
+
+def get_rew_term(env_name):
+    if env_name == "cartpole" or env_name == "cartpole_swing":
+        return 495
+    if env_name == "mountain_car":
+        return -100
+    if env_name == "acrobot":
+        return -100
+    if env_name == "coinrun":
+        return 9.9
+    if env_name == "maze" or env_name == "maze_aisc":
+        return 9.9
+    if env_name == "ascent":
+        return 9.9
+    else:
+        raise NotImplementedError(f"reward termination not implemented for {env_name}")

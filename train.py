@@ -14,7 +14,7 @@ import torch
 from discrete_env.stacked_env import StackedEnv
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
     create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv, get_model_with_largest_checkpoint, \
-    load_tempered_policy
+    load_tempered_policy, get_rew_term
 
 try:
     import wandb
@@ -32,23 +32,6 @@ def load_ppo_value_models(env_name, env, observation_shape, device, val_type):
     cfg = get_config(value_dir)
     _, policy = initialize_policy(device, cfg, env, observation_shape)
     return policy, get_model_with_largest_checkpoint(value_dir)
-
-
-def get_rew_term(env_name):
-    if env_name == "cartpole" or env_name == "cartpole_swing":
-        return 495
-    if env_name == "mountain_car":
-        return -100
-    if env_name == "acrobot":
-        return -100
-    if env_name == "coinrun":
-        return 9.9
-    if env_name == "maze" or env_name == "maze_aisc":
-        return 9.9
-    if env_name == "ascent":
-        return 9.9
-    else:
-        raise NotImplementedError(f"reward termination not implemented for {env_name}")
 
 
 def train(args):
