@@ -1,9 +1,10 @@
 import copy
 
+from common.diffusion import DDPM, LatentDiffusionModel
 from common.env.procgen_wrappers import *
 from common.logger import Logger
 from common.model import RewValModel, NextRewModel, MlpModelNoFinalRelu, ImpalaValueModel
-from common.policy import UniformPolicy, CraftedTorchPolicy, ValuePolicyWrapper
+from common.policy import UniformPolicy, CraftedTorchPolicy, ValuePolicyWrapper, DiffusionPolicy
 from common.storage import Storage, LirlStorage
 from common import set_global_seeds, set_global_log_levels
 
@@ -135,6 +136,7 @@ def train(args):
     pre_trained_value_encoder = hyperparameters.get("pre_trained_value_encoder", False)
     is_impala = hyperparameters.get("architecture", "impala")=="impala"
     storage_override = (256,) if (pre_trained_value_encoder and is_impala) else None
+    storage_override = (2048,) if algo == 'latent-diffusion' else storage_override
     storage, storage_valid, storage_trusted, storage_trusted_val = initialize_storage(device, model, n_envs, n_steps,
                                                                                       observation_shape, algo, act_shape, storage_override)
 
@@ -162,7 +164,7 @@ def train(args):
             rew_lr=rew_lr,
         )
         hyperparameters.update(ppo_lirl_params)
-    canon_params = {}
+    extra_params = {}
     if algo in ['canon', 'trusted-value', 'trusted-value-unlimited']:
         trusted_policy_name = hyperparameters.get("trusted_policy", "uniform")
         if not ppo_value:
@@ -213,7 +215,7 @@ def train(args):
         else:
             raise NotImplementedError
 
-        canon_params = dict(
+        extra_params = dict(
             value_model=value_model,
             value_model_val=value_model_val,
             storage_trusted=storage_trusted,
@@ -223,6 +225,12 @@ def train(args):
             value_model_logp_val=value_model_logp_val,
             q_model=q_model,
             q_model_val=q_model_val,
+        )
+    elif algo == "latent-diffusion":
+        latent_dim = storage_override[0] #TODO: systematize this - what should it be?
+        diffusion_policy = DiffusionPolicy(policy, latent_dim)
+        extra_params = dict(
+            diffusion_policy=diffusion_policy,
         )
 
     cfg = vars(args)
@@ -237,7 +245,7 @@ def train(args):
         wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
 
-    hyperparameters.update(canon_params)
+    hyperparameters.update(extra_params)
 
     rew_term = hyperparameters.get("reward_termination", None)
     if rew_term is not None:
@@ -255,7 +263,8 @@ def train(args):
         print("Loading agent from %s" % args.model_file)
         checkpoint = torch.load(args.model_file)
         agent.policy.load_state_dict(checkpoint["model_state_dict"])
-        agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if algo != "latent-diffusion":
+            agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     if hyperparameters.get("load_value_models", False):
         checkpoint = torch.load(value_dir)
@@ -348,6 +357,8 @@ def initialize_storage(device, model, n_envs, n_steps, observation_shape, algo, 
     storage_cons = Storage
     if algo in ['ppo-lirl', 'canon', 'trusted-value', 'trusted-value-unlimited', 'ppo-tracked']:
         storage_cons = LirlStorage
+    if algo in ['latent-diffusion']:
+        hidden_state_dim = storage_override
     storage = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
     storage_valid = storage_cons(observation_shape, hidden_state_dim, n_steps, n_envs, device, act_shape)
     hidden_state_dim = (storage_override or hidden_state_dim)
@@ -375,6 +386,8 @@ def initialize_agent(device, env, env_valid, hyperparameters, logger, num_checkp
         from agents.ppo_uniform import PPO_Uniform as AGENT
     elif algo == 'ppo-tracked':
         from agents.ppo_tracked import PPO_Tracked as AGENT
+    elif algo == 'latent-diffusion':
+        from agents.latent_diffusion import LatentDiffusion as AGENT
     else:
         raise NotImplementedError
     agent = AGENT(env, policy, logger, storage, device,

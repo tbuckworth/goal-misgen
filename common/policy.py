@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from scipy.special import log_softmax
 
+from .diffusion import DDPM, LatentDiffusionModel
 from .misc_util import orthogonal_init
 from .model import GRU
 import torch.nn as nn
@@ -56,12 +57,29 @@ class CategoricalPolicy(nn.Module):
         v = self.fc_value(hidden).reshape(-1)
         return p, v, hidden
 
+    def forward_to_latents(self, x):
+        return self.embedder.forward_to_latents(x)
+
+    def forward_from_latents(self, latents):
+        hidden = self.embedder.forward_from_latents(latents)
+        logits = self.fc_policy(hidden) / self.T
+        log_probs = F.log_softmax(logits, dim=1)
+        p = Categorical(logits=log_probs)
+        v = self.fc_value(hidden).reshape(-1)
+        return p, v, latents
+
+    def forward_with_latents(self, x):
+        latents = self.forward_to_latents(x)
+        return self.forward_from_latents(latents)
+
 
 class DiffusionPolicy(nn.Module):
-    def __init__(self, policy, diffusion_model):
+    def __init__(self, policy, latent_dim):
         self.policy = policy
         self.T = 1.
-        self.diffusion_model = diffusion_model
+        self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim))
+        self.device = policy.device
+        self.diffusion_model.to(self.device)
         super(DiffusionPolicy, self).__init__()
 
     def denoise(self, latents):
@@ -74,15 +92,13 @@ class DiffusionPolicy(nn.Module):
         return self.forward_from_latents(denoised_latents)
 
     def forward_to_latents(self, x):
-        return self.policy.embedder.forward_to_latents(x)
+        return self.policy.forward_to_latents(x)
 
     def forward_from_latents(self, latents):
-        hidden = self.policy.embedder.forward_from_latents(latents)
-        logits = self.fc_policy(hidden) / self.T
-        log_probs = F.log_softmax(logits, dim=1)
-        p = Categorical(logits=log_probs)
-        v = self.fc_value(hidden).reshape(-1)
-        return p, v, latents
+        return self.policy.forward_from_latents(latents)
+
+    def forward_with_latents(self, x):
+        return self.forward(x)
 
 
 class ValuePolicyWrapper(nn.Module):
