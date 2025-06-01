@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 from scipy import stats
 from scipy.stats import linregress
 
+from canon_clean import configs
+
 try:
     import wandb
     from private_login import wandb_login
@@ -74,7 +76,7 @@ run_names = [
 
 
 
-def plot_env_data(df):
+def plot_env_data(df, suptitle):
     """
     Create a figure with one row per unique env_name and three columns:
       1) PIRC (plots L2_L2_Train and L2_L2_Valid vs Return_Valid),
@@ -115,26 +117,31 @@ def plot_env_data(df):
             ax = axes[i, j]
 
             # Extract x & y
-            x = env_data["Return_Valid"].values
-            y_train = env_data[train_col].values
-            y_valid = env_data[valid_col].values
-
+            x = env_data["Return_Valid"].values.astype(float)
+            y_train = env_data[train_col].values.astype(float)
+            y_valid = env_data[valid_col].values.astype(float)
             # Scatter for Train (blue)
             ax.scatter(x, y_train, label=None, color='blue', alpha=0.6)
             # Fit line (Train)
-            slope, intercept, r_val, p_val, _ = linregress(x, y_train)
-            line_x = np.linspace(x.min(), x.max(), 100)
-            line_y = slope * line_x + intercept
-            ax.plot(line_x, line_y, '--', color='blue',
-                    label=f"Train $R^2$={r_val ** 2:.2f}")#, P-Val={p_val:.2g}")
+            try:
+                slope, intercept, r_val, p_val, _ = linregress(x, y_train)
+                line_x = np.linspace(x.min(), x.max(), 100)
+                line_y = slope * line_x + intercept
+                ax.plot(line_x, line_y, '--', color='blue',
+                        label=f"Train $R^2$={r_val ** 2:.2f}")#, P-Val={p_val:.2g}")
+            except ValueError:
+                print(f"skipping regression for {env}")
 
             # Scatter for Valid (red)
             ax.scatter(x, y_valid, label=None, color='red', alpha=0.6)
             # Fit line (Valid)
-            slope, intercept, r_val, p_val, _ = linregress(x, y_valid)
-            line_y = slope * line_x + intercept
-            ax.plot(line_x, line_y, '--', color='red',
-                    label=f"Valid $R^2$={r_val ** 2:.2f}, P-Val={p_val:.2g}")
+            try:
+                slope, intercept, r_val, p_val, _ = linregress(x, y_valid)
+                line_y = slope * line_x + intercept
+                ax.plot(line_x, line_y, '--', color='red',
+                        label=f"Valid $R^2$={r_val ** 2:.2f}, P-Val={p_val:.2g}")
+            except ValueError:
+                print(f"skipping regression for {env}")
 
             # Titles and labels
             if i == 0:
@@ -147,9 +154,11 @@ def plot_env_data(df):
 
             ax.legend()
 
+    fig.suptitle(suptitle)
     plt.tight_layout()
     plt.savefig(f"data/{'_'.join(df.tags.unique())}.png")
     plt.show()
+    print("done")
 
 
 def graph_wandb_res():
@@ -681,21 +690,28 @@ def get_summary():
         load_summary(env=tag, tag=tag)
 
 
-def create_all_graphs():
-    tags = ["new cartpole uniform", "new ascent uniform no inf"]
+def create_all_graphs(title = "soft_inf"):
+
+
+    envs = ["cartpole", "acrobot","mountain_car"]
+    ids = [6556, 5145, 171]
+    # tags = ["cartpole_soft_no_inf_6556", "acrobot_soft_no_inf_5145", "mountain_car_soft_no_inf_171"]
+    # tags = ["cartpole_soft_inf_6556", "acrobot_soft_inf_5145", "mountain_car_soft_inf_171"]
+    tags = [f"{env}_{title}_{id}" for env, id in zip(envs, ids)]
     train_dist_metric = "L2_L2_Train"
     val_dist_metric = "L2_L2_Valid"
     meg_adj = False
-    min_train_reward = 0 # ?
+    min_train_reward = -1000 # ?
     exclude_crafted = True
     df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
         exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric)
-    plot_env_data(df)
+    plot_env_data(df, title)
 
 
 
 if __name__ == "__main__":
-    create_all_graphs()
+    for suptitle in configs.keys():
+        create_all_graphs(suptitle)
     # load_all("Coinrun_Soft_Inf")
     # load_meg(["Ascent_Meg_KL5"])
     # tag = "new maze tempered loaded"
