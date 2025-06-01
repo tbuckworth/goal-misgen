@@ -126,7 +126,7 @@ class DDPM(nn.Module):
 
     # --- in DDPM ---------------------------------------------------------------
     @torch.no_grad()
-    def denoise(self, x_t: torch.Tensor, t) -> torch.Tensor:
+    def denoise(self, x_t: torch.Tensor, t: int) -> torch.Tensor:
         """
         Single-shot estimate of the clean latent x0 given a noisy x_t.
         t can be an int (same for the whole batch) or a (B,) LongTensor.

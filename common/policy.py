@@ -82,8 +82,13 @@ class DiffusionPolicy(nn.Module):
         self.diffusion_model.to(self.device)
         super(DiffusionPolicy, self).__init__()
 
-    def denoise(self, latents):
-        return self.diffusion_model.denoise(latents)
+    def denoise(self, latents, t_level: int = 25):
+        """
+        Treat `latents` as if they were observed at diffusion step `t_level`
+        (0 ≤ t < ddpm.n_steps) and return the estimated clean version.
+        Lower t_level → less denoising, higher → more.
+        """
+        return self.diffusion_model.denoise(latents, t_level)
 
     def forward(self, x, hx=None, masks=None):
         latents = self.forward_to_latents(x)
