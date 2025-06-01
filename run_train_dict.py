@@ -84,6 +84,9 @@ if __name__ == '__main__':
         "num_timesteps": 200000000,
         "num_checkpoints": 5,
         "seed": 6033,
+        "epoch": 10,
+        "num_levels": 1000,
+        "distribution_mode": "hard",
         "use_wandb": True,
         "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033"),
     }
