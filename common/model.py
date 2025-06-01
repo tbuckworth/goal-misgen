@@ -182,7 +182,18 @@ class ImpalaModel(nn.Module):
         x = nn.ReLU()(x)
         return x
 
+    def forward_to_latents(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = nn.ReLU()(x)
+        x = Flatten()(x)
+        return x
 
+    def forward_from_latents(self, x):
+        x = self.fc(x)
+        x = nn.ReLU()(x)
+        return x
 
 
 class GRU(nn.Module):

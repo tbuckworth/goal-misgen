@@ -8,15 +8,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical, Normal
 
+
 class CategoricalPolicy(nn.Module):
-    def __init__(self, 
+    def __init__(self,
                  embedder,
                  recurrent,
                  action_size):
         """
         embedder: (torch.Tensor) model to extract the embedding for observation
         action_size: number of the categorical actions
-        """ 
+        """
         super(CategoricalPolicy, self).__init__()
         self.T = 1.
         self.embedder = embedder
@@ -36,7 +37,7 @@ class CategoricalPolicy(nn.Module):
         hidden = self.embedder(x)
         if self.recurrent:
             hidden, hx = self.gru(hidden, hx, masks)
-        logits = self.fc_policy(hidden)/self.T
+        logits = self.fc_policy(hidden) / self.T
         log_probs = F.log_softmax(logits, dim=1)
         p = Categorical(logits=log_probs)
         v = self.fc_value(hidden).reshape(-1)
@@ -46,14 +47,43 @@ class CategoricalPolicy(nn.Module):
         hidden = self.embedder(x)
         v = self.fc_value(hidden).reshape(-1)
         return v
-    
+
     def forward_with_embedding(self, x):
         hidden = self.embedder(x)
-        logits = self.fc_policy(hidden)/self.T
+        logits = self.fc_policy(hidden) / self.T
         log_probs = F.log_softmax(logits, dim=1)
         p = Categorical(logits=log_probs)
         v = self.fc_value(hidden).reshape(-1)
         return p, v, hidden
+
+
+class DiffusionPolicy(nn.Module):
+    def __init__(self, policy, diffusion_model):
+        self.policy = policy
+        self.T = 1.
+        self.diffusion_model = diffusion_model
+        super(DiffusionPolicy, self).__init__()
+
+    def denoise(self, latents):
+        # TODO: implement diffusion model
+        return latents
+
+    def forward(self, x, hx=None, masks=None):
+        latents = self.forward_to_latents(x)
+        denoised_latents = self.denoise(latents)
+        return self.forward_from_latents(denoised_latents)
+
+    def forward_to_latents(self, x):
+        return self.policy.embedder.forward_to_latents(x)
+
+    def forward_from_latents(self, latents):
+        hidden = self.policy.embedder.forward_from_latents(latents)
+        logits = self.fc_policy(hidden) / self.T
+        log_probs = F.log_softmax(logits, dim=1)
+        p = Categorical(logits=log_probs)
+        v = self.fc_value(hidden).reshape(-1)
+        return p, v, latents
+
 
 class ValuePolicyWrapper(nn.Module):
     def __init__(self, policy):
@@ -62,6 +92,7 @@ class ValuePolicyWrapper(nn.Module):
 
     def forward(self, x):
         return self.policy.value(x)
+
 
 class UniformPolicy(nn.Module):
     def __init__(self, action_size, device, input_dims=1):
@@ -96,7 +127,7 @@ class UniformPolicy(nn.Module):
 
 
 class PolicyWrapperIRL(nn.Module):
-    def __init__(self,policy, device):
+    def __init__(self, policy, device):
         super(PolicyWrapperIRL, self).__init__()
         self.policy = policy
         self.device = device
@@ -139,6 +170,7 @@ class CraftedPolicy:
         p = np.exp(logits)
         return np.random.choice([-1, 1], p=p)
 
+
 class CraftedTorchPolicy(nn.Module):
     def __init__(self, misgen, action_size, device, input_dims=1):
         super(CraftedTorchPolicy, self).__init__()
@@ -169,7 +201,7 @@ class CraftedTorchPolicy(nn.Module):
         return hidden @ self.actor
 
     def fc_value(self, hidden):
-        return torch.ones((*hidden.shape[:-1],1)).to(self.device)
+        return torch.ones((*hidden.shape[:-1], 1)).to(self.device)
 
     def forward(self, x, hx, masks):
         hidden = self.embed(x)
