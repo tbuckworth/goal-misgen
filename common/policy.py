@@ -75,12 +75,13 @@ class CategoricalPolicy(nn.Module):
 
 class DiffusionPolicy(nn.Module):
     def __init__(self, policy, latent_dim):
+        super(DiffusionPolicy, self).__init__()
         self.policy = policy
         self.T = 1.
         self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim))
+        #TODO: init diffusion_model?
         self.device = policy.device
         self.diffusion_model.to(self.device)
-        super(DiffusionPolicy, self).__init__()
 
     def denoise(self, latents, t_level: int = 25):
         """
