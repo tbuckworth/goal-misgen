@@ -108,6 +108,9 @@ class LatentDiffusion(BaseAgent):
 
         summary = {
             'Loss/total': np.mean(total_loss_list),
+            "loss/pi": np.nan,
+            "loss/value": np.nan,
+            "loss/entropy": np.nan,
             'Loss/l1_reg': np.mean(l1_reg_list)
         }
         return summary

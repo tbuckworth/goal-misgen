@@ -229,6 +229,7 @@ def train(args):
     elif algo == "latent-diffusion":
         latent_dim = storage_override[0] #TODO: systematize this - what should it be?
         diffusion_policy = DiffusionPolicy(policy, latent_dim)
+        diffusion_policy.to(device)
         extra_params = dict(
             diffusion_policy=diffusion_policy,
         )

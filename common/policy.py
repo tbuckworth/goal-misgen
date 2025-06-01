@@ -80,8 +80,7 @@ class DiffusionPolicy(nn.Module):
         self.T = 1.
         self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim))
         #TODO: init diffusion_model?
-        self.device = policy.device
-        self.diffusion_model.to(self.device)
+
 
     def denoise(self, latents, t_level: int = 25):
         """
