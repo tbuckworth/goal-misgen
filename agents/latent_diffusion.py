@@ -92,6 +92,7 @@ class LatentDiffusion(BaseAgent):
                 dist_batch, value_batch, _ = self.policy(obs_batch, hidden_state_batch, mask_batch)
 
                 #TODO: this is just boilerplate at this point:
+
                 # 1.  Collect a buffer of latent vectors from your trained policy.
                 latents = torch.stack(collected_latents)  # (N, latent_dim)
 
@@ -110,6 +111,27 @@ class LatentDiffusion(BaseAgent):
                 # 5.  Plug into your DiffusionPolicy:
                 policy = ...  # pre-trained RL policy
                 diffusion_policy = DiffusionPolicy(policy, ddpm)
+
+                for epoch in range(1, epochs + 1):
+                    total_loss = 0.0
+                    for x0 in loader:
+                        x0 = x0.to(device)
+                        t = torch.randint(0, model.n_steps, (x0.size(0),),
+                                          device=device, dtype=torch.long)
+
+                        loss = model.p_losses(x0, t)
+
+                        optim.zero_grad()
+                        loss.backward()
+                        if grad_clip is not None:
+                            nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                        optim.step()
+
+                        total_loss += loss.item() * x0.size(0)
+
+                    mean_loss = total_loss / len(loader.dataset)
+                    print(f"[{epoch}/{epochs}]  loss={mean_loss:.4f}")
+
 
 
 
