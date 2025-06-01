@@ -83,8 +83,7 @@ class DiffusionPolicy(nn.Module):
         super(DiffusionPolicy, self).__init__()
 
     def denoise(self, latents):
-        # TODO: implement diffusion model
-        return latents
+        return self.diffusion_model.denoise(latents)
 
     def forward(self, x, hx=None, masks=None):
         latents = self.forward_to_latents(x)

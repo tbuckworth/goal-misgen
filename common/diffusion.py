@@ -124,6 +124,30 @@ class DDPM(nn.Module):
             x = self.p_sample(x, t)
         return x
 
+    # --- in DDPM ---------------------------------------------------------------
+    @torch.no_grad()
+    def denoise(self, x_t: torch.Tensor, t) -> torch.Tensor:
+        """
+        Single-shot estimate of the clean latent x0 given a noisy x_t.
+        t can be an int (same for the whole batch) or a (B,) LongTensor.
+        """
+        if isinstance(t, int):
+            t = torch.full((x_t.size(0),), t, device=x_t.device, dtype=torch.long)
+
+        eps_pred = self.model(x_t, t)  # ε̂_θ(x_t, t)
+
+        alpha_bar = self.alphas_cum[t]  # (B,)
+        sqrt_ab = torch.sqrt(alpha_bar)
+        sqrt_1mab = torch.sqrt(1.0 - alpha_bar)
+
+        while sqrt_ab.dim() < x_t.dim():  # broadcast to x_t shape
+            sqrt_ab = sqrt_ab.unsqueeze(-1)
+            sqrt_1mab = sqrt_1mab.unsqueeze(-1)
+
+        x0_hat = (x_t - sqrt_1mab * eps_pred) / sqrt_ab
+        return x0_hat
+
+
 # ------------------------------------------------------------
 # Simple latent replay buffer
 # ------------------------------------------------------------

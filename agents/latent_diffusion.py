@@ -73,7 +73,7 @@ class LatentDiffusion(BaseAgent):
         return act.cpu().numpy(), log_prob_act.cpu().numpy(), value.cpu().numpy(), latents.cpu().numpy(), dist.entropy().cpu().numpy()
 
     def optimize(self):
-        pi_loss_list, value_loss_list, entropy_loss_list, l1_reg_list, total_loss_list = [], [], [], [], []
+        l1_reg_list, total_loss_list = [], []
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -86,11 +86,10 @@ class LatentDiffusion(BaseAgent):
             generator = self.storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                            recurrent=recurrent)
             for sample in generator:
-                obs_batch, hidden_state_batch, act_batch, done_batch, \
+                obs_batch, latent_batch, act_batch, done_batch, \
                     old_log_prob_act_batch, old_value_batch, return_batch, adv_batch = sample
 
-                latents = hidden_state_batch  # TODO: figure this out and rename
-                x0 = latents.to(self.device)
+                x0 = latent_batch.to(self.device)
                 t = torch.randint(0, self.ddpm.n_steps, (x0.size(0),),
                                   device=self.device, dtype=torch.long)
 
