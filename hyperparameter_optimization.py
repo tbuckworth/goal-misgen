@@ -303,6 +303,7 @@ def latent_diffusion_search():
         "exp_name": "diffusion",
         "env_name": "coinrun",
         "param_name": "latent-diffusion",
+        "wandb_tags": ["lat-diff"],
         "num_timesteps": 10000000,
         "num_checkpoints": 5,
         "seed": 6033,
