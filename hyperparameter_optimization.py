@@ -297,6 +297,28 @@ def canon_search():
     bounds = {}
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards")
 
+def latent_diffusion_search():
+    fixed = {
+        "algo": "latent-diffusion",
+        "exp_name": "diffusion",
+        "env_name": "coinrun",
+        "param_name": "latent-diffusion",
+        "num_timesteps": 10000000,
+        "num_checkpoints": 5,
+        "seed": 6033,
+        # "epoch": 10,
+        "num_levels": 1000,
+        "distribution_mode": "hard",
+        "use_wandb": True,
+        "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033"),
+    }
+    bounds = {
+        "epoch": [3, 100],
+        "learning_rate": [1e-6, 1e-3],
+    }
+    run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.val_mean_episode_rewards")
+
+
 
 if __name__ == "__main__":
-    ppo()
+    latent_diffusion_search()
