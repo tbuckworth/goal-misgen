@@ -80,7 +80,6 @@ class DiffusionPolicy(nn.Module):
         self.T = 1.
         self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim))
         self.diffusion_model.apply(xavier_uniform_init)
-        #TODO: init diffusion_model?
 
 
     def denoise(self, latents, t_level: int = 25):
