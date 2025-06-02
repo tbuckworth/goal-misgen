@@ -3,7 +3,7 @@ import torch
 from scipy.special import log_softmax
 
 from .diffusion import DDPM, LatentDiffusionModel
-from .misc_util import orthogonal_init
+from .misc_util import orthogonal_init, xavier_uniform_init
 from .model import GRU
 import torch.nn as nn
 import torch.nn.functional as F
@@ -79,6 +79,7 @@ class DiffusionPolicy(nn.Module):
         self.policy = policy
         self.T = 1.
         self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim))
+        self.diffusion_model.apply(xavier_uniform_init)
         #TODO: init diffusion_model?
 
 
