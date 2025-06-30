@@ -13,12 +13,12 @@ from train import create_stacked_env
 class BaseDiscreteEnvTest(unittest.TestCase):
     def setUp(cls) -> None:
         cls.env_cons = get_env_constructor(cls.env_name)
-        cls.env = cls.env_cons(DictToArgs({"render": "human", "seed": 0}), {"max_steps": 30, "drop_same": True},
+        cls.env = cls.env_cons(DictToArgs({"render": "human", "seed": 0}), {"n_envs": 24, "max_steps": 30, "drop_same": True},
                                False)
         cls.env.reset(seed=np.random.randint(0, 1000))
 
     def run_step(self):
-        for i in range(100):
+        for i in range(1000):
             actions = [self.env.action_space.sample() for _ in range(self.env.num_envs)]
             # actions = [0 for _ in range(self.env.n_envs)]
             obs, rew, done, info = self.env.step(actions)
@@ -62,6 +62,13 @@ class TestCartpoleSwing(BaseDiscreteEnvTest):
     def test_step(self):
         self.run_step()
 
+class TestCobras(BaseDiscreteEnvTest):
+    def setUp(cls) -> None:
+        cls.env_name = "cobras"
+        super(TestCobras, cls).setUp()
+
+    def test_step(self):
+        self.run_step()
 
 class TestStackedCartpole(BaseDiscreteEnvTest):
 

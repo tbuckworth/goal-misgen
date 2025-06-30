@@ -2,30 +2,22 @@ import numpy as np
 
 
 class StartSpace:
-    def __init__(self, low, high, np_random, condition=None):
+    def __init__(self, low, high, np_random, condition=None, discrete_space=False):
         assert len(low) == len(high), "low and high must be the same length"
         self.low = np.array(low)
         self.high = np.array(high)
         self._np_random = np_random
         self.n_inputs = len(low)
         self.condition = condition
-
-    # def sample(self, n):
-    #     x = self._np_random.uniform(low=self.low, high=self.high, size=(n, self.n_inputs))
-    #     if self.condition is not None:
-    #         x[self.condition(x)==False] = 0
-    #         while len(x) < n:
-    #             z = self.sample(n)
-    #
-    #         while np.any(flt):
-    #             z = self.sample(n)
-    #             z = z[self.condition(z) == False]
-    #             while len(z)< np.sum(flt):
-    #
-    #             x[flt] = self.sample(n)[flt]
-    #     return x
+        self.discrete_space = discrete_space
 
     def sample(self, n):
+        x = self.sample_floats(n)
+        if self.discrete_space:
+            return np.round(x).astype(int)
+        return x
+
+    def sample_floats(self, n):
         if self.condition is None:
             return self._np_random.uniform(low=self.low, high=self.high, size=(n, self.n_inputs))
 
@@ -38,7 +30,7 @@ class StartSpace:
         return x[0:n]
 
 
-    def set_np_random(self, np_random):
+    def set_np_random(self, np_random: np.random.Generator):
         self._np_random = np_random
 
 

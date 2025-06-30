@@ -6,6 +6,7 @@ from common.env.mujoco_wrappers import create_mujoco
 from discrete_env.acrobot_pre_vec import create_acrobot
 from discrete_env.cartpole_pre_vec import create_cartpole, create_cartpole_continuous
 from discrete_env.cartpole_swing_pre_vec import create_cartpole_swing
+from discrete_env.cobras import create_cobras
 from discrete_env.mountain_car_pre_vec import create_mountain_car
 from discrete_env.pre_vec_wrappers import DeVecEnvWrapper, PetsWrapper
 
@@ -22,6 +23,8 @@ def get_env_constructor(env_name):
         create_venv = create_mountain_car
     elif env_name == "acrobot":
         create_venv = create_acrobot
+    elif env_name == "cobras":
+        create_venv = create_cobras
     elif env_name == "lunar_lander":
         raise NotImplementedError
     elif re.search("-v", env_name):
