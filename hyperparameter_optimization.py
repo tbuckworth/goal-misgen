@@ -190,13 +190,13 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": ['mountain_car', 'acrobot', 'cartpole_swing', 'cartpole', 'ascent'],
+        "env_name": ['cobras'],#['mountain_car', 'acrobot', 'cartpole_swing', 'cartpole', 'ascent'],
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
         "num_timesteps": int(5e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["gen_misgen", "max_ent2"],
+        "wandb_tags": ["cb0"],#["gen_misgen", "max_ent2"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": False,
@@ -206,8 +206,8 @@ def ppo():
         "anneal_lr": False,
         "reward_termination": "get",
         # "reward_termination": 495,
-        "train_pct_ood": [0, 0, 0, 0, 0.01, 0.1, 0.25, 0.5],
-        "alpha_max_ent": [0.5, 1., 2.],
+        "train_pct_ood": 0,#[0, 0, 0, 0, 0.01, 0.1, 0.25, 0.5],
+        "alpha_max_ent": [0.0, 0.5, 1., 2.],
         # "hid_dims": [],
         # "dense_rewards": False,
         # "num_rew_updates": 1,
@@ -322,4 +322,4 @@ def latent_diffusion_search():
 
 
 if __name__ == "__main__":
-    latent_diffusion_search()
+    ppo()
