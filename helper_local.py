@@ -396,5 +396,7 @@ def get_rew_term(env_name):
         return 9.9
     if env_name == "ascent":
         return 9.9
+    if env_name == "cobras":
+        return 1e6
     else:
         raise NotImplementedError(f"reward termination not implemented for {env_name}")

@@ -162,6 +162,8 @@ def optimize_hyperparams(bounds,
     hparams.update(string_select)
 
     hparams = {k: int(v) if isinstance(v, np.int64) else v for k, v in hparams.items()}
+    #TODO: remove this!
+    run_next(hparams)
     try:
         run_next(hparams)
     except Exception as e:
@@ -204,7 +206,7 @@ def ppo():
         # "entropy_coef": [0, 0.02, 0.1, 0.2],
         "l1_coef": 0,
         "anneal_lr": False,
-        "reward_termination": "get",
+        # "reward_termination": "get",
         # "reward_termination": 495,
         "train_pct_ood": 0,#[0, 0, 0, 0, 0.01, 0.1, 0.25, 0.5],
         "alpha_max_ent": [0.0, 0.5, 1., 2.],
