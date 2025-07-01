@@ -97,6 +97,8 @@ class LatentDiffusion(BaseAgent):
 
                 l1_reg = sum([param.abs().sum() for param in self.ddpm.parameters()])
 
+                loss.backwards()
+
                 # Let ddpm to handle the large batch-size with small gpu-memory
                 if grad_accumulation_cnt % grad_accumulation_steps == 0:
                     torch.nn.utils.clip_grad_norm_(self.ddpm.parameters(), self.grad_clip_norm)

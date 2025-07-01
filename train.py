@@ -250,7 +250,7 @@ def train(args):
 
     rew_term = hyperparameters.get("reward_termination", None)
     if rew_term == 'None':
-        rew_term = None
+        hyperparameters["reward_termination"] = None
     if rew_term is not None:
         if isinstance(rew_term, str) and rew_term=="get":
             hyperparameters["reward_termination"] = get_rew_term(env_name)
