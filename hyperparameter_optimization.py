@@ -305,7 +305,7 @@ def latent_diffusion_search():
         "exp_name": "diffusion",
         "env_name": "coinrun",
         "param_name": "latent-diffusion",
-        "wandb_tags": ["lat-diff"],
+        "wandb_tags": ["lat-diff1"],
         "num_timesteps": 10000000,
         "num_checkpoints": 5,
         "seed": 6033,
@@ -324,4 +324,4 @@ def latent_diffusion_search():
 
 
 if __name__ == "__main__":
-    ppo()
+    latent_diffusion_search()
