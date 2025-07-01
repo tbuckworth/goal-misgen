@@ -1,3 +1,4 @@
+import ast
 import copy
 
 from common.diffusion import DDPM, LatentDiffusionModel
@@ -70,6 +71,22 @@ def train(args):
     for var_name in list(hyperparameters.keys()) + list(other_params.keys()):
         if var_name in args.__dict__.keys() and args.__dict__[var_name] is not None:
             hyperparameters[var_name] = args.__dict__[var_name]
+
+    extra_overrides = {}
+    if args.extra_overrides is not None:
+        for a in args.extra_overrides:
+            if '=' not in a:
+                print(f"Invalid override: '{a}' (missing '=')")
+                continue
+            k, v = a.split("=", 1)
+            try:
+                extra_overrides[k] = ast.literal_eval(v)
+            except (ValueError, SyntaxError, NameError):
+                extra_overrides[k] = v
+            if k not in hyperparameters:
+                print(f"Warning: extra override parameter {k} not in hyperparams")
+
+    hyperparameters.update(extra_overrides)
 
     for key, value in hyperparameters.items():
         print(key, ':', value)

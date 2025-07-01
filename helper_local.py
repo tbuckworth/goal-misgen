@@ -267,6 +267,7 @@ def add_training_args(parser):
     parser.add_argument('--use_valid_env', action="store_true", default=True)
     parser.add_argument('--render', action="store_true", default=False)
     parser.add_argument('--wandb_tags', type=str, nargs='+')
+    parser.add_argument('--extra_overrides', type=str, nargs='+', default=[])
     parser.add_argument('--random_percent', type=int, default=0,
                         help='COINRUN: percent of environments in which coin is randomized (only for coinrun)')
     parser.add_argument('--key_penalty', type=int, default=0,
