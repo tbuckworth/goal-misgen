@@ -324,4 +324,4 @@ def latent_diffusion_search():
 
 
 if __name__ == "__main__":
-    latent_diffusion_search()
+    ppo()
