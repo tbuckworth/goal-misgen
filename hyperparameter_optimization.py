@@ -162,8 +162,6 @@ def optimize_hyperparams(bounds,
     hparams.update(string_select)
 
     hparams = {k: int(v) if isinstance(v, np.int64) else v for k, v in hparams.items()}
-    #TODO: remove this!
-    run_next(hparams)
     try:
         run_next(hparams)
     except Exception as e:
@@ -324,4 +322,4 @@ def latent_diffusion_search():
 
 
 if __name__ == "__main__":
-    ppo()
+    latent_diffusion_search()
