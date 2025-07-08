@@ -16,7 +16,7 @@ def run_canonicalisation(model_file, env_name, config, suffix):
 
     required_cols = ['seed', 'distribution_mode', 'num_levels',  'start_level']
     # 'param_name','rand_region', 'random_percent',?
-    orig_dict = {k:v for k,v in orig_cfg if k in required_cols}
+    orig_dict = {k:v for k,v in orig_cfg.items() if k in required_cols}
 
     hparams = {
         "model_file": get_model_with_largest_checkpoint(model_file),
