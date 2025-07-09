@@ -3,6 +3,23 @@
 #PBS -l walltime=48:00:00
 #PBS -N canon
 
+module load CMake/3.18.4-GCCcore-10.2.0
+
+
+
+
+
+module load Qt5/5.15.2-GCCcore-10.3.0
+
+
+
+
+
+
+
+
+
+
 module load Python/3.8.6-GCCcore-10.2.0
 cd $HOME/pyg/goal-misgen/
 source venv/bin/activate
