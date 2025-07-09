@@ -45,6 +45,7 @@ def run_canonicalisation(model_file, env_name, config, suffix):
         "trusted_policy": "uniform",
         "trusted_temp": 7,
         "use_min_val_loss": False,
+        "detach_target": False,
     }
     hparams.update(step_dict)
     hparams.update(config_dict)

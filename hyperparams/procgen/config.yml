@@ -259,7 +259,7 @@ cartpole-canon:
     use_min_val_loss: False
     update_frequently: False
     pre_trained_value_encoder: False
-
+    detach_target: True
 
 trusted-value:
     algo: trusted-value

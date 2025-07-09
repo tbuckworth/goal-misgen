@@ -75,10 +75,12 @@ class Canonicaliser(BaseAgent):
                  update_frequently=False,
                  encoder=None,
                  encoder_val=None,
+                 detach_target=True,
                  **kwargs):
 
         super(Canonicaliser, self).__init__(env, policy, logger, storage, device,
                                             n_checkpoints, env_valid, storage_valid)
+        self.detach_target = detach_target
         self.update_frequently = update_frequently
         self.use_min_val_loss = use_min_val_loss
         self.consistency_coef = consistency_coef
@@ -437,7 +439,8 @@ class Canonicaliser(BaseAgent):
                 #     target = R
                 # else:
                 target = R + self.gamma * (next_value_batch * (1 - done_batch) + term_value * done_batch)
-                value_loss = nn.MSELoss()(target.detach(), value_batch)
+                target = target.detach() if self.detach_target else target
+                value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
                 if self.update_frequently:
