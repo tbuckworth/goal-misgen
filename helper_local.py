@@ -401,3 +401,21 @@ def get_rew_term(env_name):
         return 1e6
     else:
         raise NotImplementedError(f"reward termination not implemented for {env_name}")
+
+def get_rew_sufficient(env_name):
+    if env_name == "cartpole" or env_name == "cartpole_swing":
+        return 475
+    if env_name == "mountain_car":
+        return -100
+    if env_name == "acrobot":
+        return -100
+    if env_name == "coinrun":
+        return 9.0
+    if env_name == "maze" or env_name == "maze_aisc":
+        return 9.0
+    if env_name == "ascent":
+        return 9.0
+    if env_name == "cobras":
+        raise NotImplementedError(f"Haven't established reward boundaries for cobras env yet")
+    else:
+        raise NotImplementedError(f"reward termination not implemented for {env_name}")

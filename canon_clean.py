@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from helper_local import get_rew_term, get_seed, get_model_with_largest_checkpoint
+from helper_local import get_rew_term, get_seed, get_model_with_largest_checkpoint, get_rew_sufficient
 from hyperparameter_optimization import run_next_hyperparameters
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
@@ -16,7 +16,7 @@ except ImportError:
 
 
 def get_performing_model_dirs(env_name):
-    target_rew = get_rew_term(env_name)
+    target_rew = get_rew_sufficient(env_name)
     wandb_login()
     api = wandb.Api()
     entity, project = "ic-ai-safety", "goal-misgen"

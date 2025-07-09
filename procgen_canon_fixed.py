@@ -55,6 +55,8 @@ def run_canonicalisation(model_file, env_name, config, suffix):
 def main(env_name, config):
     model_dirs = get_performing_model_dirs(env_name)
     suffix = np.random.randint(0, 10_000)
+    joined_models = '\n'.join(model_dirs)
+    print(f"Running Canonicalisation on {env_name} - following performing models found:\n{joined_models}")
 
     for model_file in model_dirs:
         run_canonicalisation(model_file, env_name, config, suffix)
