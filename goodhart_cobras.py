@@ -1,25 +1,26 @@
 import einops
+import numpy as np
 import torch
 
 from meg.meg_torch import state_action_occupancy, soft_value_iteration, soft_value_iteration_sa_rew
 
-def q_value_iteration(T, R, gamma, n_iterations=1000):
+def q_value_iteration(T, R, gamma, n_iterations=1000, device='cpu'):
     n_states, n_actions = T.shape[:2]
-    Q = torch.zeros(n_states, n_actions)
-    V = torch.zeros(n_states)
-
+    Q = torch.zeros(n_states, n_actions).to(device=device)
+    V = torch.zeros(n_states).to(device=device)
+    Qs = []
     for i in range(n_iterations):
         old_Q = Q
         # old_V = V
         V = Q.max(dim=1).values
         # Q = einops.repeat(R, 'states -> states actions', actions=n_actions)
         Q = einops.einsum(T, gamma * V, 'states actions next_states, next_states -> states actions') + R
-
+        Qs.append(Q)
         if (Q - old_Q).abs().max() < 1e-5:
             print(f'Q-value iteration converged in {i} iterations')
             break
     pi = torch.nn.functional.one_hot(Q.argmax(dim=1)).float()
-    return pi
+    return pi, Qs
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,9 +48,9 @@ def main():
     proxy_R[0, 1] = 1.
 
     _, true_pi_soft_opt = soft_value_iteration_sa_rew(true_R, T, gamma=gamma, device="cuda")
-    true_pi_hard_opt = q_value_iteration(T, true_R, gamma)
+    true_pi_hard_opt, true_Qs = q_value_iteration(T, true_R, gamma, device=device)
     _, proxy_pi_soft_opt = soft_value_iteration_sa_rew(proxy_R, T, gamma=gamma, device="cuda")
-    proxy_pi_hard_opt = q_value_iteration(T, proxy_R, gamma)
+    proxy_pi_hard_opt, proxy_Qs = q_value_iteration(T, proxy_R, gamma, device=device)
 
 
     breed = [1., 0.]
@@ -60,7 +61,10 @@ def main():
     pi_stick = torch.tensor([breed, kill]).to(device=device)
     pi_breed = torch.tensor([breed, breed]).to(device=device)
 
+    pi_uniform = torch.ones((n_states, n_actions)).softmax(dim=-1).to(device=device)
+
     all_pis = [true_pi_soft_opt, proxy_pi_soft_opt, true_pi_hard_opt, proxy_pi_hard_opt,
+               pi_uniform,
                pi_kill, pi_flip, pi_stick, pi_breed]
 
     r = torch.rand((1000, n_states, n_actions)).to(device=device)
@@ -72,18 +76,23 @@ def main():
     ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in all_pis])
     x, y = ds[...,CHOSEN_AXIS].detach().cpu().numpy().T
 
+    true_x, true_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs, true_pi_hard_opt)
+    proxy_x, proxy_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, proxy_Qs, proxy_pi_hard_opt)
+
     px, py = project_reward(CHOSEN_AXIS, true_R)
     prx, pry = project_reward(CHOSEN_AXIS, proxy_R)
 
 
     import matplotlib.pyplot as plt
-    plt.scatter(x, y)
-    plt.arrow(x.mean(), y.mean(), px, py, head_width=0.05, head_length=0.05, fc='red', ec='red', linewidth=2, label='True Reward Direction')
-    plt.arrow(x.mean(), y.mean(), prx, pry, head_width=0.05, head_length=0.05, fc='orange', ec='orange', linewidth=2, label='Proxy Reward Direction')
-    plt.scatter(x[0], y[0], color='red', label="Soft Optimal Policy for True Reward", alpha=0.5)
-    plt.scatter(x[1], y[1], color='orange', label="Soft Optimal Policy for Proxy Reward", alpha=0.5)
-    plt.scatter(x[2], y[2], color='red', label="Hard Optimal Policy for True Reward")
-    plt.scatter(x[3], y[3], color='orange', label="Hard Optimal Policy for Proxy Reward")
+    plt.scatter(x[4:], y[4:])
+    plt.arrow(x[4], y[4], px*x[4], py*y[4], head_width=0.05, head_length=0.05, fc='red', ec='red', linewidth=2, label='True Reward Direction')
+    plt.arrow(x[4], y[4], prx*x[4], pry*y[4], head_width=0.05, head_length=0.05, fc='orange', ec='orange', linewidth=2, label='Proxy Reward Direction')
+    plt.scatter(true_x, true_y, color='red', label='Hard $\pi$ on True Reward', alpha=0.7)
+    plt.scatter(proxy_x, proxy_y, color='orange', label='Hard $\pi$ on Proxy Reward', alpha=0.7)
+    # plt.scatter(x[0], y[0], color='red', label="Soft $\pi*$ for True Reward", alpha=0.5)
+    # plt.scatter(x[1], y[1], color='orange', label="Soft $\pi*$ for Proxy Reward", alpha=0.5)
+    # plt.scatter(x[2], y[2], color='red', label="Hard $\pi*$ for True Reward")
+    # plt.scatter(x[3], y[3], color='orange', label="Hard $\pi*$ for Proxy Reward")
 
     plt.xlabel('(Many Cobras, Kill) Occupancy')
     plt.ylabel('(Few Cobras, Kill) Occupancy')
@@ -94,6 +103,14 @@ def main():
 
 
     print("done")
+
+
+def generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs, true_pi_hard_opt):
+    true_pis = torch.stack([true_Qs[-1] * np.log((i + 5.44) / 2) for i in range(100)]).softmax(dim=-1)
+    true_pis = torch.concat([true_pis, true_pi_hard_opt.unsqueeze(0)])
+    true_ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in true_pis])
+    true_x, true_y = true_ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
+    return true_x, true_y
 
 
 def project_reward(CHOSEN_AXIS, true_R):

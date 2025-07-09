@@ -133,7 +133,7 @@ def soft_value_iteration_sa_rew(U: torch.tensor, T: torch.tensor, beta=1.0, gamm
     num_states, num_actions = T.shape[:2]
 
     if Q is None:
-        Q = torch.rand(num_states, num_actions, device=device)
+        Q = torch.zeros(num_states, num_actions, device=device)
 
     for iter in range(max_iterations):
         old_Q = Q.detach().clone()
