@@ -113,6 +113,41 @@ def soft_value_iteration(U: torch.tensor, T: torch.tensor, beta=1.0, gamma: floa
     pi = (beta * Q).softmax(dim=-1)
     return Q, pi
 
+def soft_value_iteration_sa_rew(U: torch.tensor, T: torch.tensor, beta=1.0, gamma: float = 0.9, Q=None,
+                         max_iterations=10000, device="cpu", atol=0.01):
+    """
+    Finds the soft Q-function and soft optimal policy.
+
+    Args:
+      U: Utility function, with shape (num_states,).
+      T: Transition probability table, with shape (num_states, num_actions, num_states).
+      beta: Inverse temperature parameter.
+      gamma: Discount factor.
+      max_iterations: Maximum number of iterations.
+      Q: Initial soft Q matrix.
+
+    Returns:
+      Q: Soft Q-function, with shape (num_states, num_actions).
+      pi: Soft optimal policy, with shape (num_states, num_actions).
+    """
+    num_states, num_actions = T.shape[:2]
+
+    if Q is None:
+        Q = torch.rand(num_states, num_actions, device=device)
+
+    for iter in range(max_iterations):
+        old_Q = Q.detach().clone()
+        Q = Q - Q.max()  # for numerical stability
+        Q = U + gamma * einops.einsum(T, (1 / beta) * (beta * Q).logsumexp(dim=-1),
+                                                        'states actions next_states, next_states -> states actions')
+
+        if torch.allclose(Q, old_Q, atol=atol):
+            pi = (beta * Q).softmax(dim=-1)
+            return Q, pi
+
+    print(f"soft value iteration failed to converge after {iter} iterations")
+    pi = (beta * Q).softmax(dim=-1)
+    return Q, pi
 
 def unknown_utility_meg(pi: torch.tensor, T: torch.tensor, gamma: float = 0.9, mu: torch.tensor = None,
                         max_iterations=10000,
