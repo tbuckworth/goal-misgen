@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 # from imitation.scripts.config.train_rl import train_rl_ex
@@ -475,6 +477,9 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
         exclude_crafted, meg_adj, min_train_reward, [tag], train_dist_metric, val_dist_metric)
 
+    # Filtering this out because only maze_aisc is correct. change this if you are actually using Maze env for everything.
+    df = df[df.env_name!="maze"]
+
     df.to_csv(f"data/{env_name}_l2_dist.csv", index=False)
 
     if date_split:
@@ -561,7 +566,9 @@ def load_summary(env="canon maze hard grouped actions", exclude_crafted=True, ta
     plt.show()
 
 
-def pull_data_for_tags(exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric):
+def pull_data_for_tags(exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric, required_cols = None):
+    if required_cols is None:
+        required_cols = []
     # Fetch runs from a project
     api = wandb.Api()
     project_name = "goal-misgen"
@@ -597,7 +604,9 @@ def pull_data_for_tags(exclude_crafted, meg_adj, min_train_reward, tags, train_d
         if train_dist_metric not in run.summary.keys():
             continue
         fields = ["Return_Train","Return_Valid", "IS_Train", "IS_Valid", "PDIS_Train", "PDIS_Valid", "env_name",
-                  "L2_L2_Train", "L2_L2_Valid"]
+                  "L2_L2_Train", "L2_L2_Valid", 'model_file']
+        fields += [r for r in required_cols if r not in fields]
+
         for field in fields:
             if field in run.summary.keys():
                 row[field] = run.summary.get(field)
@@ -707,9 +716,74 @@ def create_all_graphs(title = "soft_inf"):
         exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric)
     plot_env_data(df, title)
 
+def create_from_tag(tag, title):
+    if type(tag) == list:
+        tags = tag
+    else:
+        tags = [tag]
 
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+    meg_adj = False
+    min_train_reward = -1000 # ?
+    exclude_crafted = True
+    df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
+        exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric)
+    plot_env_data(df, title)
+
+
+def filter_maze():
+    tag = "Maze_VOrig_Soft_Inf"
+    tags = [tag]
+    train_dist_metric = "L2_L2_Train"
+    val_dist_metric = "L2_L2_Valid"
+    meg_adj = False
+    min_train_reward = 0
+    exclude_crafted = True
+
+    required_cols = ['seed', 'distribution_mode', 'num_levels',  'start_level']
+    # Think we don't need these:
+    # 'param_name','rand_region', 'random_percent',
+
+    df, ratio, train_dist_meg, train_distance, val_dist_meg, val_distance, val_rewards = pull_data_for_tags(
+        exclude_crafted, meg_adj, min_train_reward, tags, train_dist_metric, val_dist_metric, required_cols)
+
+    df = df[df.env_name!="maze"]
+
+    regs = [re.search(r'(.*)/model.*pth', model_file) for model_file in df.model_file]
+
+    logdirs = {r.group(1):i for i, r in zip(df.index, regs) if r}
+
+    api = wandb.Api()
+    project_name = "goal-misgen"
+    filters = {
+        # "$and": [
+            # {"state": "finished"},
+            "$or": [{"config.logdir": l} for l in logdirs.keys()]
+        # ]
+    }
+    runs = api.runs(f"ic-ai-safety/{project_name}", filters=filters)
+
+    df['all_matches'] = np.nan
+
+    for run in runs:
+        config = {c:run.config.get(c, None) for c in required_cols}
+        idx = logdirs.get(run.config.get('logdir',None), None)
+        if idx is None:
+            #This should never happen
+            continue
+        matching = df[required_cols].loc[idx] == config.values()
+        print(idx)
+        print(df[required_cols].loc[idx])
+        print(config.values())
+        df.loc[idx, 'all_matches'] = matching.all()
+
+    plot_env_data(df, 'Filtered Maze')
 
 if __name__ == "__main__":
+    filter_maze()
+    exit()
+    # load_summary("Maze_VOrig_Soft_Inf", tag = 'Maze_VOrig_Soft_Inf')
     for suptitle in configs.keys():
         create_all_graphs(suptitle)
     # load_all("Coinrun_Soft_Inf")
