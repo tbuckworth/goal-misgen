@@ -90,3 +90,6 @@ private_login.py
 wandb/
 venv/
 results/
+data/
+slurm*.out
+
