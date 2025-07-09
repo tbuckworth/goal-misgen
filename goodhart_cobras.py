@@ -47,9 +47,9 @@ def main():
     proxy_R[0, 1] = 1.
 
     _, true_pi_soft_opt = soft_value_iteration_sa_rew(true_R, T, gamma=gamma, device="cuda")
-    true_pi_hard_opt = q_value_iteration(true_R, T, gamma)
+    true_pi_hard_opt = q_value_iteration(T, true_R, gamma)
     _, proxy_pi_soft_opt = soft_value_iteration_sa_rew(proxy_R, T, gamma=gamma, device="cuda")
-    proxy_pi_hard_opt = q_value_iteration(proxy_R, T, gamma)
+    proxy_pi_hard_opt = q_value_iteration(T, proxy_R, gamma)
 
 
     breed = [1., 0.]
