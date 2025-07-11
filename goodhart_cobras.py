@@ -305,10 +305,10 @@ def random(temp=1):
     mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
 
     true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
-    true_R = (true_R.exp()/true_R.exp().sum())
+    true_R = (true_R.exp()/true_R.exp().sum())*10
 
     proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
-    proxy_R = (proxy_R.exp()/proxy_R.exp().sum())
+    proxy_R = (proxy_R.exp()/proxy_R.exp().sum())*10
 
     plot_state_action_occupancies(
         f"Random with temp {1/temp:.2f}",
