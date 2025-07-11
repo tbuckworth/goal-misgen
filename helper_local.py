@@ -410,9 +410,9 @@ def get_rew_sufficient(env_name):
     if env_name == "acrobot":
         return -100
     if env_name == "coinrun":
-        return 9.0
+        return 8.0
     if env_name == "maze" or env_name == "maze_aisc":
-        return 9.0
+        return 8.0
     if env_name == "ascent":
         return 9.0
     if env_name == "cobras":

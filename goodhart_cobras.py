@@ -149,6 +149,12 @@ def cobras():
         act_name,
     )
 
+def unit_circle_points(n):
+    angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    x = np.cos(angles)
+    y = np.sin(angles)
+    return np.stack([x, y], axis=1)
+
 def plot_state_action_occupancies(
         name,
         n_states,
@@ -168,14 +174,29 @@ def plot_state_action_occupancies(
         act_name = f"Action {CHOSEN_AXIS}"
     assert torch.allclose(T.sum(dim=-1), torch.tensor(1.)), "T is not valid transition matrix"
     assert torch.allclose(mu.sum(), torch.tensor(1.)), "mu is not valid initialisation matrix"
-    true_CR = canonicalise(T, true_R, gamma, device=device)
-    proxy_CR = canonicalise(T, proxy_R, gamma, device=device)
+    # _, true_pi_soft_opt = soft_value_iteration_sa_rew(true_R, T, gamma=gamma, device="cuda")
+    # _, proxy_pi_soft_opt = soft_value_iteration_sa_rew(proxy_R, T, gamma=gamma, device="cuda")
 
-    _, true_pi_soft_opt = soft_value_iteration_sa_rew(true_R, T, gamma=gamma, device="cuda")
-    true_pi_hard_opt, true_Qs = ppo_tabular(T, true_R, gamma, device=device)#, slow=True)
-    _, proxy_pi_soft_opt = soft_value_iteration_sa_rew(proxy_R, T, gamma=gamma, device="cuda")
-    proxy_pi_hard_opt, proxy_Qs = ppo_tabular(T, proxy_R, gamma, device=device)#, slow=True)
+    # px, py, true_x, true_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R)
+    #
+    # prx, pry, proxy_x, proxy_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, proxy_R)
 
+    u = unit_circle_points(8)
+    u = u.repeat(2).reshape(8, 2, 2)
+    u[..., 1] *= -1
+    reward_list = torch.tensor(u).to(device=device,dtype=torch.float32).unbind(0)
+    # reward_list = [true_R, proxy_R]
+    # reward_names = ["True", "Proxy"]
+    reward_data = []
+
+    for R in reward_list:
+        arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R)
+        reward_data.append(
+            dict(arrow_x=arrow_x,
+             arrow_y=arrow_y,
+             sao_x=sao_x,
+             sao_y=sao_y)
+                           )
     breed = [1., 0.]
     kill = [0., 1.]
 
@@ -186,8 +207,7 @@ def plot_state_action_occupancies(
 
     pi_uniform = torch.ones((n_states, n_actions)).softmax(dim=-1).to(device=device)
 
-    all_pis = [true_pi_soft_opt, proxy_pi_soft_opt, true_pi_hard_opt, proxy_pi_hard_opt,
-               pi_uniform,
+    all_pis = [pi_uniform, #true_pi_soft_opt, proxy_pi_soft_opt, true_pi_hard_opt, proxy_pi_hard_opt,
                pi_kill, pi_flip, pi_stick, pi_breed]
 
     r = torch.rand((1000, n_states, n_actions)).to(device=device)
@@ -196,24 +216,11 @@ def plot_state_action_occupancies(
     all_pis += list((r * div).softmax(dim=-1).to(device=device).unbind(dim=-0))
     all_pis += list(torch.rand((100, n_states, n_actions)).softmax(dim=-1).to(device=device).unbind(dim=0))
 
-
-
     ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in all_pis])
     x, y = ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
 
-    true_x, true_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs, true_pi_hard_opt)
-    proxy_x, proxy_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, proxy_Qs, proxy_pi_hard_opt)
 
-    # px, py = projection(CHOSEN_AXIS, ds, true_R)
-    # prx, pry = projection(CHOSEN_AXIS, ds, proxy_R)
 
-    px, py = true_CR[...,CHOSEN_AXIS].cpu().numpy()
-    prx, pry = proxy_CR[...,CHOSEN_AXIS].cpu().numpy()
-    # This is what it should be, but doesn't line up:
-    # px, py = true_CR[0, 0].cpu().numpy(), true_CR[1, 1].cpu().numpy()
-
-    # (true_x[-1] - true_x[0], true_y[-1] - true_y[0])
-    # (proxy_x[-1] - proxy_x[0], proxy_y[-1] - proxy_y[0])
 
     circle_size = 5
     tri_size = 50
@@ -235,17 +242,17 @@ def plot_state_action_occupancies(
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
     plt.scatter(x[4:], y[4:], s=circle_size)
-    plt.scatter(true_x, true_y, color='red', label='Hard $\pi$ on True Reward', alpha=0.7, s=circle_size)
-    plt.scatter(proxy_x, proxy_y, color='orange', label='Hard $\pi$ on Proxy Reward', alpha=0.7, s=circle_size)
-    plt.scatter(x[0], y[0], color='red', label="Soft $\pi*$ for True Reward", alpha=0.7, s=tri_size)
-    plt.scatter(x[1], y[1], color='orange', label="Soft $\pi*$ for Proxy Reward", alpha=0.7, s=tri_size)
-    plt.arrow(x[4], y[4], px, py, width=0.05, head_width=0.1, head_length=0.1,
-              fc='red', edgecolor='black', linewidth=0.5, label='True Reward Direction')
-    plt.arrow(x[4], y[4], prx, pry, width=0.05, head_width=0.1, head_length=0.1,
-              fc='orange', edgecolor='black', linewidth=.5, label='Proxy Reward Direction')
+
+    for d in reward_data:
+        plt.scatter(d["sao_x"], d["sao_y"], color='orange', alpha=0.5, s=circle_size)
+
+    for d in reward_data:
+        plt.arrow(x[0], y[0], d["arrow_x"], d["arrow_y"], width=0.05, head_width=0.1, head_length=0.1,
+                  fc='orange', edgecolor='black', linewidth=0.5)
+
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
-        plt.arrow(x[4], y[4], nrx, nry, width=0.05, head_width=0.1, head_length=0.1,
+        plt.arrow(x[0], y[0], nrx, nry, width=0.05, head_width=0.1, head_length=0.1,
                   fc='green', edgecolor='black', linewidth=.5, label='Policy Reward Direction')
     plt.xlabel(f'({state0}, {act_name}) Occupancy')
     plt.ylabel(f'({state1}, {act_name}) Occupancy')
@@ -255,6 +262,14 @@ def plot_state_action_occupancies(
     plt.show()
 
     print("done")
+
+
+def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R):
+    true_CR = canonicalise(T, true_R, gamma, device=device)
+    _, true_Qs = ppo_tabular(T, true_R, gamma, device=device)  # , slow=True)
+    true_x, true_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs)
+    px, py = true_CR[..., CHOSEN_AXIS].cpu().numpy()
+    return px, py, true_x, true_y
 
 
 def projection(CHOSEN_AXIS, ds, true_CR):
@@ -269,10 +284,10 @@ def projection(CHOSEN_AXIS, ds, true_CR):
     return px.item(), py.item()
 
 
-def generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs, true_pi_hard_opt):
-    tp0 = torch.stack(true_Qs).softmax(dim=-1)
+def generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs):
+    true_pis = torch.stack(true_Qs).softmax(dim=-1)
     # true_pis = torch.stack([true_Qs[-1] * np.log((i + 5.44) / 2) for i in range(100)]).softmax(dim=-1)
-    true_pis = torch.concat([tp0, true_pi_hard_opt.unsqueeze(0)])
+    # true_pis = torch.concat([tp0, true_pi_hard_opt.unsqueeze(0)])
     true_ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in true_pis])
     true_x, true_y = true_ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
     return true_x, true_y
