@@ -79,7 +79,7 @@ def ppo_tabular(
                 T, V, 's a s2, s2 -> s a')
             V = (old_probs * Q_pi).sum(dim=1)
 
-        if Q_pi.isnan().all():
+        if Q_pi.isnan().any():
             break
 
         advantages = Q_pi - V.unsqueeze(1)                  # A(s,a)
@@ -292,6 +292,7 @@ def projection(CHOSEN_AXIS, ds, true_CR):
 
 def generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs):
     true_pis = torch.stack(true_Qs).softmax(dim=-1)
+    true_pis = true_pis[~true_pis.isnan().any(dim=-1).any(dim=-1)]
     # true_pis = torch.stack([true_Qs[-1] * np.log((i + 5.44) / 2) for i in range(100)]).softmax(dim=-1)
     # true_pis = torch.concat([tp0, true_pi_hard_opt.unsqueeze(0)])
     true_ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in true_pis])
