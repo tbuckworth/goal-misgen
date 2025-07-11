@@ -53,8 +53,10 @@ def state_action_occupancy(pi: torch.tensor, T: torch.tensor, gamma: float, mu: 
     """
 
     d = state_occupancy(pi, T, gamma, mu, max_iterations, d=d, device=device)
-    return einops.einsum(d, pi, 'states, states actions -> states actions')
-
+    try:
+        return einops.einsum(d, pi, 'states, states actions -> states actions')
+    except RuntimeError as e:
+        raise e
 
 def policy_evaluation(pi: torch.tensor, U: torch.tensor, T: torch.tensor, gamma: float, mu: torch.tensor = None,
                       max_iterations=1000, d=None):

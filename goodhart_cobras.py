@@ -79,6 +79,9 @@ def ppo_tabular(
                 T, V, 's a s2, s2 -> s a')
             V = (old_probs * Q_pi).sum(dim=1)
 
+        if Q_pi.isnan().all():
+            break
+
         advantages = Q_pi - V.unsqueeze(1)                  # A(s,a)
 
         # ---- actor: clipped PPO update ----
@@ -95,7 +98,7 @@ def ppo_tabular(
         policies.append(new_probs.detach())                 # track policy over time
 
         # ---- convergence check ----
-        if i>100 and (new_probs - old_probs).abs().max() < 1e-8:
+        if (i>100 and (new_probs - old_probs).abs().max() < 1e-8):
             print(f'PPO converged in {i} iterations')
             break
 
@@ -181,8 +184,10 @@ def plot_state_action_occupancies(
     #
     # prx, pry, proxy_x, proxy_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, proxy_R)
 
-    u = unit_circle_points(8)
-    u = u.repeat(2).reshape(8, 2, 2)
+    n_arrows = 4
+
+    u = unit_circle_points(n_arrows)
+    u = u.repeat(2).reshape(n_arrows, 2, 2)
     u[..., 1] *= -1
     reward_list = torch.tensor(u).to(device=device,dtype=torch.float32).unbind(0)
     # reward_list = [true_R, proxy_R]
@@ -267,6 +272,7 @@ def plot_state_action_occupancies(
 def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R):
     true_CR = canonicalise(T, true_R, gamma, device=device)
     _, true_Qs = ppo_tabular(T, true_R, gamma, device=device)  # , slow=True)
+
     true_x, true_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs)
     px, py = true_CR[..., CHOSEN_AXIS].cpu().numpy()
     return px, py, true_x, true_y
