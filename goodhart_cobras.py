@@ -105,16 +105,19 @@ def ppo_tabular(
     return pi, [p.log() for p in policies]
 
 
-def main():
+def cobras():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_states = 2
     n_actions = 2
     gamma = 0.9
     CHOSEN_AXIS = 0
-    # state 0: many cobras
+    state0 = "Many Cobras"
+    state1 = "Few Cobras"
     # state 1: few cobras
     # action 0: breed cobras
     # action 1: kill cobras
+    act_name = "Kill" if CHOSEN_AXIS else "Breed"
+
 
     T = torch.zeros((n_states, n_actions, n_states)).to(device=device)
     T[:, 0, 0] = 1  # breeding always takes you to many cobras
@@ -128,6 +131,41 @@ def main():
     proxy_R = torch.zeros((n_states, n_actions)).to(device=device)
     proxy_R[0, 1] = 1.
 
+
+
+    plot_state_action_occupancies(
+        "Cobras",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        true_R,
+        proxy_R,
+        CHOSEN_AXIS,
+        device,
+        state0,
+        state1,
+        act_name,
+    )
+
+def plot_state_action_occupancies(
+        name,
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        true_R,
+        proxy_R,
+        CHOSEN_AXIS,
+        device,
+        state0="State 0",
+        state1="State 1",
+        act_name=None,
+    ):
+    if act_name is None:
+        act_name = f"Action {CHOSEN_AXIS}"
     assert torch.allclose(T.sum(dim=-1), torch.tensor(1.)), "T is not valid transition matrix"
     assert torch.allclose(mu.sum(), torch.tensor(1.)), "mu is not valid initialisation matrix"
     true_CR = canonicalise(T, true_R, gamma, device=device)
@@ -174,13 +212,12 @@ def main():
     # This is what it should be, but doesn't line up:
     # px, py = true_CR[0, 0].cpu().numpy(), true_CR[1, 1].cpu().numpy()
 
-    (true_x[-1] - true_x[0], true_y[-1] - true_y[0])
-    (proxy_x[-1] - proxy_x[0], proxy_y[-1] - proxy_y[0])
+    # (true_x[-1] - true_x[0], true_y[-1] - true_y[0])
+    # (proxy_x[-1] - proxy_x[0], proxy_y[-1] - proxy_y[0])
 
     circle_size = 5
     tri_size = 50
 
-    act_name = "Kill" if CHOSEN_AXIS else "Breed"
 
     import matplotlib.pyplot as plt
     plt.scatter(x[4:], y[4:], s=circle_size)
@@ -194,11 +231,11 @@ def main():
               fc='red', edgecolor='black', linewidth=0.5, label='True Reward Direction')
     plt.arrow(x[4], y[4], prx, pry, width=0.05, head_width=0.1, head_length=0.1,
               fc='orange', edgecolor='black', linewidth=.5, label='Proxy Reward Direction')
-    plt.xlabel(f'(Many Cobras, {act_name}) Occupancy')
-    plt.ylabel(f'(Few Cobras, {act_name}) Occupancy')
+    plt.xlabel(f'({state0}, {act_name}) Occupancy')
+    plt.ylabel(f'({state1}, {act_name}) Occupancy')
     plt.legend()
-    plt.title('State-Action Occupancy vs Reward Functions\nCobra Breeding Environment')
-    plt.savefig("cobra_state_action_occupancy.png")
+    plt.title(f'State-Action Occupancy vs Reward Functions\n{name} Environment')
+    plt.savefig(f"data/{name}_state_action_occupancy.png")
     plt.show()
 
     print("done")
@@ -253,6 +290,39 @@ def projected_arrow(R, p0, p1, gamma=0.9):
     coeff  = torch.linalg.lstsq(B, r_vec[:2]).solution   # first 2 coords suffice
     return coeff      # (Δx, Δy) for the arrow
 
+def random(temp=1):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+    # state 0: many cobras
+    # state 1: few cobras
+    # action 0: breed cobras
+    # action 1: kill cobras
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+
+    true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+
+    proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+
+    plot_state_action_occupancies(
+        f"Random with temp {1/temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        true_R,
+        proxy_R,
+        CHOSEN_AXIS,
+        device,
+    )
+
+
 
 if __name__ == "__main__":
-    main()
+    for i in range(1, 5):
+        random(i)
