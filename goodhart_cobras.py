@@ -163,7 +163,7 @@ def plot_state_action_occupancies(
         state0="State 0",
         state1="State 1",
         act_name=None,
-    ):
+    add_random_policy=False):
     if act_name is None:
         act_name = f"Action {CHOSEN_AXIS}"
     assert torch.allclose(T.sum(dim=-1), torch.tensor(1.)), "T is not valid transition matrix"
@@ -218,19 +218,35 @@ def plot_state_action_occupancies(
     circle_size = 5
     tri_size = 50
 
+    if add_random_policy:
+        pis = torch.stack(all_pis)
+        e = -pis * pis.log()
+        e[e.isnan()] = 0
+        entropies = e.sum(dim=-1).mean(dim=-1)
+        ni = (entropies==entropies[entropies > 0.0001].min()).argwhere()[0].item()
+
+        new_R = pis[ni].log()
+        new_CR = canonicalise(T, new_R, gamma, device=device)
+        new_CR = new_CR/new_CR.max()
+        nrx, nry = new_CR[...,CHOSEN_AXIS].cpu().numpy()
+        npx, npy = ds[ni,...,CHOSEN_AXIS].cpu().numpy()
+
 
     import matplotlib.pyplot as plt
+    plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
     plt.scatter(x[4:], y[4:], s=circle_size)
     plt.scatter(true_x, true_y, color='red', label='Hard $\pi$ on True Reward', alpha=0.7, s=circle_size)
     plt.scatter(proxy_x, proxy_y, color='orange', label='Hard $\pi$ on Proxy Reward', alpha=0.7, s=circle_size)
     plt.scatter(x[0], y[0], color='red', label="Soft $\pi*$ for True Reward", alpha=0.7, s=tri_size)
     plt.scatter(x[1], y[1], color='orange', label="Soft $\pi*$ for Proxy Reward", alpha=0.7, s=tri_size)
-    # plt.scatter(x[2], y[2], color='red', label="Hard $\pi*$ for True Reward")
-    # plt.scatter(x[3], y[3], color='orange', label="Hard $\pi*$ for Proxy Reward")
     plt.arrow(x[4], y[4], px, py, width=0.05, head_width=0.1, head_length=0.1,
               fc='red', edgecolor='black', linewidth=0.5, label='True Reward Direction')
     plt.arrow(x[4], y[4], prx, pry, width=0.05, head_width=0.1, head_length=0.1,
               fc='orange', edgecolor='black', linewidth=.5, label='Proxy Reward Direction')
+    if add_random_policy:
+        plt.scatter(npx, npy, color='green', s=tri_size)
+        plt.arrow(x[4], y[4], nrx, nry, width=0.05, head_width=0.1, head_length=0.1,
+                  fc='green', edgecolor='black', linewidth=.5, label='Policy Reward Direction')
     plt.xlabel(f'({state0}, {act_name}) Occupancy')
     plt.ylabel(f'({state1}, {act_name}) Occupancy')
     plt.legend()
@@ -305,10 +321,10 @@ def random(temp=1):
     mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
 
     true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
-    true_R = (true_R.exp()/true_R.exp().sum())*10
+    true_R = (true_R.exp()/true_R.exp().sum())*max(10-temp,1)
 
     proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
-    proxy_R = (proxy_R.exp()/proxy_R.exp().sum())*10
+    proxy_R = (proxy_R.exp()/proxy_R.exp().sum())*max(10-temp, 1)
 
     plot_state_action_occupancies(
         f"Random with temp {1/temp:.2f}",
@@ -323,11 +339,47 @@ def random(temp=1):
         device,
     )
 
-
-
-if __name__ == "__main__":
+def run_all_randoms():
     for i in range(1, 10):
         try:
             random(i)
         except RuntimeError:
             pass
+
+
+def policy_to_reward(temp):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+    # state 0: many cobras
+    # state 1: few cobras
+    # action 0: breed cobras
+    # action 1: kill cobras
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+
+    true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    true_R = (true_R.exp() / true_R.exp().sum()) * max(10 - temp, 1)
+
+    proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    proxy_R = (proxy_R.exp() / proxy_R.exp().sum()) * max(10 - temp, 1)
+
+    plot_state_action_occupancies(
+        f"Random with temp {1 / temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        true_R,
+        proxy_R,
+        CHOSEN_AXIS,
+        device,
+    )
+
+
+if __name__ == "__main__":
+    policy_to_reward(2)
