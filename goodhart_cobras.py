@@ -316,7 +316,8 @@ def plot_state_action_occupancies(
 
     for i, d in enumerate(reward_data):
         plt.scatter(d["sao_x"], d["sao_y"], color=d["colour"],
-                    alpha=0.5, s=circle_size, label=f"{d['algo_name']} {d['name']}")
+                    alpha=0.5, s=circle_size, label=f"{d['algo_name']} {d['name']}",
+                    marker=d["shape"])
 
     for i, d in enumerate(reward_data):
         plt.arrow(x[0], y[0], d["arrow_x"], d["arrow_y"], width=0.05, head_width=0.1, head_length=0.1,
