@@ -7,7 +7,7 @@ from meg.meg_torch import state_action_occupancy, soft_value_iteration, soft_val
 
 def uniform_policy_evaluation(T, R, gamma, n_iterations=1000, device='cpu'):
     n_states, n_actions = T.shape[:2]
-    V = torch.zeros(n_states).to(device =device)
+    V = torch.zeros(n_states).to(device=device)
     # Uniform policy probability
     uniform_prob = 1 / n_actions
 
@@ -19,12 +19,14 @@ def uniform_policy_evaluation(T, R, gamma, n_iterations=1000, device='cpu'):
             return V
     return V
 
+
 def canonicalise(T, R, gamma, policy_evaluation=uniform_policy_evaluation, n_iterations=1000, device='cpu'):
     V = policy_evaluation(T, R, gamma, n_iterations, device)
     CR = R + gamma * einops.einsum(T, V, "s a ns, ns -> s a") - V.unsqueeze(-1)
     return CR
 
-def q_value_iteration(T, R, gamma, n_iterations=1000, device='cpu', slow = False):
+
+def q_value_iteration(T, R, gamma, n_iterations=1000, device='cpu', slow=False):
     n_states, n_actions = T.shape[:2]
     Q = torch.zeros(n_states, n_actions).to(device=device)
     Qs = []
@@ -47,12 +49,12 @@ def q_value_iteration(T, R, gamma, n_iterations=1000, device='cpu', slow = False
 
 
 def ppo_tabular(
-    T, R, gamma,
-    n_iterations: int = 1000,
-    device: str = 'cpu',
-    lr: float = 0.1,
-    clip_eps: float = 0.2,
-    eval_iters: int = 20,
+        T, R, gamma,
+        n_iterations: int = 1000,
+        device: str = 'cpu',
+        lr: float = 0.1,
+        clip_eps: float = 0.2,
+        eval_iters: int = 20,
 ):
     """
     Tabular PPO with a full-model critic.
@@ -69,12 +71,12 @@ def ppo_tabular(
     optimiser = torch.optim.SGD([logits], lr=lr)
 
     policies = []
-    old_probs = torch.softmax(logits.detach(), dim=1)      # π₀
+    old_probs = torch.softmax(logits.detach(), dim=1)  # π₀
 
     for i in range(n_iterations):
         # ---- critic: evaluate V^π and Q^π with full model ----
         V = torch.zeros(n_states, device=device)
-        for _ in range(eval_iters):                         # iterative policy evaluation
+        for _ in range(eval_iters):  # iterative policy evaluation
             Q_pi = R + gamma * einops.einsum(
                 T, V, 's a s2, s2 -> s a')
             V = (old_probs * Q_pi).sum(dim=1)
@@ -82,29 +84,81 @@ def ppo_tabular(
         if Q_pi.isnan().any():
             break
 
-        advantages = Q_pi - V.unsqueeze(1)                  # A(s,a)
+        advantages = Q_pi - V.unsqueeze(1)  # A(s,a)
 
         # ---- actor: clipped PPO update ----
         optimiser.zero_grad()
         new_probs = torch.softmax(logits, dim=1)
-        ratio      = new_probs / old_probs                  # π_θ / π_old
+        ratio = new_probs / old_probs  # π_θ / π_old
 
-        unclipped  = ratio * advantages
-        clipped    = torch.clamp(ratio, 1-clip_eps, 1+clip_eps) * advantages
-        loss = -torch.min(unclipped, clipped).mean()        # maximise surrogate ⇒ minimise –surrogate
+        unclipped = ratio * advantages
+        clipped = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
+        loss = -torch.min(unclipped, clipped).mean()  # maximise surrogate ⇒ minimise –surrogate
         loss.backward()
         optimiser.step()
 
-        policies.append(new_probs.detach())                 # track policy over time
+        policies.append(new_probs.detach())  # track policy over time
 
         # ---- convergence check ----
-        if (i>100 and (new_probs - old_probs).abs().max() < 1e-8):
+        if (i > 100 and (new_probs - old_probs).abs().max() < 1e-8):
             print(f'PPO converged in {i} iterations')
             break
 
         old_probs = new_probs.detach()
 
-    pi = old_probs                                         # final stochastic policy
+    pi = old_probs  # final stochastic policy
+    return pi, [p.log() for p in policies]
+
+
+def ppo_fixed_adv_tabular(
+        T, R, gamma,
+        n_iterations: int = 1000,
+        device: str = 'cpu',
+        lr: float = 0.1,
+        clip_eps: float = 0.2,
+        eval_iters: int = 20,
+):
+    """
+    Tabular PPO with a full-model critic.
+    Matches the interface of `q_value_iteration`.
+    Returns:
+        pi  – final π(s,a) probabilities, shape [S, A] (analogous to one-hot arg-max in QVI)
+        policies – list of π_t(s,a) tensors across updates (mirrors the role of Qs in QVI)
+    """
+    T, R = T.to(device), R.to(device)
+    n_states, n_actions = T.shape[:2]
+
+    advantages = canonicalise(T, R, gamma, device=device)
+
+    # actor parameters (state-wise logits)
+    logits = torch.zeros(n_states, n_actions, device=device, requires_grad=True)
+    optimiser = torch.optim.SGD([logits], lr=lr)
+
+    policies = []
+    old_probs = torch.softmax(logits.detach(), dim=1)  # π₀
+
+    for i in range(n_iterations):
+        # ---- actor: clipped PPO update ----
+        optimiser.zero_grad()
+        new_probs = torch.softmax(logits, dim=1)
+        ratio = new_probs / old_probs  # π_θ / π_old
+
+        unclipped = ratio * advantages
+        clipped = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
+        loss = -torch.min(unclipped, clipped).mean()  # maximise surrogate ⇒ minimise –surrogate
+        loss.backward()
+        optimiser.step()
+
+        policies.append(new_probs.detach())  # track policy over time
+
+        # ---- convergence check ----
+        if (i > 100 and (new_probs - old_probs).abs().max() < 1e-8):
+            print(f'PPO converged in {i} iterations')
+            break
+
+        old_probs = new_probs.detach()
+
+    pi = old_probs  # final stochastic policy
     return pi, [p.log() for p in policies]
 
 
@@ -121,7 +175,6 @@ def cobras():
     # action 1: kill cobras
     act_name = "Kill" if CHOSEN_AXIS else "Breed"
 
-
     T = torch.zeros((n_states, n_actions, n_states)).to(device=device)
     T[:, 0, 0] = 1  # breeding always takes you to many cobras
     T[:, 1, 1] = 1  # killing always takes you to few cobras
@@ -135,10 +188,9 @@ def cobras():
     proxy_R[0, 1] = 1.
 
     reward_dict = {
-        "True Reward":true_R,
-        "Proxy Reward":proxy_R,
+        "True Reward": true_R,
+        "Proxy Reward": proxy_R,
     }
-
 
     plot_state_action_occupancies(
         "Cobras",
@@ -155,11 +207,13 @@ def cobras():
         act_name,
     )
 
+
 def unit_circle_points(n):
     angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
     x = np.cos(angles)
     y = np.sin(angles)
     return np.stack([x, y], axis=1)
+
 
 def plot_state_action_occupancies(
         name,
@@ -174,7 +228,11 @@ def plot_state_action_occupancies(
         state0="State 0",
         state1="State 1",
         act_name=None,
-    add_random_policy=False):
+        add_random_policy=False,
+        rl_algo=None,
+):
+    if rl_algo is None:
+        rl_algo = {"PPO": ppo_tabular}
     if act_name is None:
         act_name = f"Action {CHOSEN_AXIS}"
     assert torch.allclose(T.sum(dim=-1), torch.tensor(1.)), "T is not valid transition matrix"
@@ -194,14 +252,25 @@ def plot_state_action_occupancies(
 
     reward_data = []
 
-    for R in reward_list:
-        arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R)
-        reward_data.append(
-            dict(arrow_x=arrow_x,
-             arrow_y=arrow_y,
-             sao_x=sao_x,
-             sao_y=sao_y)
-                           )
+    colours = ["red", "orange", "green", "blue", "cyan", "magenta", "purple", "brown"]
+    shapes = ['o','x','+','v','s']
+
+    for i, R in enumerate(reward_list):
+        name = reward_names[i] if reward_names else None
+        c = colours[i] if reward_names else 'orange'
+        for j, (algo_name, algo) in enumerate(rl_algo.items()):
+            arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R, algo)
+            reward_data.append(
+                dict(name=name,
+                     arrow_x=arrow_x,
+                     arrow_y=arrow_y,
+                     sao_x=sao_x,
+                     sao_y=sao_y,
+                     algo_name=algo_name,
+                     colour=c,
+                     shape=shapes[j]
+                     )
+            )
     breed = [1., 0.]
     kill = [0., 1.]
 
@@ -212,7 +281,7 @@ def plot_state_action_occupancies(
 
     pi_uniform = torch.ones((n_states, n_actions)).softmax(dim=-1).to(device=device)
 
-    all_pis = [pi_uniform, #true_pi_soft_opt, proxy_pi_soft_opt, true_pi_hard_opt, proxy_pi_hard_opt,
+    all_pis = [pi_uniform,  # true_pi_soft_opt, proxy_pi_soft_opt, true_pi_hard_opt, proxy_pi_hard_opt,
                pi_kill, pi_flip, pi_stick, pi_breed]
 
     r = torch.rand((1000, n_states, n_actions)).to(device=device)
@@ -224,9 +293,6 @@ def plot_state_action_occupancies(
     ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in all_pis])
     x, y = ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
 
-
-
-
     circle_size = 5
     tri_size = 50
 
@@ -235,36 +301,26 @@ def plot_state_action_occupancies(
         e = -pis * pis.log()
         e[e.isnan()] = 0
         entropies = e.sum(dim=-1).mean(dim=-1)
-        ni = (entropies==entropies[entropies > 0.0001].min()).argwhere()[0].item()
+        ni = (entropies == entropies[entropies > 0.0001].min()).argwhere()[0].item()
 
         new_R = pis[ni].log()
         new_CR = canonicalise(T, new_R, gamma, device=device)
-        new_CR = new_CR/new_CR.max()
-        nrx, nry = new_CR[...,CHOSEN_AXIS].cpu().numpy()
-        npx, npy = ds[ni,...,CHOSEN_AXIS].cpu().numpy()
+        new_CR = new_CR / new_CR.max()
+        nrx, nry = new_CR[..., CHOSEN_AXIS].cpu().numpy()
+        npx, npy = ds[ni, ..., CHOSEN_AXIS].cpu().numpy()
 
-    colours = ["red", "orange", "green", "blue", "cyan", "magenta", "purple", "brown"]
 
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
     plt.scatter(x[4:], y[4:], s=circle_size)
 
     for i, d in enumerate(reward_data):
-        c = 'orange'
-        l=None
-        if reward_names is not None:
-            c = colours[i]
-            l=reward_names[i]
-        plt.scatter(d["sao_x"], d["sao_y"], color=c, alpha=0.5, s=circle_size)
+        plt.scatter(d["sao_x"], d["sao_y"], color=d["colour"],
+                    alpha=0.5, s=circle_size, label=f"{d['algo_name']} {d['name']}")
 
     for i, d in enumerate(reward_data):
-        c = 'orange'
-        l = None
-        if reward_names is not None:
-            c = colours[i]
-            l = reward_names[i]
         plt.arrow(x[0], y[0], d["arrow_x"], d["arrow_y"], width=0.05, head_width=0.1, head_length=0.1,
-                  fc=c, edgecolor='black', linewidth=0.5, label=l)
+                  fc=d["colour"], edgecolor='black', linewidth=0.5, label=d['name'])
 
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
@@ -280,9 +336,9 @@ def plot_state_action_occupancies(
     print("done")
 
 
-def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R):
+def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R, rl_algo=ppo_tabular):
     true_CR = canonicalise(T, true_R, gamma, device=device)
-    _, true_Qs = ppo_tabular(T, true_R, gamma, device=device)  # , slow=True)
+    _, true_Qs = rl_algo(T, true_R, gamma, device=device)  # , slow=True)
 
     true_x, true_y = generate_occupancy_trajectories(CHOSEN_AXIS, T, device, gamma, mu, true_Qs)
     px, py = true_CR[..., CHOSEN_AXIS].cpu().numpy()
@@ -324,20 +380,22 @@ def project_reward_to_kill_axes(CHOSEN_AXIS, R):
     py = (R[1, CHOSEN_AXIS] - R[1, other_axis]).item()  # state “few cobras”
     return px, py
 
+
 def projected_arrow(R, p0, p1, gamma=0.9):
-    D  = 1 + gamma*(p0 - p1)
-    v0 = torch.tensor([(1-gamma*p1)/D - gamma*p0*(1-gamma*p1)/D**2,
-                       gamma*p1/D       - gamma**2*p0*p1/D**2])
-    v1 = torch.tensor([-gamma*p0/D**2,
-                       gamma*p0/D - gamma*p0/D**2])
-    B  = torch.stack([v0, v1], dim=1)       # 2×2
+    D = 1 + gamma * (p0 - p1)
+    v0 = torch.tensor([(1 - gamma * p1) / D - gamma * p0 * (1 - gamma * p1) / D ** 2,
+                       gamma * p1 / D - gamma ** 2 * p0 * p1 / D ** 2])
+    v1 = torch.tensor([-gamma * p0 / D ** 2,
+                       gamma * p0 / D - gamma * p0 / D ** 2])
+    B = torch.stack([v0, v1], dim=1)  # 2×2
     # canonicalised reward (true or proxy)
     Rcanon = R - R.mean(dim=1, keepdim=True)
     # return = R·η;  we only need the 4 numbers of R
-    r_vec  = torch.tensor([*Rcanon.view(-1).tolist()])
+    r_vec = torch.tensor([*Rcanon.view(-1).tolist()])
     # least-squares coefficients
-    coeff  = torch.linalg.lstsq(B, r_vec[:2]).solution   # first 2 coords suffice
-    return coeff      # (Δx, Δy) for the arrow
+    coeff = torch.linalg.lstsq(B, r_vec[:2]).solution  # first 2 coords suffice
+    return coeff  # (Δx, Δy) for the arrow
+
 
 def random(temp=1):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -354,13 +412,13 @@ def random(temp=1):
     mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
 
     true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
-    true_R = (true_R.exp()/true_R.exp().sum())*max(10-temp,1)
+    true_R = (true_R.exp() / true_R.exp().sum()) * max(10 - temp, 1)
 
     proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
-    proxy_R = (proxy_R.exp()/proxy_R.exp().sum())*max(10-temp, 1)
+    proxy_R = (proxy_R.exp() / proxy_R.exp().sum()) * max(10 - temp, 1)
 
     plot_state_action_occupancies(
-        f"Random with temp {1/temp:.2f}",
+        f"Random with temp {1 / temp:.2f}",
         n_states,
         n_actions,
         T,
@@ -371,6 +429,7 @@ def random(temp=1):
         CHOSEN_AXIS,
         device,
     )
+
 
 def run_all_randoms():
     for i in range(1, 10):
@@ -413,6 +472,7 @@ def policy_to_reward(temp):
         device,
     )
 
+
 def star(temp=2):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_states = 2
@@ -442,5 +502,41 @@ def star(temp=2):
         device,
     )
 
+
+def fixed_adv(temp):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+
+    true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    true_R = (true_R.exp() / true_R.exp().sum()) * max(10 - temp, 1)
+
+    proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    proxy_R = (proxy_R.exp() / proxy_R.exp().sum()) * max(10 - temp, 1)
+
+    reward_dict = {
+        "True Reward": true_R,
+        "Proxy Reward": proxy_R,
+    }
+
+    plot_state_action_occupancies(
+        f"Random with temp {1 / temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        reward_dict,
+        CHOSEN_AXIS,
+        device,
+        rl_algo={"PPO": ppo_tabular, "Fixed Adv": ppo_fixed_adv_tabular},
+    )
+
+
 if __name__ == "__main__":
-    cobras()
+    fixed_adv(2)
