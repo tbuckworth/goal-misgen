@@ -113,7 +113,7 @@ def cobras():
     n_states = 2
     n_actions = 2
     gamma = 0.9
-    CHOSEN_AXIS = 0
+    CHOSEN_AXIS = 1
     state0 = "Many Cobras"
     state1 = "Few Cobras"
     # state 1: few cobras
@@ -134,6 +134,10 @@ def cobras():
     proxy_R = torch.zeros((n_states, n_actions)).to(device=device)
     proxy_R[0, 1] = 1.
 
+    reward_dict = {
+        "True Reward":true_R,
+        "Proxy Reward":proxy_R,
+    }
 
 
     plot_state_action_occupancies(
@@ -143,8 +147,7 @@ def cobras():
         T,
         mu,
         gamma,
-        true_R,
-        proxy_R,
+        reward_dict,
         CHOSEN_AXIS,
         device,
         state0,
@@ -165,8 +168,7 @@ def plot_state_action_occupancies(
         T,
         mu,
         gamma,
-        true_R,
-        proxy_R,
+        reward_list,
         CHOSEN_AXIS,
         device,
         state0="State 0",
@@ -184,14 +186,12 @@ def plot_state_action_occupancies(
     #
     # prx, pry, proxy_x, proxy_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, proxy_R)
 
-    n_arrows = 4
+    if isinstance(reward_list, dict):
+        reward_names = list(reward_list.keys())
+        reward_list = list(reward_list.values())
+    else:
+        reward_names = None
 
-    u = unit_circle_points(n_arrows)
-    u = u.repeat(2).reshape(n_arrows, 2, 2)
-    u[..., 1] *= -1
-    reward_list = torch.tensor(u).to(device=device,dtype=torch.float32).unbind(0)
-    # reward_list = [true_R, proxy_R]
-    # reward_names = ["True", "Proxy"]
     reward_data = []
 
     for R in reward_list:
@@ -243,17 +243,28 @@ def plot_state_action_occupancies(
         nrx, nry = new_CR[...,CHOSEN_AXIS].cpu().numpy()
         npx, npy = ds[ni,...,CHOSEN_AXIS].cpu().numpy()
 
+    colours = ["red", "orange", "green", "blue", "cyan", "magenta", "purple", "brown"]
 
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
     plt.scatter(x[4:], y[4:], s=circle_size)
 
-    for d in reward_data:
-        plt.scatter(d["sao_x"], d["sao_y"], color='orange', alpha=0.5, s=circle_size)
+    for i, d in enumerate(reward_data):
+        c = 'orange'
+        l=None
+        if reward_names is not None:
+            c = colours[i]
+            l=reward_names[i]
+        plt.scatter(d["sao_x"], d["sao_y"], color=c, alpha=0.5, s=circle_size)
 
-    for d in reward_data:
+    for i, d in enumerate(reward_data):
+        c = 'orange'
+        l = None
+        if reward_names is not None:
+            c = colours[i]
+            l = reward_names[i]
         plt.arrow(x[0], y[0], d["arrow_x"], d["arrow_y"], width=0.05, head_width=0.1, head_length=0.1,
-                  fc='orange', edgecolor='black', linewidth=0.5)
+                  fc=c, edgecolor='black', linewidth=0.5, label=l)
 
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
@@ -402,6 +413,34 @@ def policy_to_reward(temp):
         device,
     )
 
+def star(temp=2):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+
+    n_arrows = 32
+
+    u = unit_circle_points(n_arrows)
+    u = u.repeat(2).reshape(n_arrows, 2, 2)
+    u[..., 1] *= -1
+    reward_list = torch.tensor(u).to(device=device, dtype=torch.float32).unbind(0)
+
+    plot_state_action_occupancies(
+        f"Random with temp {1 / temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        reward_list,
+        CHOSEN_AXIS,
+        device,
+    )
 
 if __name__ == "__main__":
-    policy_to_reward(2)
+    cobras()
