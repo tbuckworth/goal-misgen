@@ -440,6 +440,7 @@ class Canonicaliser(BaseAgent):
                 # else:
                 target = R + self.gamma * (next_value_batch * (1 - done_batch) + term_value * done_batch)
                 target = target.detach() if self.detach_target else target
+                #TODO: is value iteration incorrect if target is not detached?
                 value_loss = nn.MSELoss()(target, value_batch)
                 value_loss.backward()
                 val_losses.append(value_loss.item())
@@ -853,6 +854,7 @@ class Canonicaliser(BaseAgent):
         }
 
     def inf_term_value(self):
+        #TODO: should np.log(self.n_actions) be np.log(1/n_actions)?
         return (1 / (1 - self.gamma)) * np.log(self.n_actions)
 
     def maybe_encode(self, obs, encoder, hidden_state):

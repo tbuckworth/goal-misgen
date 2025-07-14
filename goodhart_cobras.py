@@ -540,4 +540,4 @@ def fixed_adv(temp):
 
 
 if __name__ == "__main__":
-    fixed_adv(2)
+    star(2)
