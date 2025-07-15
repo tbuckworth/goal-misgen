@@ -260,6 +260,8 @@ def plot_state_action_occupancies(
         c = colours[i] if reward_names else 'orange'
         for j, (algo_name, algo) in enumerate(rl_algo.items()):
             arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R, algo)
+            _, soft_pi = soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device)
+            soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[..., CHOSEN_AXIS].detach().cpu().numpy()
             reward_data.append(
                 dict(name=name,
                      arrow_x=arrow_x,
@@ -268,7 +270,9 @@ def plot_state_action_occupancies(
                      sao_y=sao_y,
                      algo_name=algo_name,
                      colour=c,
-                     shape=shapes[j]
+                     shape=shapes[j],
+                     soft_x=soft_x,
+                     soft_y=soft_y,
                      )
             )
     breed = [1., 0.]
@@ -314,14 +318,17 @@ def plot_state_action_occupancies(
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
     plt.scatter(x[4:], y[4:], s=circle_size)
 
-    for i, d in enumerate(reward_data):
+    for d in reward_data:
         plt.scatter(d["sao_x"], d["sao_y"], color=d["colour"],
                     alpha=0.5, s=circle_size, label=f"{d['algo_name']} {d['name']}",
                     marker=d["shape"])
 
-    for i, d in enumerate(reward_data):
+    for d in reward_data:
         plt.arrow(x[0], y[0], d["arrow_x"], d["arrow_y"], width=0.05, head_width=0.1, head_length=0.1,
                   fc=d["colour"], edgecolor='black', linewidth=0.5, label=d['name'])
+
+    for d in reward_data:
+        plt.scatter(d['soft_x'], d['soft_y'], color=d["colour"], s=tri_size)
 
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
@@ -474,15 +481,15 @@ def policy_to_reward(temp):
     )
 
 
-def star(temp=2):
+def star(inv_temp=2):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_states = 2
     n_actions = 2
     gamma = 0.9
     CHOSEN_AXIS = 0
 
-    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
-    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+    T = torch.rand((n_states, n_actions, n_states)).mul(inv_temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(inv_temp).softmax(dim=-1).to(device=device)
 
     n_arrows = 32
 
@@ -492,7 +499,7 @@ def star(temp=2):
     reward_list = torch.tensor(u).to(device=device, dtype=torch.float32).unbind(0)
 
     plot_state_action_occupancies(
-        f"Random with temp {1 / temp:.2f}",
+        f"Random with temp {1 / inv_temp:.2f}",
         n_states,
         n_actions,
         T,
