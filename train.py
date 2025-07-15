@@ -12,6 +12,7 @@ from common import set_global_seeds, set_global_log_levels
 import os, time, argparse
 import random
 import torch
+from device import get_best_device
 
 from discrete_env.stacked_env import StackedEnv
 from helper_local import create_venv, initialize_policy, get_hyperparameters, listdir, add_training_args, get_config, \
@@ -95,10 +96,7 @@ def train(args):
     ## DEVICE ##
     ############
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_device)
-    if args.device == 'gpu':
-        device = torch.device('cuda')
-    elif args.device == 'cpu':
-        device = torch.device('cpu')
+    device = get_best_device()
 
     #################
     ## ENVIRONMENT ##
@@ -260,7 +258,7 @@ def train(args):
         cfg = vars(args)
         cfg.update(hyperparameters)
         wb_resume = "allow"  # if args.model_file is None else "must"
-        wandb.init(project="goal-misgen", config=cfg, tags=args.wandb_tags, resume=wb_resume)
+        wandb.init(project="goal-misgen", entity="ic-ai-safety", config=cfg, tags=args.wandb_tags, resume=wb_resume)
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
 
     hyperparameters.update(extra_params)
