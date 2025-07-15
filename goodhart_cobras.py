@@ -319,16 +319,45 @@ def plot_state_action_occupancies(
     plt.scatter(x[4:], y[4:], s=circle_size)
 
     for d in reward_data:
-        plt.scatter(d["sao_x"], d["sao_y"], color=d["colour"],
-                    alpha=0.5, s=circle_size, label=f"{d['algo_name']} {d['name']}",
-                    marker=d["shape"])
+        params = dict(
+            x=d["sao_x"],
+            y=d["sao_y"],
+            color=d["colour"],
+            alpha=0.5,
+            s=circle_size,
+            marker=d['shape'],
+            )
+        if len(reward_data)<5:
+            params['label'] = f"{d['algo_name']} {d['name']}"
+        plt.scatter(**params)
 
     for d in reward_data:
-        plt.arrow(x[0], y[0], d["arrow_x"], d["arrow_y"], width=0.05, head_width=0.1, head_length=0.1,
-                  fc=d["colour"], edgecolor='black', linewidth=0.5, label=d['name'])
+        params = dict(
+            x=x[0],
+            y=y[0],
+            dx=d["arrow_x"],
+            dy=d["arrow_y"],
+            width=0.05,
+            head_width=0.1,
+            head_length=0.1,
+            fc=d["colour"],
+            edgecolor='black',
+            linewidth=0.5,
+        )
+        if len(reward_data)<5:
+            params['label'] = d['name']
+        plt.arrow(**params)
 
     for d in reward_data:
-        plt.scatter(d['soft_x'], d['soft_y'], color=d["colour"], s=tri_size)
+        params = dict(
+            x=d['soft_x'],
+            y=d['soft_y'],
+            color=d["colour"],
+            s=tri_size,
+        )
+        if len(reward_data)<5:
+            params['label'] = f"Soft $\pi*$: {d['name']}"
+        plt.scatter(**params)
 
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
