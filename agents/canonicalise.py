@@ -855,7 +855,7 @@ class Canonicaliser(BaseAgent):
 
     def inf_term_value(self):
         #TODO: should np.log(self.n_actions) be np.log(1/n_actions)?
-        return (1 / (1 - self.gamma)) * np.log(self.n_actions)
+        return (1 / (1 - self.gamma)) * np.log(1/self.n_actions)
 
     def maybe_encode(self, obs, encoder, hidden_state):
         if encoder is None:
