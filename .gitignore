@@ -92,4 +92,4 @@ venv/
 results/
 data/
 slurm*.out
-
+outputs

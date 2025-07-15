@@ -8,6 +8,7 @@ module load Qt5/5.15.2-GCCcore-10.3.0
 module load Python/3.8.6-GCCcore-10.2.0
 cd $HOME/pyg/goal-misgen/
 source venv/bin/activate
+pip install -r requirements.txt
 python3.8 train.py --exp_name maze_aisc --env_name maze_aisc --num_levels $num_levels --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed $seed --use_wandb --rand_region $rand_region
 
 #usage:
