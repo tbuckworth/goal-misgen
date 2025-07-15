@@ -372,6 +372,17 @@ def plot_state_action_occupancies(
 
     print("done")
 
+    soft_pis = [soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device) for R in reward_list]
+    implied_R = [canonicalise(T, pi.log(), gamma, device=device) for _, pi in soft_pis]
+    from titus_meg import norm_funcs, dist_funcs
+    normalize = norm_funcs["l2_norm"]
+    distance = dist_funcs["l2_dist"]
+    pircs = [distance(normalize(R), normalize(IR)) for R, IR in zip(reward_list, implied_R)]
+    # These are all close to zero, yay!
+    # TODO: do the same for hard pis trained on PPO - check at various stages of training.
+
+
+
 
 def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R, rl_algo=ppo_tabular):
     true_CR = canonicalise(T, true_R, gamma, device=device)
