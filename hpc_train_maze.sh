@@ -7,6 +7,9 @@ module load CMake/3.18.4-GCCcore-10.2.0
 module load Qt5/5.15.2-GCCcore-10.2.0  # Changed from 10.3.0 to 10.2.0
 module load Python/3.8.6-GCCcore-10.2.0
 
+# Set Qt5 directory for CMake
+export Qt5_DIR=$EBROOTQT5/lib/cmake/Qt5
+
 cd $HOME/pyg/goal-misgen/
 source venv/bin/activate
 python -m pip install --upgrade pip
