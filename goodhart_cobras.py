@@ -1,9 +1,11 @@
+
 import einops
 import numpy as np
 import torch
 
 from meg.meg_torch import state_action_occupancy, soft_value_iteration, soft_value_iteration_sa_rew
 
+from titus_meg import MattMeg
 
 def uniform_policy_evaluation(T, R, gamma, n_iterations=1000, device='cpu'):
     n_states, n_actions = T.shape[:2]
@@ -253,7 +255,7 @@ def plot_state_action_occupancies(
     reward_data = []
 
     colours = ["red", "orange", "green", "blue", "cyan", "magenta", "purple", "brown"]
-    shapes = ['o','x','+','v','s']
+    shapes = ['o', 'x', '+', 'v', 's']
 
     for i, R in enumerate(reward_list):
         name = reward_names[i] if reward_names else None
@@ -261,7 +263,9 @@ def plot_state_action_occupancies(
         for j, (algo_name, algo) in enumerate(rl_algo.items()):
             arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R, algo)
             _, soft_pi = soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device)
-            soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[..., CHOSEN_AXIS].detach().cpu().numpy()
+            soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[
+                ..., CHOSEN_AXIS].detach().cpu().numpy()
+            soft_meg = MattMeg(soft_pi, T, mu=mu, device=device).learn_meg()[0]
             reward_data.append(
                 dict(name=name,
                      arrow_x=arrow_x,
@@ -273,6 +277,7 @@ def plot_state_action_occupancies(
                      shape=shapes[j],
                      soft_x=soft_x,
                      soft_y=soft_y,
+                     soft_meg=soft_meg,
                      )
             )
     breed = [1., 0.]
@@ -313,7 +318,6 @@ def plot_state_action_occupancies(
         nrx, nry = new_CR[..., CHOSEN_AXIS].cpu().numpy()
         npx, npy = ds[ni, ..., CHOSEN_AXIS].cpu().numpy()
 
-
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
     plt.scatter(x[4:], y[4:], s=circle_size)
@@ -326,8 +330,8 @@ def plot_state_action_occupancies(
             alpha=0.5,
             s=circle_size,
             marker=d['shape'],
-            )
-        if len(reward_data)<5:
+        )
+        if len(reward_data) < 5:
             params['label'] = f"{d['algo_name']} {d['name']}"
         plt.scatter(**params)
 
@@ -344,7 +348,7 @@ def plot_state_action_occupancies(
             edgecolor='black',
             linewidth=0.5,
         )
-        if len(reward_data)<5:
+        if len(reward_data) < 5:
             params['label'] = d['name']
         plt.arrow(**params)
 
@@ -352,10 +356,11 @@ def plot_state_action_occupancies(
         params = dict(
             x=d['soft_x'],
             y=d['soft_y'],
-            color=d["colour"],
+            c=d["soft_meg"],
+            cmap='viridis',
             s=tri_size,
         )
-        if len(reward_data)<5:
+        if len(reward_data) < 5:
             params['label'] = f"Soft $\pi*$: {d['name']}"
         plt.scatter(**params)
 
@@ -380,8 +385,12 @@ def plot_state_action_occupancies(
     pircs = [distance(normalize(R), normalize(IR)) for R, IR in zip(reward_list, implied_R)]
     # These are all close to zero, yay!
     # TODO: do the same for hard pis trained on PPO - check at various stages of training.
+    # from titus_meg import MattMeg
+    # meg_object = MattMeg(soft_pis[0][1], T, mu=mu, device=device)
+    # meg, elapsed = meg_object.learn_meg()
+    # megs = [MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for _, pi in soft_pis]
 
-
+    unit_circle_points
 
 
 def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R, rl_algo=ppo_tabular):
