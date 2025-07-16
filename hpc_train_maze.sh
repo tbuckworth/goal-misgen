@@ -11,6 +11,7 @@ cd $HOME/pyg/goal-misgen/
 source venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install -e ../procgenAISC/
 python3.8 train.py --exp_name maze_aisc --env_name maze_aisc --num_levels $num_levels --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed $seed --use_wandb --rand_region $rand_region
 
 #usage:
