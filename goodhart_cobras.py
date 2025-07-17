@@ -277,7 +277,7 @@ def plot_state_action_occupancies(
                      shape=shapes[j],
                      soft_x=soft_x,
                      soft_y=soft_y,
-                     soft_meg=soft_meg,
+                     soft_meg=soft_meg.detach().cpu().numpy(),
                      )
             )
     breed = [1., 0.]
@@ -352,17 +352,23 @@ def plot_state_action_occupancies(
             params['label'] = d['name']
         plt.arrow(**params)
 
-    for d in reward_data:
-        params = dict(
-            x=d['soft_x'],
-            y=d['soft_y'],
-            c=d["soft_meg"],
-            cmap='viridis',
-            s=tri_size,
-        )
-        if len(reward_data) < 5:
-            params['label'] = f"Soft $\pi*$: {d['name']}"
-        plt.scatter(**params)
+    x_data = [d['soft_x'] for d in reward_data]
+    y_data = [d['soft_y'] for d in reward_data]
+    c_data = [d['soft_meg'] for d in reward_data]
+    plt.scatter(x_data, y_data, c=c_data, cmap='viridis', s=tri_size,
+                label=f"Soft $\pi*$ coloured by Meg")
+
+    # for d in reward_data:
+    #     params = dict(
+    #         x=d['soft_x'],
+    #         y=d['soft_y'],
+    #         c=d["soft_meg"],
+    #         cmap='viridis',
+    #         s=tri_size,
+    #     )
+    #     if len(reward_data) < 5:
+    #         params['label'] = f"Soft $\pi*$: {d['name']}"
+    #     plt.scatter(**params)
 
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
