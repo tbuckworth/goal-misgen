@@ -565,6 +565,33 @@ def star(inv_temp=2):
         device,
     )
 
+def state_only_reward(inv_temp=2):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(inv_temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(inv_temp).softmax(dim=-1).to(device=device)
+
+    r1 = torch.tensor([1., -1.]).to(device=device)
+
+    r2 = torch.tensor([-1., 1.]).to(device=device)
+
+    reward_list = [einops.einsum(r, T, "ns, s a ns -> s a") for r in [r1, r2]]
+
+    plot_state_action_occupancies(
+        f"Random with temp {1 / inv_temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        reward_list,
+        CHOSEN_AXIS,
+        device,
+    )
 
 def fixed_adv(temp):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -602,4 +629,4 @@ def fixed_adv(temp):
 
 
 if __name__ == "__main__":
-    star(2)
+    state_only_reward(2)
