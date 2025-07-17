@@ -19,11 +19,8 @@ from helper_local import create_venv, initialize_policy, get_hyperparameters, li
     create_shifted_venv, get_value_dir_and_config_for_env, create_unshifted_venv, get_model_with_largest_checkpoint, \
     load_tempered_policy, get_rew_term
 
-try:
-    import wandb
-    from private_login import wandb_login
-except ImportError:
-    pass
+import wandb
+from private_login import wandb_login
 
 
 def load_ppo_value_models(env_name, env, observation_shape, device, val_type):
