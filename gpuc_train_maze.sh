@@ -14,7 +14,8 @@ module load Python/3.8.6-GCCcore-10.2.0
 # Set Qt5 directory for CMake
 export Qt5_DIR=$EBROOTQT5/lib/cmake/Qt5
 
-cd /vol/bitbucket/$USER/goal-misgen/
+# TODO hardcoded my username since slurm does not seem to have USER env var
+cd /vol/bitbucket/rm1723/goal-misgen/
 source /vol/bitbucket/tfb115/goal-misgen/venv/bin/activate
 # python -m pip install --upgrade pip
 # pip install -r requirements.txt
