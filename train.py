@@ -252,16 +252,21 @@ def train(args):
     cfg = vars(args)
     cfg.update(hyperparameters)
     np.save(os.path.join(logdir, "config.npy"), cfg)
+    print(" - SAVED CONFIG")
 
     if args.use_wandb:
         wandb_login()
+        print(" - LOGGED INTO WANDB")
         cfg = vars(args)
         cfg.update(hyperparameters)
+        print(" - UPDATED HYPER")
         wb_resume = "allow"  # if args.model_file is None else "must"
         wandb.init(project="goal-misgen", entity="ic-ai-safety", config=cfg, tags=args.wandb_tags, resume=wb_resume)
+        print(" - WANDB INIT'D")
     logger = Logger(n_envs, logdir, use_wandb=args.use_wandb)
 
     hyperparameters.update(extra_params)
+    print(" - HYPER UPDATED")
 
     rew_term = hyperparameters.get("reward_termination", None)
     if rew_term == 'None':
