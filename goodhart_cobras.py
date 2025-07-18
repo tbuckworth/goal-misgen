@@ -301,6 +301,8 @@ def plot_state_action_occupancies(
 
     ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in all_pis])
     x, y = ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
+    megs = torch.stack([MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for pi in all_pis])
+
 
     circle_size = 5
     tri_size = 50
@@ -320,7 +322,7 @@ def plot_state_action_occupancies(
 
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
-    plt.scatter(x[4:], y[4:], s=circle_size)
+    plt.scatter(x[4:], y[4:], s=circle_size, c=megs[4:], cmap='viridis')
 
     for d in reward_data:
         params = dict(
