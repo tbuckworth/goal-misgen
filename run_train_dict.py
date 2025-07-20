@@ -90,4 +90,19 @@ if __name__ == '__main__':
         "use_wandb": True,
         "model_file": get_model_with_largest_checkpoint("logs/train/coinrun/coinrun/2025-01-24__15-27-41__seed_6033"),
     }
-    run_next_hyperparameters(hparams)
+    load_and_run_maze = {
+        "exp_name": "maze1",
+        "env_name": "maze_aisc",
+        "num_levels": 100000,
+        "distribution_mode": "hard",
+        "param_name": "hard-500-low-mem",
+        "num_timesteps": 200000000,
+        "num_checkpoints": 5,
+        "seed": 50,
+        "rand_region": 1,
+        "use_wandb": True,
+        "model_file": get_model_with_largest_checkpoint("logs/train/maze_aisc/maze1/2025-04-01__18-09-01__seed_50"),
+        "render": True,
+        "normalize_rew": False,
+    }
+    run_next_hyperparameters(load_and_run_maze)
