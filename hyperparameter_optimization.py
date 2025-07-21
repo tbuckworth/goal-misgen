@@ -196,7 +196,7 @@ def ppo():
         "device": "gpu",
         "num_timesteps": int(5e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["cb0"],#["gen_misgen", "max_ent2"],
+        "wandb_tags": ["gen_misgen", "max_ent2"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": False,
