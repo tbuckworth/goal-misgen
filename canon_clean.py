@@ -54,7 +54,7 @@ steps = {
         "n_envs": 32,
         "n_steps": 512,
         "n_val_envs": 8,
-        "val_epochs": 150,
+        "val_epoch": 150,
         "hidden_dims": [256, 256],
     },
     "acrobot": {
@@ -62,7 +62,7 @@ steps = {
         "n_envs": 32,
         "n_steps": 512,
         "n_val_envs": 8,
-        "val_epochs": 150,
+        "val_epoch": 150,
         "hidden_dims": [256, 256],
     },
     "maze": {
@@ -70,7 +70,7 @@ steps = {
         "n_envs": 16,
         "n_steps": 2048,
         "n_val_envs": 8,
-        "val_epochs": 300,
+        "val_epoch": 300,
         "hidden_dims": [256, 256, 256, 256],
     },
     "maze_aisc": {
@@ -78,7 +78,7 @@ steps = {
         "n_envs": 16,
         "n_steps": 2048,
         "n_val_envs": 8,
-        "val_epochs": 300,
+        "val_epoch": 300,
         "hidden_dims": [256, 256, 256, 256],
     },
     "coinrun": {
@@ -86,7 +86,7 @@ steps = {
         "n_envs": 16,
         "n_steps": 2048,
         "n_val_envs": 8,
-        "val_epochs": 300,
+        "val_epoch": 300,
         "hidden_dims": [256, 256, 256, 256],
     },
 }

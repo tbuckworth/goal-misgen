@@ -1,9 +1,11 @@
+
 import einops
 import numpy as np
 import torch
 
 from meg.meg_torch import state_action_occupancy, soft_value_iteration, soft_value_iteration_sa_rew
 
+from titus_meg import MattMeg
 
 def uniform_policy_evaluation(T, R, gamma, n_iterations=1000, device='cpu'):
     n_states, n_actions = T.shape[:2]
@@ -253,7 +255,7 @@ def plot_state_action_occupancies(
     reward_data = []
 
     colours = ["red", "orange", "green", "blue", "cyan", "magenta", "purple", "brown"]
-    shapes = ['o','x','+','v','s']
+    shapes = ['o', 'x', '+', 'v', 's']
 
     for i, R in enumerate(reward_list):
         name = reward_names[i] if reward_names else None
@@ -261,7 +263,9 @@ def plot_state_action_occupancies(
         for j, (algo_name, algo) in enumerate(rl_algo.items()):
             arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R, algo)
             _, soft_pi = soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device)
-            soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[..., CHOSEN_AXIS].detach().cpu().numpy()
+            soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[
+                ..., CHOSEN_AXIS].detach().cpu().numpy()
+            soft_meg = MattMeg(soft_pi, T, mu=mu, device=device).learn_meg()[0]
             reward_data.append(
                 dict(name=name,
                      arrow_x=arrow_x,
@@ -273,6 +277,7 @@ def plot_state_action_occupancies(
                      shape=shapes[j],
                      soft_x=soft_x,
                      soft_y=soft_y,
+                     soft_meg=soft_meg.detach().cpu().numpy(),
                      )
             )
     breed = [1., 0.]
@@ -296,6 +301,8 @@ def plot_state_action_occupancies(
 
     ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in all_pis])
     x, y = ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
+    megs = torch.stack([MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for pi in all_pis])
+
 
     circle_size = 5
     tri_size = 50
@@ -313,10 +320,9 @@ def plot_state_action_occupancies(
         nrx, nry = new_CR[..., CHOSEN_AXIS].cpu().numpy()
         npx, npy = ds[ni, ..., CHOSEN_AXIS].cpu().numpy()
 
-
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
-    plt.scatter(x[4:], y[4:], s=circle_size)
+    plt.scatter(x[4:], y[4:], s=circle_size, c=megs[4:], cmap='viridis')
 
     for d in reward_data:
         params = dict(
@@ -326,8 +332,8 @@ def plot_state_action_occupancies(
             alpha=0.5,
             s=circle_size,
             marker=d['shape'],
-            )
-        if len(reward_data)<5:
+        )
+        if len(reward_data) < 5:
             params['label'] = f"{d['algo_name']} {d['name']}"
         plt.scatter(**params)
 
@@ -344,20 +350,27 @@ def plot_state_action_occupancies(
             edgecolor='black',
             linewidth=0.5,
         )
-        if len(reward_data)<5:
+        if len(reward_data) < 5:
             params['label'] = d['name']
         plt.arrow(**params)
 
-    for d in reward_data:
-        params = dict(
-            x=d['soft_x'],
-            y=d['soft_y'],
-            color=d["colour"],
-            s=tri_size,
-        )
-        if len(reward_data)<5:
-            params['label'] = f"Soft $\pi*$: {d['name']}"
-        plt.scatter(**params)
+    x_data = [d['soft_x'] for d in reward_data]
+    y_data = [d['soft_y'] for d in reward_data]
+    c_data = [d['soft_meg'] for d in reward_data]
+    plt.scatter(x_data, y_data, c=c_data, cmap='viridis', s=tri_size,
+                label=f"Soft $\pi*$ coloured by Meg")
+
+    # for d in reward_data:
+    #     params = dict(
+    #         x=d['soft_x'],
+    #         y=d['soft_y'],
+    #         c=d["soft_meg"],
+    #         cmap='viridis',
+    #         s=tri_size,
+    #     )
+    #     if len(reward_data) < 5:
+    #         params['label'] = f"Soft $\pi*$: {d['name']}"
+    #     plt.scatter(**params)
 
     if add_random_policy:
         plt.scatter(npx, npy, color='green', s=tri_size)
@@ -371,6 +384,21 @@ def plot_state_action_occupancies(
     plt.show()
 
     print("done")
+
+    soft_pis = [soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device) for R in reward_list]
+    implied_R = [canonicalise(T, pi.log(), gamma, device=device) for _, pi in soft_pis]
+    from titus_meg import norm_funcs, dist_funcs
+    normalize = norm_funcs["l2_norm"]
+    distance = dist_funcs["l2_dist"]
+    pircs = [distance(normalize(R), normalize(IR)) for R, IR in zip(reward_list, implied_R)]
+    # These are all close to zero, yay!
+    # TODO: do the same for hard pis trained on PPO - check at various stages of training.
+    # from titus_meg import MattMeg
+    # meg_object = MattMeg(soft_pis[0][1], T, mu=mu, device=device)
+    # meg, elapsed = meg_object.learn_meg()
+    # megs = [MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for _, pi in soft_pis]
+
+    unit_circle_points
 
 
 def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R, rl_algo=ppo_tabular):
@@ -539,6 +567,33 @@ def star(inv_temp=2):
         device,
     )
 
+def state_only_reward(inv_temp=2):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(inv_temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(inv_temp).softmax(dim=-1).to(device=device)
+
+    r1 = torch.tensor([1., -1.]).to(device=device)
+
+    r2 = torch.tensor([-1., 1.]).to(device=device)
+
+    reward_list = [einops.einsum(r, T, "ns, s a ns -> s a") for r in [r1, r2]]
+
+    plot_state_action_occupancies(
+        f"Random with temp {1 / inv_temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        reward_list,
+        CHOSEN_AXIS,
+        device,
+    )
 
 def fixed_adv(temp):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -576,4 +631,4 @@ def fixed_adv(temp):
 
 
 if __name__ == "__main__":
-    star(2)
+    state_only_reward(2)
