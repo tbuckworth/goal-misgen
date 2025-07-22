@@ -14,18 +14,18 @@ def run_script(_):
     Run hyperparameter_optimization.py using the Python interpreter
     from the specified virtual environment.
     """
-    subprocess.run(["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", "hyperparameter_optimization.py"])
+    subprocess.run(["python3.8", "hyperparameter_optimization.py"])
 
 def run_canon(_, model_files, tag):
     """
     Run hyperparameter_optimization.py using the Python interpreter
     from the specified virtual environment.
     """
-    base_dir = "/vol/bitbucket/tfb115/goal-misgen/"
+    base_dir = "/vol/bitbucket/rm1723/goal-misgen/"
     model_files = [base_dir + m for m in model_files]
     # subprocess.run(["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8", f"multi_canon.py --model_files {' '.join(model_files)} --tag {tag}"])
-    cmd = ["/vol/bitbucket/tfb115/goal-misgen/opvenv/bin/python3.8",
-           "/vol/bitbucket/tfb115/goal-misgen/multi_canon_local.py",
+    cmd = ["python3.8",
+           "multi_canon_local.py",
            "--tag",
            tag,
            "--model_files",
@@ -51,12 +51,12 @@ def main():
         pool.starmap(run_canon, args)
 
 def hp():
-    if len(sys.argv) < 2:
-        print("Usage: python multi_train.py <n>")
-        print("Example: python multi_train.py 5")
-        sys.exit(1)
+    # if len(sys.argv) < 2:
+    #     print("Usage: python multi_train.py <n>")
+    #     print("Example: python multi_train.py 5")
+    #     sys.exit(1)
 
-    n = int(sys.argv[1])  # Number of parallel processes
+    n = 1 #int(sys.argv[1])  # Number of parallel processes
 
     args = [(i,) for i in range(n)]
     # Verify that the venv's python exists

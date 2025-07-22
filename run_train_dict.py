@@ -118,7 +118,7 @@ if __name__ == '__main__':
         "env_name": "acrobot",
         "exp_name": "value",
         "param_name": "trusted-value",
-        "wandb_tags": ["trusted value"],
+        "wandb_tags": ["trusted value", "rohan"],
         "algo": "trusted-value",
         "num_timesteps": int((128+16)*1024),
         "use_wandb": True,

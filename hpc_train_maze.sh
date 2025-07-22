@@ -13,8 +13,8 @@ export Qt5_DIR=$EBROOTQT5/lib/cmake/Qt5
 cd $HOME/pyg/goal-misgen/
 source venv/bin/activate
 python3.9 -m pip install --upgrade pip
-pip3.9 install -r requirements.txt
-pip3.9 install -e ../procgenAISC/
+python3.9 -m pip install -r requirements.txt
+python3.9 -m pip install -e ../procgenAISC/
 python3.9 train.py --exp_name maze_aisc --env_name maze_aisc --num_levels $num_levels --distribution_mode hard --param_name hard-500 --num_timesteps 200000000 --num_checkpoints 5 --seed $seed --use_wandb --rand_region $rand_region
 
 #usage:

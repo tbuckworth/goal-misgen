@@ -41,7 +41,7 @@ class PreVecEnv(Env):
         self.num_envs = n_envs
         self.max_steps = max_steps
         self.n_actions = n_actions
-        self.np_random_seed = None
+        # self.np_random_seed = None
         self._np_random = None
         self.action_space = spaces.Discrete(self.n_actions)
         self.observation_space = spaces.Box(self.low[self.non_drop_index], self.high[self.non_drop_index],
@@ -117,9 +117,9 @@ class PreVecEnv(Env):
         return self._get_ob()
 
     def seed(self, seed=None):
-        self.np_random_seed = seed
+        # self.np_random_seed = seed
         if self.np_random_seed is not None:
-            self._np_random, self.np_random_seed = seeding.np_random(seed)
+            # self._np_random, self.np_random_seed = seeding.np_random(seed)
             self.start_space.set_np_random(self._np_random)
         return [seed]
 

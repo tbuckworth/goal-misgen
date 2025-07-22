@@ -200,7 +200,7 @@ def ppo():
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
-        "num_timesteps": int(5e7),
+        "num_timesteps": 2e8,  # int(5e7),
         "seed": [6033, 0, 42, 50, 81],
         "wandb_tags": ["gen_misgen", "max_ent2", "rohan"],
         "use_wandb": True,
@@ -221,6 +221,11 @@ def ppo():
         # "reset_rew_model_weights": False,
         # "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
         # "rew_learns_from_trusted_rollouts": [False, True],
+        
+        "entropy_coef": 0.,
+        "alpha_max_ent": 1.,
+        "normalize_rew": False,
+        "detatch_target": True
     }
     bounds = {}
     #     "rew_lr": [0.0001, 0.05],
