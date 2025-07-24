@@ -190,13 +190,7 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": [
-            # 'mountain_car',
-            # 'acrobot',
-            # 'cartpole_swing',
-            'cartpole',
-            'ascent',
-        ],
+        "env_name": ['cartpole'],
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
@@ -333,4 +327,4 @@ def latent_diffusion_search():
 
 
 if __name__ == "__main__":
-    latent_diffusion_search()
+    ppo()

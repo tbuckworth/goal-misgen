@@ -14,7 +14,7 @@ def run_script(_):
     Run hyperparameter_optimization.py using the Python interpreter
     from the specified virtual environment.
     """
-    subprocess.run(["python3.8", "hyperparameter_optimization.py"])
+    subprocess.run(["python3.9", "hyperparameter_optimization.py"])
 
 def run_canon(_, model_files, tag):
     """
@@ -51,12 +51,12 @@ def main():
         pool.starmap(run_canon, args)
 
 def hp():
-    # if len(sys.argv) < 2:
-    #     print("Usage: python multi_train.py <n>")
-    #     print("Example: python multi_train.py 5")
-    #     sys.exit(1)
+    if len(sys.argv) < 2:
+        print("Usage: python multi_train.py <n>")
+        print("Example: python multi_train.py 5")
+        sys.exit(1)
 
-    n = 1 #int(sys.argv[1])  # Number of parallel processes
+    n = int(sys.argv[1])  # Number of parallel processes
 
     args = [(i,) for i in range(n)]
     # Verify that the venv's python exists
