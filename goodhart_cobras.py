@@ -49,6 +49,137 @@ def q_value_iteration(T, R, gamma, n_iterations=1000, device='cpu', slow=False):
     pi = torch.nn.functional.one_hot(Q.argmax(dim=1)).float()
     return pi, Qs
 
+def orthogonal_value_iteration(
+        T, R, gamma,
+        n_iterations: int = 10000,
+        device: str = 'cpu',
+        lr: float = 0.1,
+        clip_eps: float = 0.2,
+        eval_iters: int = 20,
+):
+    """
+    Orthogonal Value Iteration
+    """
+    T, R = T.to(device), R.to(device)
+    n_states, n_actions = T.shape[:2]
+
+    # actor parameters (state-wise p_parallel)
+    p_parallel = torch.zeros(n_states, device=device, requires_grad=True)
+    p_orthogonal = torch.zeros(n_states, device=device, requires_grad=True)
+
+    opt_parallel = torch.optim.Adam([p_parallel], lr=lr)
+    opt_orthogonal = torch.optim.Adam([p_orthogonal], lr=lr)
+
+    policies = []
+    R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+    old_probs = torch.log_softmax(R_parallel.detach(), dim=-1)  # π₀
+
+    for i in range(n_iterations):
+        R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+        R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
+
+        loss_parallel = -torch.dot(R_parallel.flatten(), R_orthogonal.flatten().detach())
+        loss_orthogonal = torch.dot(R_parallel.flatten().detach(), R_orthogonal.flatten())
+
+
+        opt_parallel.zero_grad()
+        loss_parallel.backward()
+        opt_parallel.step()
+
+        opt_orthogonal.zero_grad()
+        loss_orthogonal.backward()
+        opt_orthogonal.step()
+
+        new_probs = torch.log_softmax(R_parallel, dim=-1)
+        policies.append(new_probs.detach())  # track policy over time
+
+        # ---- convergence check ----
+        if (i > 100 and (new_probs - old_probs).abs().max() < 1e-8):
+            print(f'OVI converged in {i} iterations')
+            break
+
+        old_probs = new_probs.detach()
+
+    pi = old_probs  # final stochastic policy
+    return pi, [p for p in policies]
+
+
+def proximal_orthogonal_value(
+        T, R, gamma,
+        n_iterations: int = 1000,
+        device: str = 'cpu',
+        lr: float = 0.1,
+        clip_eps: float = 0.2,
+        eval_iters: int = 20,
+):
+    """
+    Tabular PPO with a full-model critic.
+    Matches the interface of `q_value_iteration`.
+    Returns:
+        pi  – final π(s,a) probabilities, shape [S, A] (analogous to one-hot arg-max in QVI)
+        policies – list of π_t(s,a) tensors across updates (mirrors the role of Qs in QVI)
+    """
+    T, R = T.to(device), R.to(device)
+    n_states, n_actions = T.shape[:2]
+
+    p_parallel = torch.zeros(n_states, device=device, requires_grad=True)
+    p_orthogonal = torch.zeros(n_states, device=device, requires_grad=True)
+
+    opt_parallel = torch.optim.Adam([p_parallel], lr=lr)
+    opt_orthogonal = torch.optim.Adam([p_orthogonal], lr=lr)
+
+    # R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+
+    # actor parameters (state-wise logits)
+    logits = torch.zeros(n_states, n_actions, device=device, requires_grad=True)
+    optimiser = torch.optim.SGD([logits], lr=lr)
+
+    policies = []
+    old_probs = torch.softmax(logits.detach(), dim=1)  # π₀
+
+    for i in range(n_iterations):
+
+        for _ in range(eval_iters):  # iterative policy evaluation
+            R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+            R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
+
+            loss_parallel = -torch.dot(R_parallel.flatten(), R_orthogonal.flatten().detach())
+            loss_orthogonal = torch.dot(R_parallel.flatten().detach(), R_orthogonal.flatten())
+
+            opt_parallel.zero_grad()
+            loss_parallel.backward()
+            opt_parallel.step()
+
+            opt_orthogonal.zero_grad()
+            loss_orthogonal.backward()
+            opt_orthogonal.step()
+
+        advantages = R_parallel.detach()
+
+        # ---- actor: clipped PPO update ----
+        optimiser.zero_grad()
+        new_probs = torch.softmax(logits, dim=1)
+        ratio = new_probs / old_probs  # π_θ / π_old
+
+        unclipped = ratio * advantages
+        clipped = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
+        loss = -torch.min(unclipped, clipped).mean()  # maximise surrogate ⇒ minimise –surrogate
+        loss.backward()
+        optimiser.step()
+
+        policies.append(new_probs.detach())  # track policy over time
+
+        # ---- convergence check ----
+        if (i > 100 and (new_probs - old_probs).abs().max() < 1e-8):
+            print(f'POV converged in {i} iterations')
+            break
+
+        old_probs = new_probs.detach()
+
+    pi = old_probs  # final stochastic policy
+    return pi, [p.log() for p in policies]
+
+
 
 def ppo_tabular(
         T, R, gamma,
@@ -232,6 +363,7 @@ def plot_state_action_occupancies(
         act_name=None,
         add_random_policy=False,
         rl_algo=None,
+        colour_meg=True,
 ):
     if rl_algo is None:
         rl_algo = {"PPO": ppo_tabular}
@@ -260,12 +392,12 @@ def plot_state_action_occupancies(
     for i, R in enumerate(reward_list):
         name = reward_names[i] if reward_names else None
         c = colours[i] if reward_names else 'orange'
+        _, soft_pi = soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device)
+        soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[
+            ..., CHOSEN_AXIS].detach().cpu().numpy()
+        soft_meg = MattMeg(soft_pi, T, mu=mu, device=device).learn_meg()[0]
         for j, (algo_name, algo) in enumerate(rl_algo.items()):
             arrow_x, arrow_y, sao_x, sao_y = generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, R, algo)
-            _, soft_pi = soft_value_iteration_sa_rew(R, T, gamma=gamma, device=device)
-            soft_x, soft_y = state_action_occupancy(soft_pi, T, gamma, mu, device=device)[
-                ..., CHOSEN_AXIS].detach().cpu().numpy()
-            soft_meg = MattMeg(soft_pi, T, mu=mu, device=device).learn_meg()[0]
             reward_data.append(
                 dict(name=name,
                      arrow_x=arrow_x,
@@ -301,7 +433,8 @@ def plot_state_action_occupancies(
 
     ds = torch.stack([state_action_occupancy(pi, T, gamma, mu, device=device) for pi in all_pis])
     x, y = ds[..., CHOSEN_AXIS].detach().cpu().numpy().T
-    megs = torch.stack([MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for pi in all_pis])
+    if colour_meg:
+        megs = torch.stack([MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for pi in all_pis])
 
 
     circle_size = 5
@@ -322,7 +455,10 @@ def plot_state_action_occupancies(
 
     import matplotlib.pyplot as plt
     plt.figure(figsize=(12, 8))  # width=10 inches, height=6 inches
-    plt.scatter(x[4:], y[4:], s=circle_size, c=megs[4:], cmap='viridis')
+    if colour_meg:
+        plt.scatter(x[4:], y[4:], s=circle_size, c=megs[4:], cmap='viridis')
+    else:
+        plt.scatter(x[4:], y[4:], s=circle_size)
 
     for d in reward_data:
         params = dict(
@@ -399,7 +535,9 @@ def plot_state_action_occupancies(
     # megs = [MattMeg(pi, T, mu=mu, device=device).learn_meg()[0] for _, pi in soft_pis]
 
     unit_circle_points
-
+    order_vals = [i for i in range(len(reward_data[2]['sao_y']))]
+    plt.scatter(x=reward_data[2]['sao_x'], y=reward_data[2]['sao_y'], c=order_vals, cmap='viridis')
+    plt.show()
 
 def generate_reward_data(CHOSEN_AXIS, T, device, gamma, mu, true_R, rl_algo=ppo_tabular):
     true_CR = canonicalise(T, true_R, gamma, device=device)
@@ -629,6 +767,42 @@ def fixed_adv(temp):
         rl_algo={"PPO": ppo_tabular, "Fixed Adv": ppo_fixed_adv_tabular},
     )
 
+def orthogonal_value(temp):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
+
+    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+
+    true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    true_R = (true_R.exp() / true_R.exp().sum()) * max(10 - temp, 1)
+
+    proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    proxy_R = (proxy_R.exp() / proxy_R.exp().sum()) * max(10 - temp, 1)
+
+    reward_dict = {
+        "True Reward": true_R,
+        "Proxy Reward": proxy_R,
+    }
+
+    plot_state_action_occupancies(
+        f"Random with temp {1 / temp:.2f}",
+        n_states,
+        n_actions,
+        T,
+        mu,
+        gamma,
+        reward_dict,
+        CHOSEN_AXIS,
+        device,
+        rl_algo={"POV": proximal_orthogonal_value, "PPO": ppo_tabular, },
+        colour_meg=False,
+    )
+
+
 
 if __name__ == "__main__":
-    state_only_reward(2)
+    orthogonal_value(2)
