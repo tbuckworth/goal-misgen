@@ -781,11 +781,11 @@ def filter_maze():
     plot_env_data(df, 'Filtered Maze')
 
 if __name__ == "__main__":
-    filter_maze()
-    exit()
+    # filter_maze()
+    # exit()
     # load_summary("Maze_VOrig_Soft_Inf", tag = 'Maze_VOrig_Soft_Inf')
-    for suptitle in configs.keys():
-        create_all_graphs(suptitle)
+    # for suptitle in configs.keys():
+        # create_all_graphs(suptitle)
     # load_all("Coinrun_Soft_Inf")
     # load_meg(["Ascent_Meg_KL5"])
     # tag = "new maze tempered loaded"
@@ -795,3 +795,5 @@ if __name__ == "__main__":
     #         "Ascent_Hard_Canon_corrected": "Ascent",
     #         }
     # create_ratio_graphs(tags, "test")
+    
+    create_from_tag("rbm_canon_2", "Canonicalisation 2")

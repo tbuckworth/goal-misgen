@@ -190,13 +190,13 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": ['cartpole'],
+        "env_name": ['cartpole'],  # todo try more envs
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
         "num_timesteps": 2e8,  # int(5e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["gen_misgen", "max_ent2", "rohan"],
+        "wandb_tags": ["gen_misgen", "max_ent2", "rbm_cartpole_2"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": False,
@@ -206,7 +206,7 @@ def ppo():
         "anneal_lr": False,
         "reward_termination": "get",
         # "reward_termination": 495,
-        "train_pct_ood": 0,#[0, 0, 0, 0, 0.01, 0.1, 0.25, 0.5],
+        "train_pct_ood": [0, 0.02, 0.05, 0.10, 0.15, 0.20, 0.25],
         "alpha_max_ent": [0.0, 0.5, 1., 2.],
         # "hid_dims": [],
         # "dense_rewards": False,
@@ -219,7 +219,7 @@ def ppo():
         "entropy_coef": 0.,
         "alpha_max_ent": 1.,
         "normalize_rew": False,
-        "detatch_target": True
+        "detach_target": True
     }
     bounds = {}
     #     "rew_lr": [0.0001, 0.05],

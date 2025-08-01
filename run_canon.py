@@ -2,6 +2,12 @@ from helper_local import get_model_with_largest_checkpoint, get_seed
 from hyperparameter_optimization import run_next_hyperparameters
 from load_wandb_table import load_summary, load_meg
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+def find_dirs(env, category=None, set="train", start=None, end=None, seed=None):
+    dir = Path(f"logs/{set}/{env}/{category}")
+    print([f for f in dir.iterdir() if f.is_dir()])
+    
 
 ascent_represent = [
     # misgen:
@@ -338,7 +344,7 @@ if __name__ == '__main__':
     # run_tags_for_files({"Cartpole_Meg_KL0": None}, cartpole_dirs, ignore_errors=True)
 
     # # model_files = maze_dirs + new_maze_dirs
-    run_tags_for_files({"Maze_VOrig_Soft_Inf_Pre": None}, maze_dirs_apr25, ignore_errors=True)
+    # run_tags_for_files({"Maze_VOrig_Soft_Inf_Pre": None}, maze_dirs_apr25, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs , ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, new_maze_dirs, ignore_errors=True)
     # run_tags_for_files({"Maze_VOrig_Soft_Target_Mean_Adj": None}, maze_dirs_apr25, ignore_errors=True)
@@ -350,7 +356,7 @@ if __name__ == '__main__':
 
     #
     # run_tags_for_files({"new ascent uniform no inf":None}, local_unique_ascent_dirs, ignore_errors=False)
-    # run_tags_for_files({"new cartpole tempered target mean":None}, cartpole_dirs, ignore_errors=True)
+    run_tags_for_files({"new cartpole tempered target mean":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new cartpole target mean old val":None}, cartpole_dirs, ignore_errors=True)
     # run_tags_for_files({"new ascent target mean":None}, unique_ascent_dirs, ignore_errors=True)
 

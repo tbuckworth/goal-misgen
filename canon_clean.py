@@ -25,7 +25,10 @@ def get_performing_model_dirs(env_name):
         "state": "finished",
         "config.algo": "ppo",
         "config.env_name": env_name,
-        "summary_metrics.mean_episode_rewards": {"$gte": target_rew}
+        "summary_metrics.mean_episode_rewards": {"$gte": target_rew},
+        "tags": {
+            "$in": ["rbm_cartpole_2"],
+        },
     }
 
     runs = api.runs(f"{entity}/{project}", filters=filters)
@@ -46,7 +49,7 @@ steps = {
         "n_envs": 32,
         "n_steps": 512,
         "n_val_envs": 8,
-        "val_epochs": 150,
+        "val_epoch": 150,
         "hidden_dims": [256, 256],
     },
     "cartpole": {
@@ -54,7 +57,7 @@ steps = {
         "n_envs": 32,
         "n_steps": 512,
         "n_val_envs": 8,
-        "val_epoch": 150,
+        "val_epoch": 1000,  # todo was 150
         "hidden_dims": [256, 256],
     },
     "acrobot": {
@@ -98,30 +101,30 @@ configs = {
         "centered_logprobs": False,
         "adjust_logprob_mean": False,
     },
-    "soft_no_inf": {
-        "soft_canonicalisation": True,
-        "infinite_value": False,
-        "centered_logprobs": False,
-        "adjust_logprob_mean": False,
-    },
-    "hard": {
-        "soft_canonicalisation": False,
-        "infinite_value": False,
-        "centered_logprobs": False,
-        "adjust_logprob_mean": False,
-    },
-    "hard_centred": {
-        "soft_canonicalisation": False,
-        "infinite_value": False,
-        "centered_logprobs": True,
-        "adjust_logprob_mean": False,
-    },
-    "hard_mean_adj": {
-        "soft_canonicalisation": False,
-        "infinite_value": False,
-        "centered_logprobs": False,
-        "adjust_logprob_mean": True,
-    },
+    # "soft_no_inf": {
+    #     "soft_canonicalisation": True,
+    #     "infinite_value": False,
+    #     "centered_logprobs": False,
+    #     "adjust_logprob_mean": False,
+    # },
+    # "hard": {
+    #     "soft_canonicalisation": False,
+    #     "infinite_value": False,
+    #     "centered_logprobs": False,
+    #     "adjust_logprob_mean": False,
+    # },
+    # "hard_centred": {
+    #     "soft_canonicalisation": False,
+    #     "infinite_value": False,
+    #     "centered_logprobs": True,
+    #     "adjust_logprob_mean": False,
+    # },
+    # "hard_mean_adj": {
+    #     "soft_canonicalisation": False,
+    #     "infinite_value": False,
+    #     "centered_logprobs": False,
+    #     "adjust_logprob_mean": True,
+    # },
 }
 
 
@@ -137,7 +140,7 @@ def run_canonicalisation(model_file, env_name, config, suffix):
         "env_name": "get",
         "exp_name": "canon",
         "param_name": "cartpole-canon",
-        "wandb_tags": [f"{env_name}_{config}_{suffix}"],
+        "wandb_tags": [f"{env_name}_{config}_{suffix}", "rbm_canon_neat-sun-131058"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "mini_batch_size": 2048,
@@ -145,7 +148,7 @@ def run_canonicalisation(model_file, env_name, config, suffix):
         "learning_rate": 5e-4,
         "distribution_mode": "hard",
         "seed": seed,
-        "load_value_models": True,
+        "load_value_models": False,  # todo check if value functions are good
         # "pre_trained_value_encoder": True,
         "value_dir": None,
         # "soft_canonicalisation": True,
@@ -157,9 +160,9 @@ def run_canonicalisation(model_file, env_name, config, suffix):
         # "adjust_logprob_mean": False,
         "use_valid_env": True,
         "pirc": True,
-        "trusted_policy": "uniform",
+        "trusted_policy": "uniform",  # todo can potentially use trusted policy
         "trusted_temp": 7,
-        "use_min_val_loss": False,
+        "use_min_val_loss": True,
     }
     hparams.update(step_dict)
     hparams.update(config_dict)
@@ -191,7 +194,10 @@ def main(env_name: str, num_workers) -> None:
     num_workers : int | None, optional
         How many worker processes to launch.  None → `os.cpu_count()`.
     """
-    model_dirs = get_performing_model_dirs(env_name)
+    # model_dirs = get_performing_model_dirs(env_name)
+    model_dirs = [
+        "logs/train/cartpole/ppo/2025-07-31__12-14-10__seed_6033" # TODO remove neat-sun-131058
+    ]
     suffix = np.random.randint(0, 10_000)
 
     # Build the argument tuples once; avoids re-rolling suffix in each process.
