@@ -190,13 +190,13 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": ['cartpole'],  # todo try more envs
+        "env_name": ['cartpole', "ascent", "mountain_car", "acrobot"],  # todo try more envs
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
         "num_timesteps": 2e8,  # int(5e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["gen_misgen", "max_ent2", "rbm_cartpole_2"],
+        "wandb_tags": ["gen_misgen", "max_ent2", "rbm_cartpole_gen_1"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": False,
