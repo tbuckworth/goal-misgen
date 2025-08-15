@@ -92,6 +92,14 @@ steps = {
         "val_epoch": 300,
         "hidden_dims": [256, 256, 256, 256],
     },
+    "ascent": {
+        "num_timesteps": int(24 * 256),
+        "n_envs": 16,
+        "n_steps": 256,
+        "n_val_envs": 8,
+        "val_epoch": 300,
+        "hidden_dims": [16, 16],
+    },
 }
 
 configs = {
@@ -100,6 +108,12 @@ configs = {
         "infinite_value": True,
         "centered_logprobs": False,
         "adjust_logprob_mean": False,
+    },
+    "soft_no_inf_mean_adj": {
+        "soft_canonicalisation": True,
+        "infinite_value": False,
+        "centered_logprobs": False,
+        "adjust_logprob_mean": True,
     },
     # "soft_no_inf": {
     #     "soft_canonicalisation": True,
@@ -146,7 +160,7 @@ def run_canonicalisation(model_file, env_name, config, suffix):
         "mini_batch_size": 2048,
         "num_levels": 10000,
         "learning_rate": 5e-4,
-        "distribution_mode": "hard",
+        "distribution_mode": "hard-slow-learn",
         "seed": seed,
         "load_value_models": False,  # todo check if value functions are good
         # "pre_trained_value_encoder": True,

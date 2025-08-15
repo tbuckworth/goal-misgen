@@ -5,7 +5,7 @@
 
 cd /vol/bitbucket/${USER}/goal-misgen
 source venv/bin/activate
-python3.9 multi_train.py 12
+python3.9 multi_train.py $1
 
 
 # export PATH=/vol/bitbucket/${USER}/goal-misgen/opvenv/bin/:/vol/cuda/12.2.0/bin/:$PATH

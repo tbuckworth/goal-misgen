@@ -328,11 +328,11 @@ class Canonicaliser(BaseAgent):
             with (torch.no_grad()):
                 if self.print_ascent_rewards:
                     print("Train Env Rew:")
-                df_train, dt = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model,
+                df_train, dt, dt_l1 = self.canonicalise_and_evaluate_efficient(self.storage_trusted, self.value_model,
                                                                         self.value_model_logp)
                 if self.print_ascent_rewards:
                     print("Valid Env Rew:")
-                df_valid, dv = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val,
+                df_valid, dv, dv_l1 = self.canonicalise_and_evaluate_efficient(self.storage_trusted_val, self.value_model_val,
                                                                         self.value_model_logp_val)
 
                 df_train["Env"] = "Train"
@@ -345,6 +345,8 @@ class Canonicaliser(BaseAgent):
                 "distances_pivoted": wandb.Table(dataframe=pivoted_df),
                 "L2_L2_Train": dt,
                 "L2_L2_Valid": dv,
+                "L1_L1_Train": dt_l1,
+                "L1_L1_Valid": dv_l1,
                 "Meg_Train": meg_train,
                 "Meg_Valid": meg_valid,
                 "IS_Train": is_return,
@@ -790,12 +792,15 @@ class Canonicaliser(BaseAgent):
 
         data = []
         d = np.nan
+        d_l1
         for norm_name, normalize in self.norm_funcs.items():
             for dist_name, distance in self.dist_funcs.items():
                 dist = distance(normalize(canon_logp), normalize(canon_true_r))
                 data.append({'Norm': norm_name, 'Metric': dist_name, 'Distance': dist.item()})
                 if norm_name == "l2_norm" and dist_name == "l2_dist":
                     d = dist.item()
+                elif norm_name == "l1_norm" and dist_name == "l1_dist":
+                    d_l1 = dist.item()
         return pd.DataFrame(data), d
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
