@@ -190,7 +190,7 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": ['cartpole', "ascent", "acrobot"],  # todo try more envs
+        "env_name": ["ascent"],  # todo try more envs
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",

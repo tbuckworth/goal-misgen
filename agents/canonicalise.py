@@ -478,8 +478,7 @@ class Canonicaliser(BaseAgent):
                         term_value = self.inf_term_value() if self.infinite_value else 0
                     else:
                         raise NotImplementedError
-                    target = R + self.gamma * (
-                            next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
+                    target = R + self.gamma * (next_value_batch_val * (1 - done_batch_val) + term_value * done_batch_val)
 
                     value_loss_val = nn.MSELoss()(target, value_batch_val)
 
@@ -792,7 +791,7 @@ class Canonicaliser(BaseAgent):
 
         data = []
         d = np.nan
-        d_l1
+        d_l1 = np.nan
         for norm_name, normalize in self.norm_funcs.items():
             for dist_name, distance in self.dist_funcs.items():
                 dist = distance(normalize(canon_logp), normalize(canon_true_r))
@@ -801,7 +800,7 @@ class Canonicaliser(BaseAgent):
                     d = dist.item()
                 elif norm_name == "l1_norm" and dist_name == "l1_dist":
                     d_l1 = dist.item()
-        return pd.DataFrame(data), d
+        return pd.DataFrame(data), d, d_l1
 
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _, hidden_batch, next_h_batch = sample

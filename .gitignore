@@ -93,3 +93,5 @@ results/
 data/
 slurm*.out
 outputs
+
+.VSCodeCounter

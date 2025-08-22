@@ -27,7 +27,7 @@ def get_performing_model_dirs(env_name):
         "config.env_name": env_name,
         "summary_metrics.mean_episode_rewards": {"$gte": target_rew},
         "tags": {
-            "$in": ["rbm_cartpole_gen_1"],
+            "$in": ["rbm_gen_2"],
         },
     }
 
