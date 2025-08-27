@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l select=1:ncpus=8:mem=24gb:ngpus=1
+#PBS -l select=1:ncpus=8:mem=24gb:ngpus=1:gpu_type=RTX6000
 #PBS -l walltime=48:00:00
 #PBS -N canon
 
