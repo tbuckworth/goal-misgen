@@ -306,6 +306,7 @@ def latent_diffusion_search():
         "wandb_tags": ["lat-diff1"],
         "num_timesteps": 10000000,
         "num_checkpoints": 5,
+        'normalize_rew': False,
         "seed": 6033,
         # "epoch": 10,
         "num_levels": 1000,

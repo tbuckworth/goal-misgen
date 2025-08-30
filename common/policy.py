@@ -74,11 +74,11 @@ class CategoricalPolicy(nn.Module):
 
 
 class DiffusionPolicy(nn.Module):
-    def __init__(self, policy, latent_dim):
+    def __init__(self, policy, latent_dim, depth=8):
         super(DiffusionPolicy, self).__init__()
         self.policy = policy
         self.T = 1.
-        self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim))
+        self.diffusion_model = DDPM(LatentDiffusionModel(latent_dim, depth=depth))
         self.diffusion_model.apply(xavier_uniform_init)
 
 
