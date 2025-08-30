@@ -103,6 +103,60 @@ def orthogonal_value_iteration(
     pi = old_probs  # final stochastic policy
     return pi, [p for p in policies]
 
+def project_with_orthogonal_mapping(
+        T, R, gamma,
+        n_iterations: int = 1000,
+        device: str = 'cpu',
+        lr: float = 0.1,
+        clip_eps: float = 0.2,
+        eval_iters: int = 100,
+):
+    """
+    Tabular PPO with a full-model critic.
+    Matches the interface of `q_value_iteration`.
+    Returns:
+        pi  – final π(s,a) probabilities, shape [S, A] (analogous to one-hot arg-max in QVI)
+        policies – list of π_t(s,a) tensors across updates (mirrors the role of Qs in QVI)
+    """
+    T, R = T.to(device), R.to(device)
+    n_states, n_actions = T.shape[:2]
+
+    p_parallel = torch.zeros(n_states, device=device, requires_grad=True)
+    p_orthogonal = torch.zeros(n_states, device=device, requires_grad=True)
+
+    opt_parallel = torch.optim.Adam([p_parallel], lr=lr)
+    opt_orthogonal = torch.optim.Adam([p_orthogonal], lr=lr)
+
+    Old_R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+    Old_R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
+
+    for i in range(n_iterations):
+        for _ in range(eval_iters):  # iterative policy evaluation
+            R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+            R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
+
+            loss_orthogonal = torch.dot(R_parallel.flatten().detach(), R_orthogonal.flatten())
+
+            opt_orthogonal.zero_grad()
+            loss_orthogonal.backward()
+            opt_orthogonal.step()
+            if torch.allclose(Old_R_orthogonal, R_orthogonal, atol=1e-8):
+                break
+            Old_R_orthogonal = R_orthogonal
+
+        R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+        R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
+
+        loss_parallel = -torch.dot(R_parallel.flatten(), R_orthogonal.flatten().detach())
+        opt_parallel.zero_grad()
+        loss_parallel.backward()
+        opt_parallel.step()
+        if torch.allclose(Old_R_parallel, R_parallel, atol=1e-8):
+            print(f"Project Orthogonal Converged after {i} iterations")
+            break
+        Old_R_parallel = R_parallel
+
+    return R_parallel
 
 def proximal_orthogonal_value(
         T, R, gamma,
@@ -138,21 +192,23 @@ def proximal_orthogonal_value(
     old_probs = torch.softmax(logits.detach(), dim=1)  # π₀
 
     for i in range(n_iterations):
-
         for _ in range(eval_iters):  # iterative policy evaluation
             R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
             R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
 
-            loss_parallel = -torch.dot(R_parallel.flatten(), R_orthogonal.flatten().detach())
             loss_orthogonal = torch.dot(R_parallel.flatten().detach(), R_orthogonal.flatten())
-
-            opt_parallel.zero_grad()
-            loss_parallel.backward()
-            opt_parallel.step()
 
             opt_orthogonal.zero_grad()
             loss_orthogonal.backward()
             opt_orthogonal.step()
+
+        R_parallel = R + gamma * einops.einsum(T, p_parallel, "s a ns, ns -> s a") - p_parallel.unsqueeze(-1)
+        R_orthogonal = gamma * einops.einsum(T, p_orthogonal, "s a ns, ns -> s a") - p_orthogonal.unsqueeze(-1)
+
+        loss_parallel = -torch.dot(R_parallel.flatten(), R_orthogonal.flatten().detach())
+        opt_parallel.zero_grad()
+        loss_parallel.backward()
+        opt_parallel.step()
 
         advantages = R_parallel.detach()
 
@@ -802,7 +858,27 @@ def orthogonal_value(temp):
         colour_meg=False,
     )
 
+def test_orthogonal_projection_is_canon(temp=2):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_states = 2
+    n_actions = 2
+    gamma = 0.9
+    CHOSEN_AXIS = 0
 
+    T = torch.rand((n_states, n_actions, n_states)).mul(temp).softmax(dim=-1).to(device=device)
+    mu = torch.rand((n_states,)).mul(temp).softmax(dim=-1).to(device=device)
+
+    true_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    true_R = (true_R.exp() / true_R.exp().sum()) * max(10 - temp, 1)
+
+    proxy_R = torch.rand((n_states, n_actions)).mul(temp).to(device=device)
+    proxy_R = (proxy_R.exp() / proxy_R.exp().sum()) * max(10 - temp, 1)
+
+    projected_R = project_with_orthogonal_mapping(T, true_R, gamma, device=device)
+    print(f"Projected R:{projected_R.detach().cpu().numpy().tolist()}")
+    canonicalised_R = canonicalise(T, true_R, gamma, device)
+    print(f"Canonicalised R:{canonicalised_R.detach().cpu().numpy().tolist()}")
+    print("done")
 
 if __name__ == "__main__":
-    orthogonal_value(2)
+    test_orthogonal_projection_is_canon(2)
