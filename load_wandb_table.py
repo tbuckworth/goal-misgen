@@ -796,4 +796,7 @@ if __name__ == "__main__":
     #         }
     # create_ratio_graphs(tags, "test")
     
-    create_from_tag("rbm_canon_2", "Canonicalisation 2")
+    ls = ["ascent_soft_inf_368", "ascent_soft_no_inf_mean_adj_368", "cartpole_soft_inf_7199", "cartpole_soft_no_inf_mean_adj_7199"]
+    
+    for l in ls:
+        create_from_tag(l, l)

@@ -53,11 +53,11 @@ steps = {
         "hidden_dims": [256, 256],
     },
     "cartpole": {
-        "num_timesteps": int(40 * 512),
+        "num_timesteps": 2e6, #int(40 * 512),
         "n_envs": 32,
         "n_steps": 512,
         "n_val_envs": 8,
-        "val_epoch": 1000,  # todo was 150
+        "val_epoch": 100,  # todo was 150
         "hidden_dims": [256, 256],
     },
     "acrobot": {
@@ -65,7 +65,7 @@ steps = {
         "n_envs": 32,
         "n_steps": 512,
         "n_val_envs": 8,
-        "val_epoch": 1000,  # todo was 150
+        "val_epoch": 100,  # todo was 150
         "hidden_dims": [256, 256],
     },
     "maze": {
@@ -93,11 +93,11 @@ steps = {
         "hidden_dims": [256, 256, 256, 256],
     },
     "ascent": {
-        "num_timesteps": int(24 * 256),
+        "num_timesteps": 2e6, #int(24 * 256),
         "n_envs": 16,
         "n_steps": 256,
         "n_val_envs": 8,
-        "val_epoch": 300,
+        "val_epoch": 100,
         "hidden_dims": [16, 16],
     },
 }
@@ -154,7 +154,7 @@ def run_canonicalisation(model_file, env_name, config, suffix):
         "env_name": "get",
         "exp_name": "canon",
         "param_name": "cartpole-canon",
-        "wandb_tags": [f"{env_name}_{config}_{suffix}", "rbm_canon_5"],
+        "wandb_tags": [f"{env_name}_{config}_{suffix}", "rbm_canon_8"],
         "num_checkpoints": 1,
         "use_wandb": True,
         "mini_batch_size": 2048,
@@ -217,16 +217,18 @@ def main(env_name: str, num_workers) -> None:
         for model_file in model_dirs
         for config in configs.keys()
     ]
-
+    
     # Spawn is the safe option with PyTorch.
-    mp.set_start_method("spawn", force=True)
+    
+    # mp.set_start_method("spawn", force=True)
 
     with ProcessPoolExecutor(max_workers=num_workers) as pool:
         pool.map(_worker, jobs)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_name", type=str, default="mountain_car")
+    parser.add_argument("--env_name", type=str, default="ascent")
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args()
+    # main("ascent", 1)
     main(args.env_name, args.workers)

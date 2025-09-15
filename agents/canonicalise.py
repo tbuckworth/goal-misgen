@@ -232,8 +232,7 @@ class Canonicaliser(BaseAgent):
         shp = (self.n_envs, *self.storage.hidden_state_size)
         hidden_state = np.zeros(shp)
         done = np.zeros(self.n_envs)
-        self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
-                              self.trusted_policy, self.policy, self.encoder)
+        
         # Need to re-do this, so it's fresh for the env data collection:
         obs = self.env.reset()
         done = np.zeros(self.n_envs)
@@ -242,21 +241,24 @@ class Canonicaliser(BaseAgent):
         obs_v = self.env_valid.reset()
         hidden_state_v = np.zeros(shp)
         done_v = np.zeros(self.n_envs)
-        self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
-                              self.trusted_policy, self.policy, self.encoder_val)
         # Need to re-do this, so it's fresh for the valid env data collection:
         obs_v = self.env_valid.reset()
         done_v = np.zeros(self.n_envs)
+        
+        self.collect_rollouts(done, hidden_state, obs, self.storage, self.env)
+        # valid
+        if self.env_valid is not None:
+            self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_valid, self.env_valid)
 
         # Traditional PPO:
         while self.t < num_timesteps:
             # Run Policy
             self.policy.eval()
-            self.collect_rollouts(done, hidden_state, obs, self.storage, self.env)
+            self.collect_rollouts(done, hidden_state, obs, self.storage_trusted, self.env,
+                              self.trusted_policy, self.policy, self.encoder)
+            self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_trusted_val, self.env_valid,
+                              self.trusted_policy, self.policy, self.encoder_val)
 
-            # valid
-            if self.env_valid is not None:
-                self.collect_rollouts(done_v, hidden_state_v, obs_v, self.storage_valid, self.env_valid)
 
             # Optimize policy & valueq
             # summary = self.optimize()
@@ -761,7 +763,7 @@ class Canonicaliser(BaseAgent):
 
         return rew_batch, obs_batch, act_batch, value, next_value, dist.log_prob(act_batch), done_batch
 
-    def canonicalise_and_evaluate_efficient(self, storage, value_model, value_model_logp):
+    def canonicalise_and_evaluate_efficient(self, storage, value_model, value_model_logp, debug=True):
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
             self.mini_batch_size = batch_size
@@ -775,8 +777,35 @@ class Canonicaliser(BaseAgent):
         else:
             generator = storage.fetch_train_generator(mini_batch_size=self.mini_batch_size,
                                                       recurrent=recurrent)
-
-        tuples = [self.sample_and_canonicalise(sample, value_model, value_model_logp) for sample in generator]
+            
+        # Collect for debugging
+        all_obs, all_actions, all_rewards = [], [], []
+        all_canon_logp, all_canon_reward = [], []
+        
+        tuples = []
+        for sample in generator:
+            obs_batch = sample[0]  # observations
+            act_batch = sample[2]  # actions  
+            rew_batch = sample[8]  # rewards
+            
+            if debug:
+                all_obs.append(obs_batch.cpu().numpy())
+                all_actions.append(act_batch.cpu().numpy())
+                all_rewards.append(rew_batch.cpu().numpy())
+            
+            # Perform canonicalization
+            logp_batch, rew_batch_out, adj_batch, adj_batch_logp = self.sample_and_canonicalise(sample, value_model, value_model_logp)
+            tuples.append((logp_batch, rew_batch_out, adj_batch, adj_batch_logp))
+            
+            if debug:
+                canon_logp = logp_batch + adj_batch_logp
+                canon_reward = rew_batch_out + adj_batch
+                all_canon_logp.append(canon_logp.cpu().numpy())
+                all_canon_reward.append(canon_reward.cpu().numpy())
+        
+        if debug:
+            self.debug_plot(all_obs, all_actions, all_rewards, all_canon_logp, all_canon_reward)
+        
         logp_batch, rew_batch, adj_batch, adj_batch_logp = zip(*tuples)
         logp = torch.concat(list(logp_batch))
         rew = torch.concat(list(rew_batch))
@@ -801,7 +830,35 @@ class Canonicaliser(BaseAgent):
                 elif norm_name == "l1_norm" and dist_name == "l1_dist":
                     d_l1 = dist.item()
         return pd.DataFrame(data), d, d_l1
+    
+    def debug_plot(self, all_obs, all_actions, all_rewards, all_canon_logp, all_canon_reward):
+        import matplotlib.pyplot as plt
+        import numpy as np
 
+        # Concatenate all batches
+        obs = np.concatenate(all_obs, axis=0)
+        actions = np.concatenate(all_actions, axis=0)
+        rewards = np.concatenate(all_rewards, axis=0)
+        canon_logp = np.concatenate(all_canon_logp, axis=0)
+        canon_reward = np.concatenate(all_canon_reward, axis=0)
+
+        # Get unique state-action pairs
+        unique_indices = self._get_unique_state_action_indices(obs, actions)
+
+        # Select unique pairs
+        unique_obs = obs[unique_indices]
+        unique_actions = actions[unique_indices]
+        unique_rewards = rewards[unique_indices]
+        unique_canon_logp = canon_logp[unique_indices]
+        unique_canon_reward = canon_reward[unique_indices]
+
+        print(f"Total pairs: {len(obs)}, Unique pairs: {len(unique_indices)}")
+
+        # Plot canonicalized reward vs implied reward
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+
+
+    # todo ascent -- debug here
     def sample_and_canonicalise(self, sample, value_model, value_model_logp):
         obs_batch, nobs_batch, act_batch, done_batch, _, _, _, _, rew_batch, logp_batch, _, _, hidden_batch, next_h_batch = sample
         dist, _, _ = self.policy.forward_with_embedding(obs_batch)
@@ -809,7 +866,7 @@ class Canonicaliser(BaseAgent):
             try:
                 dist, act_batch = remove_duplicate_actions(dist, act_batch.to(torch.int32), self.env)
             except Exception as e:
-                pass
+                print(f"Warning: remove_duplicateactions failed {e}")
 
         val_batch = value_model(obs_batch).squeeze()
         next_val_batch = value_model(nobs_batch).squeeze()
@@ -841,7 +898,11 @@ class Canonicaliser(BaseAgent):
         # normalize = self.norm_funcs["l2_norm"]
         # distance = self.dist_funcs["l2_dist"]
         # print(distance(normalize(logp_batch+adjustment_logp), normalize(rew_batch+adjustment)).item())
-        return logp_batch, rew_batch, adjustment, adjustment_logp
+        
+        # plot canonicalised reward/canonicalised logprob for unique state/action pairs
+        # both train and val
+        # unique vals from arrays(rew_batch+adj, logp_batch+adj_logp), norm and dist func with canon values
+        return logp_batch, rew_batch, adjustment, adjustment_logp  #todo breakpoint
         # For cartpole - plots angle against val models
         import matplotlib.pyplot as plt
         plt.scatter(obs_batch[:, 2].cpu().numpy(), (val_batch).cpu().numpy())

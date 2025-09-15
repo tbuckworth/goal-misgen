@@ -190,13 +190,13 @@ def run_forever(bounds, fixed, run_func, opt_metric, abs=False):
 def ppo():
     fixed = {
         "detect_nan": False,
-        "env_name": ["ascent"],  # todo try more envs
+        "env_name": ["acrobot"],  # todo try more envs
         "exp_name": 'ppo',
         "param_name": 'cartpole-mlp',
         "device": "gpu",
-        "num_timesteps": 2e8,  # int(5e7),
+        "num_timesteps": 1e6,  # int(5e7),
         "seed": [6033, 0, 42, 50, 81],
-        "wandb_tags": ["gen_misgen", "max_ent2", "rbm_gen_2"],
+        "wandb_tags": ["gen_misgen", "max_ent2", "rbm_gen_4"],
         "use_wandb": True,
         "mirror_env": False,
         "use_valid_env": False,
@@ -216,12 +216,14 @@ def ppo():
         # "hidden_dims": [[128, 128, 128], [64, 64], [256, 256], [256, 256, 256], [64]],
         # "rew_learns_from_trusted_rollouts": [False, True],
         
-        "entropy_coef": 0.,
-        "alpha_max_ent": 1.,
+        "entropy_coef": 0., # --> check in config.yml
+        "alpha_max_ent": 1., # --> 0 todo
         "normalize_rew": False,
         "detach_target": True
     }
-    bounds = {}
+    bounds = {
+        "learning_rate": [1e-6, 2.5e-4],
+    }
     #     "rew_lr": [0.0001, 0.05],
     # }
     run_forever(bounds, fixed, run_next_hyperparameters, opt_metric="summary.mean_episode_rewards")
