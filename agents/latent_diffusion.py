@@ -42,6 +42,7 @@ class LatentDiffusion(BaseAgent):
 
         self.diffusion_policy = diffusion_policy
         self.ddpm = self.diffusion_policy.diffusion_model
+        self.ddpm.to(self.device)
         self.alpha_max_ent = alpha_max_ent
         self.reward_termination = reward_termination
         self.anneal_lr = anneal_lr
@@ -72,7 +73,7 @@ class LatentDiffusion(BaseAgent):
 
         return act.cpu().numpy(), log_prob_act.cpu().numpy(), value.cpu().numpy(), latents.cpu().numpy(), dist.entropy().cpu().numpy()
 
-    def optimize(self):
+    def old_optimize(self):
         l1_reg_list, total_loss_list = [], []
         batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
         if batch_size < self.mini_batch_size:
@@ -117,6 +118,67 @@ class LatentDiffusion(BaseAgent):
         }
         return summary
 
+    def optimize(self):
+        l1_reg_list, total_loss_list = [], []
+        batch_size = self.n_steps * self.n_envs // self.mini_batch_per_epoch
+        if batch_size < self.mini_batch_size:
+            self.mini_batch_size = batch_size
+
+        # robust integer accumulation
+        grad_accumulation_steps = max(1, batch_size // self.mini_batch_size)
+        step_in_accum = 0
+
+        self.ddpm.train()
+        self.optimizer.zero_grad()
+
+        for _ in range(self.epoch):
+            recurrent = self.policy.is_recurrent()
+            generator = self.storage.fetch_train_generator(
+                mini_batch_size=self.mini_batch_size, recurrent=recurrent
+            )
+            for sample in generator:
+                obs_batch, latent_batch, act_batch, done_batch, \
+                    old_log_prob_act_batch, old_value_batch, return_batch, adv_batch = sample
+
+                x0 = latent_batch.to(self.device)
+                t = torch.randint(0, self.ddpm.n_steps, (x0.size(0),),
+                                device=self.device, dtype=torch.long)
+
+                base_loss = self.ddpm.p_losses(x0, t)  # mean MSE over batch & features
+
+                # optional L1 regularisation
+                if self.l1_coef > 0.0:
+                    l1_reg = torch.zeros((), device=self.device)
+                    for p in self.ddpm.parameters():
+                        l1_reg = l1_reg + p.abs().sum()
+                    loss = base_loss + self.l1_coef * l1_reg
+                    l1_reg_list.append(l1_reg.item())
+                else:
+                    loss = base_loss
+                    l1_reg_list.append(0.0)
+
+                # scale for accumulation
+                (loss / grad_accumulation_steps).backward()
+                step_in_accum += 1
+
+                if step_in_accum % grad_accumulation_steps == 0:
+                    torch.nn.utils.clip_grad_norm_(self.ddpm.parameters(), self.grad_clip_norm)
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+
+                # log the *mean* loss as customary
+                total_loss_list.append(base_loss.item())
+
+        summary = {
+            'Loss/total': float(np.mean(total_loss_list)),
+            "loss/pi": np.nan,
+            "loss/value": np.nan,
+            "loss/entropy": np.nan,
+            'Loss/l1_reg': float(np.mean(l1_reg_list)),
+        }
+        return summary
+
+
     def train(self, num_timesteps):
         save_every = num_timesteps // self.num_checkpoints
         checkpoint_cnt = 0
@@ -152,7 +214,7 @@ class LatentDiffusion(BaseAgent):
             if self.t > ((checkpoint_cnt + 1) * save_every) or premature_finish:
                 print("Saving model.")
                 torch.save({
-                    'model_state_dict': self.policy.state_dict(),
+                    'model_state_dict': self.ddpm.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict()},
                     self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
