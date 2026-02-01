@@ -7,8 +7,11 @@ import gymnasium
 import numpy as np
 import torch
 import yaml
-from gym3 import ViewerWrapper, ToBaselinesVecEnv
-from procgen import ProcgenGym3Env, ProcgenEnv
+try:
+    from gym3 import ViewerWrapper, ToBaselinesVecEnv
+    from procgen import ProcgenGym3Env, ProcgenEnv
+except ImportError:
+    pass
 from torch.distributions import Categorical
 
 from common.ascent_env import AscentEnv

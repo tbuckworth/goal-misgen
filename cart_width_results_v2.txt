@@ -1,0 +1,10 @@
+Cart Width Experiment Results (Combined)
+============================================================
+
+h_range=2.40: max_reward=491.0, final=469.0, last10_avg=465.8
+h_range=1.20: max_reward=475.6, final=450.1, last10_avg=444.6
+h_range=0.90: max_reward=500.0, final=500.0, last10_avg=483.2
+h_range=0.60: max_reward=483.6, final=425.6, last10_avg=392.8
+h_range=0.45: max_reward=489.9, final=386.4, last10_avg=415.7
+h_range=0.30: max_reward=185.2, final=132.5, last10_avg=146.4
+h_range=0.15: max_reward=75.8, final=65.0, last10_avg=67.7
