@@ -1,3 +1,10 @@
+# goal-misgen
+
+Code for experiments on goal misgeneralisation in reinforcement learning, including PIRC
+(Policy-Implied Reward Comparison). **Status of PIRC, November 2026:** the work has stopped;
+[docs/pirc/README.md](docs/pirc/README.md) records what holds, what does not, and the known
+issues in this code.
+
 # Setup Instructions on Imperial lab machines
 
 ```
