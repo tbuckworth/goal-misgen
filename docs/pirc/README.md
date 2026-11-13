@@ -230,6 +230,10 @@ trusted data per run and L1 distances; it was not reviewed in depth.
 ## 9. Reproducing
 
 - `python docs/pirc/verify_maths.py` reproduces every bracketed check in a few seconds.
+- `python docs/pirc/export_wandb_runs.py` writes one row per PIRC run to
+  `docs/pirc/data/pirc_runs.csv` (not tracked; needs `wandb`, `pandas` and the untracked
+  `private_login.py`). `python docs/pirc/make_figures.py` then redraws the three figures above
+  (needs `numpy`, `pandas`, `scipy`, `matplotlib`; about a minute).
 - One PIRC number: Python 3.8, the packages in `Readme.md` plus those missing from
   `requirements.txt`, the modified Procgen built from source, trained policies under `logs/`
   (not in this repository), then
