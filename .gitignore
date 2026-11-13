@@ -93,3 +93,6 @@ results/
 data/
 slurm*.out
 
+
+# PIRC status note: run export written by docs/pirc/export_wandb_runs.py
+docs/pirc/data/
